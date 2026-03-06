@@ -1,0 +1,227 @@
+{
+  "project_name": "Gathering Cypher",
+  "design_philosophy": {
+    "concept": "The Digital Hearth",
+    "description": "A private, invitation-only ecosystem for communities to gather and build legacy. The design must feel like a permanent home, not a temporary feed. It balances the warmth of oral history with the precision of a digital archive.",
+    "core_values": [
+      "Sovereignty (Ownership)",
+      "Legacy (Permanence)",
+      "Intimacy (Private)",
+      "Warmth (Community)"
+    ]
+  },
+  "theme_strategy": {
+    "mode": "system",
+    "default": "light",
+    "description": "A 'Warm Organic' light mode that feels like daylight on sandstone, and a 'Deep Legacy' dark mode that feels like a campfire at night. Avoid sterile 'SaaS Gray'."
+  },
+  "typography": {
+    "font_families": {
+      "headings": {
+        "name": "Playfair Display",
+        "fallback": "serif",
+        "usage": "H1, H2, H3, Hero Sections, Feature Titles",
+        "weights": ["400", "600", "700"],
+        "google_font_url": "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+      },
+      "body": {
+        "name": "Manrope",
+        "fallback": "sans-serif",
+        "usage": "Paragraphs, UI Elements, Form Inputs",
+        "weights": ["400", "500", "600"],
+        "google_font_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap"
+      },
+      "accent": {
+        "name": "JetBrains Mono",
+        "fallback": "monospace",
+        "usage": "Dates, Metadata, Member Counts, Financial Figures",
+        "weights": ["400"],
+        "google_font_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap"
+      }
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl font-serif tracking-tight leading-tight",
+      "h2": "text-3xl md:text-4xl font-serif tracking-tight leading-tight",
+      "h3": "text-2xl md:text-3xl font-serif tracking-normal",
+      "body_lg": "text-lg md:text-xl font-sans leading-relaxed",
+      "body_base": "text-base font-sans leading-relaxed",
+      "caption": "text-sm font-mono tracking-wide uppercase opacity-70"
+    }
+  },
+  "colors": {
+    "palette": {
+      "light": {
+        "background": "#F9F7F2",
+        "foreground": "#292524",
+        "card": "#FFFFFF",
+        "card_foreground": "#292524",
+        "popover": "#FFFFFF",
+        "popover_foreground": "#292524",
+        "primary": "#9A3412",
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#E7E5E4",
+        "secondary_foreground": "#292524",
+        "muted": "#F5F5F4",
+        "muted_foreground": "#78716C",
+        "accent": "#FCE7F3",
+        "accent_foreground": "#9A3412",
+        "destructive": "#EF4444",
+        "destructive_foreground": "#FFFFFF",
+        "border": "#E7E5E4",
+        "input": "#E7E5E4",
+        "ring": "#9A3412"
+      },
+      "dark": {
+        "background": "#1C1917",
+        "foreground": "#F5F5F4",
+        "card": "#292524",
+        "card_foreground": "#F5F5F4",
+        "popover": "#292524",
+        "popover_foreground": "#F5F5F4",
+        "primary": "#C2410C",
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#44403C",
+        "secondary_foreground": "#F5F5F4",
+        "muted": "#292524",
+        "muted_foreground": "#A8A29E",
+        "accent": "#44403C",
+        "accent_foreground": "#F5F5F4",
+        "destructive": "#7F1D1D",
+        "destructive_foreground": "#FFFFFF",
+        "border": "#44403C",
+        "input": "#44403C",
+        "ring": "#C2410C"
+      }
+    },
+    "semantic": {
+      "brand_primary": "Terracotta / Burnt Orange (Warmth, Earth)",
+      "brand_secondary": "Sage / Stone (Stability)",
+      "success": "#15803D",
+      "warning": "#B45309",
+      "info": "#1D4ED8"
+    }
+  },
+  "visual_enhancers": {
+    "radius": {
+      "default": "rounded-lg",
+      "card": "rounded-xl",
+      "button": "rounded-full"
+    },
+    "shadows": {
+      "soft": "shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]",
+      "hover": "shadow-[0_10px_30px_-4px_rgba(0,0,0,0.1)]",
+      "inner": "shadow-inner"
+    },
+    "textures": {
+      "grain": "bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20",
+      "paper": "subtle-paper-texture"
+    },
+    "borders": {
+      "style": "border border-border/60",
+      "focus": "ring-2 ring-primary/20 ring-offset-2"
+    }
+  },
+  "layout": {
+    "container": {
+      "max_width": "max-w-7xl",
+      "padding": "px-4 md:px-8 lg:px-12",
+      "center": "mx-auto"
+    },
+    "spacing": {
+      "section_gap": "gap-12 md:gap-24",
+      "component_gap": "gap-6 md:gap-8",
+      "item_gap": "gap-3 md:gap-4"
+    },
+    "grids": {
+      "bento_dashboard": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
+      "feed": "max-w-2xl mx-auto flex flex-col gap-8",
+      "gallery": "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-8 py-6 text-base font-medium shadow-soft hover:shadow-hover transition-all duration-300",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-full px-6 py-4 text-sm font-medium transition-colors",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-lg px-4 py-2"
+    },
+    "cards": {
+      "base": "bg-card text-card-foreground rounded-xl border border-border/50 shadow-soft p-6 hover:border-primary/20 transition-colors",
+      "feature": "bg-muted/50 p-8 rounded-2xl border-none",
+      "memory": "aspect-[4/5] object-cover rounded-lg hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+    },
+    "inputs": {
+      "base": "h-12 rounded-lg border-input bg-background px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "motion": {
+    "transitions": {
+      "default": "transition-all duration-300 ease-out",
+      "slow": "transition-all duration-700 ease-[0.22, 1, 0.36, 1]",
+      "hover": "transition-transform duration-200 ease-out"
+    },
+    "animations": {
+      "fade_in": "animate-in fade-in zoom-in-95 duration-500",
+      "slide_up": "animate-in slide-in-from-bottom-4 fade-in duration-700"
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_background": {
+        "url": "https://images.unsplash.com/photo-1768244016470-271b210a8407?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwzfHxtdWx0aWdlbmVyYXRpb25hbCUyMGJsYWNrJTIwZmFtaWx5JTIwcmV1bmlvbiUyMGpveSUyMG91dGRvb3J8ZW58MHx8fHwxNzcyODQxMzI0fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Joyful multigenerational family gathering",
+        "usage": "Landing page hero, Strategy Deck cover"
+      },
+      "community_warmth": {
+        "url": "https://images.unsplash.com/photo-1761839257349-037aea1d94de?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwxfHxtdWx0aWdlbmVyYXRpb25hbCUyMGJsYWNrJTIwZmFtaWx5JTIwcmV1bmlvbiUyMGpveSUyMG91dGRvb3J8ZW58MHx8fHwxNzcyODQxMzI0fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Friends talking outdoors",
+        "usage": "About section, Community intro"
+      },
+      "legacy_texture": {
+        "url": "https://images.unsplash.com/photo-1522839206838-1cfecf32cc72?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHw0fHx2aW50YWdlJTIwcGhvdG8lMjBhbGJ1bSUyMHRleHR1cmVzJTIwb2xkJTIwcGFwZXIlMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzcyODQxMzI1fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Vintage paper texture",
+        "usage": "Background overlay for Memory Vault, Legacy Threads"
+      },
+      "archival_objects": {
+        "url": "https://images.unsplash.com/photo-1694020636291-a2c8af0c2f55?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwyfHx2aW50YWdlJTIwcGhvdG8lMjBhbGJ1bSUyMHRleHR1cmVzJTIwb2xkJTIwcGFwZXIlMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzcyODQxMzI1fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Table with papers and photos",
+        "usage": "Legacy Threads feature card, Ancestral Roll Call"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px, rounded caps"
+    }
+  },
+  "instructions_to_main_agent": {
+    "setup": [
+      "Install required fonts in index.css (Playfair Display, Manrope, JetBrains Mono).",
+      "Update tailwind.config.js with the new color palette (Terracotta/Bone theme).",
+      "Ensure lucide-react is available."
+    ],
+    "implementation_priorities": [
+      "1. Build the 'Shell': Navigation, Footer, and Theme Toggle.",
+      "2. Create the 'Archival Card' component: This is the core building block for events, memories, and threads.",
+      "3. Implement the 'Memory Vault' grid: Use a masonry or bento layout.",
+      "4. Develop the Strategy Deck/Landing Page: This is crucial for the 'Venture Pitch' requirement."
+    ],
+    "layout_rules": [
+      "Use 'Bento' grids for dashboard overviews.",
+      "Use 'Masonry' layouts for photo galleries.",
+      "Keep text legible: Max width 65ch for reading sections.",
+      "Center-align HEADINGS for drama, but Left-align BODY text for readability."
+    ],
+    "component_overrides": [
+      "Buttons: Make them pill-shaped (rounded-full).",
+      "Inputs: Use a subtle background fill (#F5F5F4) instead of just a border.",
+      "Dialogs: Add a backdrop-blur-sm to the overlay."
+    ]
+  },
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Do not use pure black (#000000) or pure white (#FFFFFF) for backgrounds; use tinted off-whites and dark charcoals.",
+    "Always add `data-testid` to interactive elements.",
+    "Use generous padding (p-8, p-12) to create a sense of luxury and space.",
+    "Ensure all images have alt text.",
+    "Design for mobile-first, but optimize for desktop 'lean-back' viewing."
+  ]
+}
