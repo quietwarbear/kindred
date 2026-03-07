@@ -1,53 +1,140 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ThemeProvider } from "next-themes";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { Toaster } from "@/components/ui/sonner";
+import { AppShell } from "@/components/layout/AppShell";
+import { AuthPage } from "@/components/AuthPage";
+import { LandingPage } from "@/components/LandingPage";
+import { StrategyPage } from "@/components/StrategyPage";
+import { apiRequest } from "@/lib/api";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const APP_STATE_KEY = "gathering-cypher-auth";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+const FullScreenMessage = ({ title, copy }) => (
+  <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
+    <div className="archival-card max-w-xl text-center">
+      <p className="eyebrow-text mb-3">Gathering Cypher</p>
+      <h1 className="font-display text-4xl text-foreground">{title}</h1>
+      <p className="mt-4 text-sm text-muted-foreground sm:text-base">{copy}</p>
+    </div>
+  </div>
+);
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+const ProtectedApp = ({ session, onLogout, onSessionRefresh }) => {
+  if (!session?.token) {
+    return <Navigate replace to="/login" />;
+  }
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
+    <AppShell
+      community={session.community}
+      onLogout={onLogout}
+      onSessionRefresh={onSessionRefresh}
+      token={session.token}
+      user={session.user}
+    />
   );
 };
 
 function App() {
+  const [session, setSession] = useState(() => {
+    try {
+      const saved = localStorage.getItem(APP_STATE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoading, setIsLoading] = useState(Boolean(session?.token));
+  const [hasCheckedSession, setHasCheckedSession] = useState(false);
+
+  useEffect(() => {
+    if (!session?.token) {
+      setIsLoading(false);
+      setHasCheckedSession(true);
+      return;
+    }
+
+    const validateSession = async () => {
+      try {
+        const payload = await apiRequest("/auth/me", { token: session.token });
+        const nextSession = {
+          token: session.token,
+          user: payload.user,
+          community: payload.community,
+        };
+        setSession(nextSession);
+        localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
+      } catch {
+        localStorage.removeItem(APP_STATE_KEY);
+        setSession(null);
+      } finally {
+        setIsLoading(false);
+        setHasCheckedSession(true);
+      }
+    };
+
+    validateSession();
+  }, [session?.token]);
+
+  const handleAuthSuccess = (payload) => {
+    const nextSession = {
+      token: payload.token,
+      user: payload.user,
+      community: payload.community,
+    };
+    setSession(nextSession);
+    localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(APP_STATE_KEY);
+    setSession(null);
+  };
+
+  const handleSessionRefresh = async () => {
+    if (!session?.token) return;
+    const payload = await apiRequest("/auth/me", { token: session.token });
+    handleAuthSuccess({ ...payload, token: session.token });
+  };
+
+  const publicAuthPage = useMemo(
+    () => <AuthPage onAuthSuccess={handleAuthSuccess} session={session} />,
+    [session]
+  );
+
+  if (isLoading && !hasCheckedSession) {
+    return <FullScreenMessage copy="Restoring your private community space." title="Opening the digital hearth" />;
+  }
+
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <div className="App min-h-screen bg-background text-foreground">
+        <BrowserRouter>
+          <Routes>
+            <Route element={<LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
+            <Route
+              element={session?.token ? <Navigate replace to="/dashboard" /> : publicAuthPage}
+              path="/login"
+            />
+            <Route element={<StrategyPage mode="public" />} path="/strategy" />
+            <Route
+              element={
+                <ProtectedApp
+                  onLogout={handleLogout}
+                  onSessionRefresh={handleSessionRefresh}
+                  session={session}
+                />
+              }
+              path="/*"
+            />
+          </Routes>
+        </BrowserRouter>
+        <Toaster position="top-right" richColors />
+      </div>
+    </ThemeProvider>
   );
 }
 
