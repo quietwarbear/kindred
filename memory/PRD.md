@@ -1,52 +1,53 @@
-# Gathering Cypher PRD
+# Gathering Cypher / Digital Courtyard PRD
 
 ## Original Problem Statement
-Build “Gathering Cypher,” a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. Requested outputs included both an MVP application and strategy materials: wireframe flow, brand naming concepts, venture pitch framing, feature prioritization roadmap, and competitive landscape analysis.
+Build “Gathering Cypher,” a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. Initial deliverables included an MVP app and strategy pack. Follow-up direction requested preserving the same color scheme and overall appearance while reshaping the product into a Digital Courtyard layout with courtyards/subyards, kinship mapping, smart gathering planning, timeline archive, shared funds/travel, and Legacy Table connection settings.
 
 ## User Choices
-- Prioritize both MVP app build and strategy pack
-- MVP scope: invite-only communities, role-based access, Events Hub, Memory Vault, Legacy Threads
-- Access model: invite-only email/password with Host, Organizer, Member roles
-- Contributions: Stripe integration
-- AI/media: voice-note memories plus AI auto-tagging
-- AI model: Gemini 3 Flash using Emergent LLM key
+- Build both MVP app + strategy pack initially
+- Initial MVP: invite-only email/password with Host, Organizer, Member roles; Events Hub, Memory Vault, Legacy Threads; Stripe contributions; voice-note memories + AI auto-tagging via Gemini using Emergent LLM key
+- Follow-up expansion: implement UI + backend + as much working functionality as possible
+- Rename/reshape current community concept into Courtyard + Subyards
+- Build Courtyard features now and keep Legacy Table integration connection-ready until credentials/docs are provided
+- Build deeper funds/travel with working travel coordination records, shared budgets, contribution tracking, and internal booking-style coordination
 
 ## Architecture Decisions
-- Frontend: React + React Router SPA with a public landing page, auth flows, and protected app shell
-- Backend: FastAPI monolith API with JWT auth, role checks, MongoDB collections, Stripe checkout/session status endpoints, and Gemini-based AI tag generation with graceful fallback
-- Database collections: users, communities, invites, events, memories, threads, payment_transactions
-- Media handling: photo/audio uploads are stored as data URLs for MVP simplicity, enabling direct rendering and lightweight archive workflows
-- Strategy materials are embedded as a dedicated Strategy Deck page available publicly and within the app
+- Frontend remains React SPA with preserved warm visual system, updated primary navigation, and new Digital Courtyard information architecture
+- Backend remains FastAPI + MongoDB for consistency with existing stack, expanding current community/event/archive model into courtyard/subyard, kinship, travel, budget, and settings APIs
+- Legacy routes from the earlier MVP remain accessible for regression safety while primary nav shifts to Home, Courtyards, Timeline, Gatherings, Funds & Travel, and Settings
+- Legacy Table is architected as a connection-ready integration layer with persisted config and sync preview counts pending real external API credentials/docs
+- Stripe remains the contribution processor; Gemini-based AI tagging remains active for memories
 
 ## What’s Implemented
-- Public landing page with community-first positioning and protected auth experience
-- Host community bootstrap, login, invite-code registration, JWT session restore, role-aware app shell
-- Events Hub with event creation, RSVP tracking, agenda builder, volunteer slots/signup, potluck coordination, map links, and event templates
-- Memory Vault with event-linked uploads, voice-note support, AI tags/summary, and comments
-- Legacy Threads with categories, voice reflections, and discussion replies
-- Members page with invite creation and invite ledger
-- Contributions page with Stripe checkout initiation, contribution packages, transaction ledger, and status polling
-- Strategy Deck with wireframe flow, naming concepts, pitch framing, roadmap, and competitive analysis
-- Automated backend regression tests plus frontend Playwright validation against the public preview URL
+- Preserved existing color scheme/visual identity while redesigning the app around a Digital Courtyard IA
+- New Home page with upcoming gatherings, active courtyards/subyards, quick actions, role catalog, and relationship/funding prompts
+- Courtyards page with parent courtyard overview, subyard creation, role tool mapping, kinship relationship graph entries, member roster, and invite management
+- Timeline page with unified archive feed, On This Day reminders, memory uploads, and story thread creation
+- Gatherings page with template-based event creation, auto-generated checklists, role assignment, RSVP, agenda, volunteers, potluck, and travel coordination records
+- Funds & Travel page with contribution packages, transaction ledger, event/family budgets, and travel overview
+- Settings page with Legacy Table connection profile and sync preview workflow
+- Backend APIs for subyards, kinship, timeline archive, travel plans, budget plans, gathering templates/checklists, funds-travel overview, and Legacy Table settings
+- Expanded backend tests and frontend Playwright regression; core requested flows passed
 
 ## Prioritized Backlog
 ### P0
-- Validate full Stripe webhook paid-state completion flow end-to-end
-- Split backend server.py into domain routers/services for maintainability
-- Add richer permission controls for editing/removing invites, members, and content
+- Validate one full Stripe paid completion + webhook lifecycle end-to-end in sandbox
+- Modularize oversized backend/server.py into domain routers/services
+- Add editing/deletion flows for subyards, kinship relationships, budgets, and travel plans
 
 ### P1
-- Add polls, anonymous suggestion box, and board/community decisions flows
-- Add better media management (download controls, moderation, richer upload previews)
-- Add community profile/settings management and custom branding controls
+- Add relationship-group based invitation shortcuts and recurring gathering suggestions
+- Add advanced timeline filters/search/export and richer archive moderation controls
+- Add external travel provider connections once credentials/docs are available
+- Add live Legacy Table import/export once API docs/credentials are available
 
 ### P2
-- Add scholarship pools, mentorship matching, documentary generation, reunion books, and broader institutional tooling
-- Add archival search, filters, exports, and deeper analytics
-- Add push notifications and recurring event workflows
+- Multi-courtyard membership across separate parent communities
+- Push notifications, SMS/email auth, and richer communications tooling
+- Premium finance analytics, deeper travel booking logic, and partner ecosystem integrations
 
 ## Next Tasks
-1. Complete Stripe webhook simulation and paid-state confirmation UX
-2. Modularize backend routes and services
-3. Add polls/voting and anonymous suggestion functionality
-4. Improve member admin controls and content moderation workflows
+1. Complete Stripe paid-state verification in sandbox
+2. Modularize backend domains for maintainability
+3. Add edit/delete/admin flows for newly introduced courtyard objects
+4. Add smarter relationship-based invitations and gathering suggestions
