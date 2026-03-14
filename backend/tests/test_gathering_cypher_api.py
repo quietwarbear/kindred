@@ -238,6 +238,215 @@ def test_events_hub_end_to_end(api_client, test_context):
     assert claimed_item["assigned_to"] == test_context["member_user"]["full_name"]
 
 
+def test_courtyard_home_structure_subyards_and_kinship(api_client, test_context):
+    # Digital Courtyard core: home payload + structure + subyard + kinship
+    home_response = api_client.get(
+        f"{BASE_URL}/api/courtyard/home",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert home_response.status_code == 200
+    home_data = home_response.json()
+    assert "active_courtyards" in home_data
+    assert "notifications" in home_data
+    assert home_data["courtyard"]["id"] == test_context["community"]["id"]
+
+    subyard_payload = {
+        "name": f"TEST Subyard {uuid.uuid4().hex[:6]}",
+        "description": "TEST subyard for courtyard structure",
+        "inherited_roles": True,
+        "role_focus": ["organizer", "historian"],
+        "visibility": "shared",
+    }
+    subyard_response = api_client.post(
+        f"{BASE_URL}/api/subyards",
+        headers=_auth_headers(test_context["host_token"]),
+        json=subyard_payload,
+        timeout=20,
+    )
+    assert subyard_response.status_code == 200
+    subyard_data = subyard_response.json()
+    assert subyard_data["name"] == subyard_payload["name"]
+
+    kinship_payload = {
+        "person_name": "TEST Person A",
+        "related_to_name": "TEST Person B",
+        "relationship_type": "cousin branch",
+        "relationship_scope": "blood",
+        "notes": "TEST kinship note",
+        "last_seen_at": "2021-01-01T00:00:00.000Z",
+    }
+    kinship_response = api_client.post(
+        f"{BASE_URL}/api/kinship",
+        headers=_auth_headers(test_context["host_token"]),
+        json=kinship_payload,
+        timeout=20,
+    )
+    assert kinship_response.status_code == 200
+    kinship_data = kinship_response.json()
+    assert kinship_data["relationship_type"] == kinship_payload["relationship_type"]
+
+    structure_response = api_client.get(
+        f"{BASE_URL}/api/courtyard/structure",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert structure_response.status_code == 200
+    structure_data = structure_response.json()
+    assert any(item["id"] == subyard_data["id"] for item in structure_data["subyards"])
+    assert any(item["id"] == kinship_data["id"] for item in structure_data["kinships"])
+
+
+def test_gatherings_templates_checklist_toggle_and_travel(api_client, test_context):
+    # Gatherings engine: templates + checklist toggle + travel create/join/list
+    templates_response = api_client.get(
+        f"{BASE_URL}/api/gatherings/templates",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert templates_response.status_code == 200
+    templates_data = templates_response.json()
+    assert len(templates_data["templates"]) >= 3
+
+    event_id = test_context["event_id"]
+    events_response = api_client.get(
+        f"{BASE_URL}/api/events",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert events_response.status_code == 200
+    current_event = next(item for item in events_response.json() if item["id"] == event_id)
+    checklist_item = current_event["planning_checklist"][0]
+
+    toggle_response = api_client.post(
+        f"{BASE_URL}/api/events/{event_id}/checklist-toggle",
+        headers=_auth_headers(test_context["host_token"]),
+        json={"item_id": checklist_item["id"]},
+        timeout=20,
+    )
+    assert toggle_response.status_code == 200
+    toggled_event = toggle_response.json()
+    toggled_item = next(item for item in toggled_event["planning_checklist"] if item["id"] == checklist_item["id"])
+    assert toggled_item["completed"] is True
+
+    travel_payload = {
+        "event_id": event_id,
+        "title": "TEST Travel Block",
+        "travel_type": "hotel",
+        "details": "TEST hotel coordination details",
+        "coordinator_name": "TEST Host",
+        "amount_estimate": 450,
+        "payment_status": "pending",
+        "seats_available": 5,
+    }
+    travel_create_response = api_client.post(
+        f"{BASE_URL}/api/travel-plans",
+        headers=_auth_headers(test_context["host_token"]),
+        json=travel_payload,
+        timeout=20,
+    )
+    assert travel_create_response.status_code == 200
+    travel_data = travel_create_response.json()
+    assert travel_data["event_id"] == event_id
+
+    assign_response = api_client.post(
+        f"{BASE_URL}/api/travel-plans/{travel_data['id']}/assign-self",
+        headers=_auth_headers(test_context["member_token"]),
+        timeout=20,
+    )
+    assert assign_response.status_code == 200
+    assigned_data = assign_response.json()
+    assert test_context["member_user"]["full_name"] in assigned_data["assigned_members"]
+
+    list_response = api_client.get(
+        f"{BASE_URL}/api/travel-plans",
+        headers=_auth_headers(test_context["host_token"]),
+        params={"event_id": event_id},
+        timeout=20,
+    )
+    assert list_response.status_code == 200
+    assert any(plan["id"] == travel_data["id"] for plan in list_response.json()["travel_plans"])
+
+
+def test_timeline_archive_funds_overview_and_settings(api_client, test_context):
+    # Timeline + funds/travel + Legacy Table settings/sync-preview
+    timeline_response = api_client.get(
+        f"{BASE_URL}/api/timeline/archive",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert timeline_response.status_code == 200
+    timeline_data = timeline_response.json()
+    assert isinstance(timeline_data["timeline_items"], list)
+    assert any(item["type"] in ["gathering", "memory", "story"] for item in timeline_data["timeline_items"])
+
+    budget_payload = {
+        "title": f"TEST Budget {uuid.uuid4().hex[:6]}",
+        "event_id": test_context["event_id"],
+        "target_amount": 1000,
+        "current_amount": 250,
+        "suggested_contribution": 50,
+        "notes": "TEST budget note",
+    }
+    budget_create_response = api_client.post(
+        f"{BASE_URL}/api/budget-plans",
+        headers=_auth_headers(test_context["host_token"]),
+        json=budget_payload,
+        timeout=20,
+    )
+    assert budget_create_response.status_code == 200
+    budget_data = budget_create_response.json()
+    assert budget_data["title"] == budget_payload["title"]
+
+    funds_overview_response = api_client.get(
+        f"{BASE_URL}/api/funds-travel/overview",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert funds_overview_response.status_code == 200
+    funds_data = funds_overview_response.json()
+    assert "budgets" in funds_data
+    assert "travel_plans" in funds_data
+    assert any(item["id"] == budget_data["id"] for item in funds_data["budgets"])
+
+    legacy_status_response = api_client.get(
+        f"{BASE_URL}/api/legacy-table/status",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert legacy_status_response.status_code == 200
+    legacy_status_data = legacy_status_response.json()
+    assert "connection_status" in legacy_status_data
+
+    legacy_config_payload = {
+        "base_url": "https://legacy-table.example.test",
+        "auth_type": "api-key",
+        "sync_members": True,
+        "sync_stories": True,
+        "sync_events": True,
+        "sync_relationships": True,
+    }
+    legacy_save_response = api_client.post(
+        f"{BASE_URL}/api/legacy-table/config",
+        headers=_auth_headers(test_context["host_token"]),
+        json=legacy_config_payload,
+        timeout=20,
+    )
+    assert legacy_save_response.status_code == 200
+    legacy_save_data = legacy_save_response.json()
+    assert legacy_save_data["base_url"] == legacy_config_payload["base_url"]
+
+    legacy_preview_response = api_client.post(
+        f"{BASE_URL}/api/legacy-table/sync-preview",
+        headers=_auth_headers(test_context["host_token"]),
+        timeout=20,
+    )
+    assert legacy_preview_response.status_code == 200
+    preview_data = legacy_preview_response.json()
+    assert "preview_counts" in preview_data
+    assert all(key in preview_data["preview_counts"] for key in ["members", "kinships", "events", "memories", "threads"])
+
+
 def test_memory_vault_create_ai_tags_and_comment(api_client, test_context):
     # Memory Vault: create + list + comment
     create_memory_payload = {

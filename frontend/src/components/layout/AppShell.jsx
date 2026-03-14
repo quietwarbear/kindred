@@ -3,22 +3,26 @@ import { useTheme } from "next-themes";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { DashboardPage } from "@/components/DashboardPage";
 import { ContributionsPage } from "@/components/ContributionsPage";
-import { EventsPage } from "@/components/EventsPage";
+import { CourtyardsPage } from "@/components/CourtyardsPage";
+import { FundsTravelPage } from "@/components/FundsTravelPage";
+import { GatheringsPage } from "@/components/GatheringsPage";
+import { HomePage } from "@/components/HomePage";
 import { MemoryVaultPage } from "@/components/MemoryVaultPage";
 import { MembersPage } from "@/components/MembersPage";
+import { SettingsPage } from "@/components/SettingsPage";
 import { StrategyPage } from "@/components/StrategyPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
+import { TimelinePage } from "@/components/TimelinePage";
+import { EventsPage } from "@/components/EventsPage";
 
 const navItems = [
-  { label: "Dashboard", path: "/dashboard" },
-  { label: "Events Hub", path: "/events" },
-  { label: "Memory Vault", path: "/memories" },
-  { label: "Legacy Threads", path: "/threads" },
-  { label: "Contributions", path: "/contributions" },
-  { label: "Members", path: "/members" },
-  { label: "Strategy Deck", path: "/app-strategy" },
+  { label: "Home", path: "/home" },
+  { label: "Courtyards", path: "/courtyards" },
+  { label: "Timeline", path: "/timeline" },
+  { label: "Gatherings", path: "/gatherings" },
+  { label: "Funds & Travel", path: "/funds-travel" },
+  { label: "Settings", path: "/settings" },
 ];
 
 export const AppShell = ({ token, user, community, onLogout, onSessionRefresh }) => {
@@ -35,7 +39,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="eyebrow-text">Private community OS</p>
+                  <p className="eyebrow-text">Digital Courtyard</p>
                   <h1 className="font-display text-2xl text-foreground">Gathering Cypher</h1>
                 </div>
               </div>
@@ -44,7 +48,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   {community?.name}
                 </p>
                 <p className="text-sm text-muted-foreground" data-testid="shell-community-metadata">
-                  {community?.community_type} · {community?.location}
+                  {community?.community_type} courtyard · {community?.location}
                 </p>
                 <p className="text-sm text-muted-foreground" data-testid="shell-user-identity">
                   Signed in as {user?.full_name} ({user?.role})
@@ -95,12 +99,12 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
           <main className="space-y-6">
             <div className="archival-card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="eyebrow-text">Invitation-only coordination</p>
+                <p className="eyebrow-text">Kinship infrastructure</p>
                 <h2 className="font-display text-3xl text-foreground sm:text-4xl" data-testid="shell-header-title">
-                  Build memory, not noise.
+                  Plan gatherings like a platform, not a patchwork.
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  Organize gatherings, preserve oral history, and track contributions inside a space your community controls.
+                  Keep the same warm visual feel while expanding into courtyards, subyards, kinship mapping, smart planning, timelines, shared funds, and travel coordination.
                 </p>
               </div>
               <div className="soft-panel flex items-center gap-3 self-start" data-testid="shell-value-pill">
@@ -113,20 +117,23 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             </div>
 
             <Routes>
-              <Route
-                element={<DashboardPage community={community} token={token} user={user} />}
-                path="dashboard"
-              />
-              <Route element={<EventsPage token={token} user={user} />} path="events" />
-              <Route element={<MemoryVaultPage token={token} user={user} />} path="memories" />
-              <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
-              <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />
+              <Route element={<HomePage token={token} />} path="dashboard" />
+              <Route element={<HomePage token={token} />} path="home" />
+              <Route element={<CourtyardsPage token={token} user={user} />} path="courtyards" />
+              <Route element={<TimelinePage token={token} />} path="timeline" />
+              <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
+              <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
+              <Route element={<SettingsPage token={token} user={user} />} path="settings" />
               <Route
                 element={<MembersPage onSessionRefresh={onSessionRefresh} token={token} user={user} />}
                 path="members"
               />
+              <Route element={<MemoryVaultPage token={token} user={user} />} path="memories" />
+              <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
+              <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />
+              <Route element={<EventsPage token={token} user={user} />} path="events" />
               <Route element={<StrategyPage mode="app" />} path="app-strategy" />
-              <Route element={<Navigate replace to="/dashboard" />} path="*" />
+              <Route element={<Navigate replace to="/home" />} path="*" />
             </Routes>
           </main>
         </div>

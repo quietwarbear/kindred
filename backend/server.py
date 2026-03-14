@@ -6,12 +6,17 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ai_tagging import generate_memory_tags
-from dotenv import load_dotenv
-from emergentintegrations.payments.stripe.checkout import (
-    CheckoutSessionRequest,
-    StripeCheckout,
+from courtyard_helpers import (
+    ROLE_TOOLING,
+    build_default_subyards,
+    build_planning_checklist,
+    build_role_suggestions,
+    countdown_days,
+    years_since,
 )
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from dotenv import load_dotenv
+from emergentintegrations.payments.stripe.checkout import CheckoutSessionRequest, StripeCheckout
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -29,10 +34,15 @@ db = client[os.environ["DB_NAME"]]
 users_collection = db.users
 communities_collection = db.communities
 invites_collection = db.invites
+subyards_collection = db.subyards
+kinships_collection = db.kinship_relationships
 events_collection = db.events
 memories_collection = db.memories
 threads_collection = db.threads
 payments_collection = db.payment_transactions
+travel_plans_collection = db.travel_plans
+budget_plans_collection = db.budget_plans
+legacy_table_collection = db.legacy_table_configs
 
 app = FastAPI(title="Gathering Cypher API")
 api_router = APIRouter(prefix="/api")
@@ -60,6 +70,39 @@ CONTRIBUTION_PACKAGES = {
     },
 }
 
+GATHERING_TEMPLATES = [
+    {
+        "id": "reunion",
+        "label": "Reunion",
+        "description": "Family-wide gathering with roll call, shared meals, and memory capture.",
+        "roles": ["organizer", "historian", "treasurer", "communications lead"],
+    },
+    {
+        "id": "birthday",
+        "label": "Birthday",
+        "description": "Celebration-focused planning with tributes, food, and guest coordination.",
+        "roles": ["organizer", "historian", "contributor"],
+    },
+    {
+        "id": "wedding",
+        "label": "Wedding",
+        "description": "Vendor, seating, travel, and budget planning for milestone moments.",
+        "roles": ["organizer", "treasurer", "communications lead"],
+    },
+    {
+        "id": "holiday",
+        "label": "Holiday",
+        "description": "Seasonal coordination for meals, travel, and attendance reminders.",
+        "roles": ["organizer", "historian", "contributor"],
+    },
+    {
+        "id": "custom",
+        "label": "Custom",
+        "description": "Start from a blank canvas and shape the gathering around your people.",
+        "roles": ["organizer", "historian", "contributor"],
+    },
+]
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -76,24 +119,93 @@ def normalize_community_type(value: str) -> str:
 def sanitize_doc(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
-    clean = {k: v for k, v in document.items() if k != "_id"}
-    return clean
+    return {key: value for key, value in document.items() if key != "_id"}
 
 
 def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any]) -> dict[str, Any]:
     user_safe = sanitize_doc(user_doc) or {}
     user_safe.pop("password_hash", None)
-    token = create_access_token(user_safe["id"], {"community_id": user_safe["community_id"], "role": user_safe["role"]})
-    return {
-        "token": token,
-        "user": user_safe,
-        "community": sanitize_doc(community_doc),
-    }
+    token = create_access_token(
+        user_safe["id"],
+        {"community_id": user_safe["community_id"], "role": user_safe["role"]},
+    )
+    return {"token": token, "user": user_safe, "community": sanitize_doc(community_doc)}
 
 
 def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "organizer", "host"]):
     if ROLE_ORDER.get(user["role"], 0) < ROLE_ORDER[minimum_role]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to perform this action.")
+
+
+def build_stripe_checkout(request: Request) -> StripeCheckout:
+    api_key = os.environ["STRIPE_API_KEY"]
+    host_url = str(request.base_url).rstrip("/")
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    return StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+
+
+def parse_datetime_safe(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def build_notifications(
+    kinships: list[dict[str, Any]],
+    pending_invites: list[dict[str, Any]],
+    upcoming_events: list[dict[str, Any]],
+    budgets: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    notifications: list[dict[str, Any]] = []
+
+    for kinship in kinships:
+        years = years_since(kinship.get("last_seen_at"))
+        if years and years >= 3:
+            notifications.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "relationship",
+                    "title": f"You haven’t seen {kinship['person_name']} in {years} years",
+                    "description": f"Consider inviting them through the {kinship['relationship_type']} circle.",
+                }
+            )
+
+    if pending_invites:
+        notifications.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "membership",
+                "title": f"{len(pending_invites)} invitation(s) still pending",
+                "description": "Follow up with organizers, cousins, or ministry leads before the next gathering.",
+            }
+        )
+
+    for budget in budgets:
+        if budget.get("target_amount", 0) > 0 and budget.get("current_amount", 0) < budget.get("target_amount", 0):
+            notifications.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "funding",
+                    "title": f"{budget['title']} is below target",
+                    "description": "Prompt contributors or open a contribution package to close the gap.",
+                }
+            )
+
+    if upcoming_events:
+        next_event = upcoming_events[0]
+        notifications.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "timeline",
+                "title": f"Next gathering: {next_event['title']}",
+                "description": "Refresh travel coordination, checklist items, and memory capture assignments.",
+            }
+        )
+
+    return notifications[:6]
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict[str, Any]:
@@ -138,11 +250,11 @@ async def get_thread_for_user(thread_id: str, user: dict[str, Any]) -> dict[str,
     return thread_doc
 
 
-def build_stripe_checkout(request: Request) -> StripeCheckout:
-    api_key = os.environ["STRIPE_API_KEY"]
-    host_url = str(request.base_url).rstrip("/")
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    return StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+async def get_subyard_for_user(subyard_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    subyard_doc = await subyards_collection.find_one({"id": subyard_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not subyard_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subyard not found.")
+    return subyard_doc
 
 
 class CommunityBootstrapRequest(BaseModel):
@@ -250,8 +362,23 @@ class EventCreateRequest(BaseModel):
     start_at: str
     location: str
     map_url: str | None = ""
-    event_template: Literal["general", "family-reunion", "church-gathering"] = "general"
+    event_template: str = "general"
     special_focus: str | None = ""
+    gathering_format: Literal["in-person", "online", "hybrid"] = "in-person"
+    max_attendees: int | None = Field(default=None, ge=1, le=5000)
+    subyard_id: str | None = ""
+    assigned_roles: list[str] = Field(default_factory=list)
+    suggested_contribution: float = Field(default=0.0, ge=0.0)
+    travel_coordination_notes: str | None = ""
+
+
+class ChecklistItemRequest(BaseModel):
+    category: str
+    title: str
+
+
+class ChecklistToggleRequest(BaseModel):
+    item_id: str
 
 
 class EventPublic(BaseModel):
@@ -267,10 +394,18 @@ class EventPublic(BaseModel):
     map_url: str | None = ""
     event_template: str
     special_focus: str | None = ""
-    agenda: list[dict[str, Any]] = []
-    volunteer_slots: list[dict[str, Any]] = []
-    potluck_items: list[dict[str, Any]] = []
-    rsvp_records: list[dict[str, Any]] = []
+    gathering_format: str = "in-person"
+    max_attendees: int | None = None
+    subyard_id: str | None = ""
+    subyard_name: str | None = ""
+    assigned_roles: list[str] = Field(default_factory=list)
+    planning_checklist: list[dict[str, Any]] = Field(default_factory=list)
+    travel_coordination_notes: str | None = ""
+    suggested_contribution: float = 0.0
+    agenda: list[dict[str, Any]] = Field(default_factory=list)
+    volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
+    potluck_items: list[dict[str, Any]] = Field(default_factory=list)
+    rsvp_records: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str
 
 
@@ -299,9 +434,9 @@ class MemoryPublic(BaseModel):
     voice_note_data_url: str | None = None
     uploaded_by: str
     uploaded_by_name: str
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     ai_summary: str | None = ""
-    comments: list[dict[str, Any]] = []
+    comments: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str
 
 
@@ -325,29 +460,13 @@ class ThreadPublic(BaseModel):
     body: str
     elder_name: str | None = ""
     voice_note_data_url: str | None = None
-    comments: list[dict[str, Any]] = []
+    comments: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str
 
 
 class PaymentCheckoutRequest(BaseModel):
     package_id: str
     origin_url: str
-
-
-class PaymentTransactionPublic(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    session_id: str
-    package_id: str
-    contribution_label: str
-    amount: float
-    currency: str
-    status: str
-    payment_status: str
-    user_email: EmailStr
-    created_at: str
-    completed_at: str | None = None
 
 
 class DashboardOverview(BaseModel):
@@ -360,9 +479,61 @@ class DashboardOverview(BaseModel):
     pending_invites: list[InvitePublic]
 
 
+class SubyardCreateRequest(BaseModel):
+    name: str
+    description: str
+    inherited_roles: bool = True
+    role_focus: list[str] = Field(default_factory=list)
+    visibility: Literal["shared", "private"] = "shared"
+
+
+class KinshipCreateRequest(BaseModel):
+    person_name: str
+    related_to_name: str
+    relationship_type: str
+    relationship_scope: Literal["blood", "chosen", "mentor", "neighbor", "honorary elder"]
+    notes: str | None = ""
+    last_seen_at: str | None = None
+
+
+class TravelPlanCreateRequest(BaseModel):
+    event_id: str
+    title: str
+    travel_type: Literal["hotel", "flight", "carpool", "shuttle"]
+    details: str
+    coordinator_name: str | None = ""
+    amount_estimate: float = Field(default=0.0, ge=0.0)
+    payment_status: Literal["pending", "partially-funded", "funded"] = "pending"
+    seats_available: int = Field(default=0, ge=0, le=500)
+
+
+class BudgetCreateRequest(BaseModel):
+    title: str
+    event_id: str | None = None
+    target_amount: float = Field(default=0.0, ge=0.0)
+    current_amount: float = Field(default=0.0, ge=0.0)
+    suggested_contribution: float = Field(default=0.0, ge=0.0)
+    notes: str | None = ""
+
+
+class LegacyTableConfigRequest(BaseModel):
+    base_url: str | None = ""
+    auth_type: Literal["api-key", "oauth", "bearer", "none"] = "api-key"
+    sync_members: bool = True
+    sync_stories: bool = True
+    sync_events: bool = True
+    sync_relationships: bool = True
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Gathering Cypher API is ready."}
+
+
+@api_router.get("/gatherings/templates")
+async def gathering_templates(current_user: dict[str, Any] = Depends(get_current_user)):
+    _ = current_user
+    return {"templates": GATHERING_TEMPLATES}
 
 
 @api_router.post("/auth/bootstrap", response_model=AuthResponse)
@@ -375,7 +546,6 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
     community_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
     created_at = now_iso()
-
     community_doc = {
         "id": community_id,
         "name": payload.community_name.strip(),
@@ -398,6 +568,26 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
 
     await communities_collection.insert_one(community_doc.copy())
     await users_collection.insert_one(user_doc.copy())
+
+    default_subyards = []
+    for template in build_default_subyards(community_doc["community_type"]):
+        default_subyards.append(
+            {
+                "id": str(uuid.uuid4()),
+                "community_id": community_id,
+                "name": template["name"],
+                "description": template["description"],
+                "inherited_roles": True,
+                "role_focus": template["role_focus"],
+                "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
+                "visibility": "shared",
+                "created_by": user_id,
+                "created_at": created_at,
+            }
+        )
+    if default_subyards:
+        await subyards_collection.insert_many([item.copy() for item in default_subyards])
+
     return build_auth_response(user_doc, community_doc)
 
 
@@ -451,31 +641,135 @@ async def me(current_user: dict[str, Any] = Depends(get_current_user)):
 async def get_overview(current_user: dict[str, Any] = Depends(get_current_user)):
     community_doc = await get_community_for_user(current_user)
     community_id = current_user["community_id"]
-
     member_count = await users_collection.count_documents({"community_id": community_id})
     event_count = await events_collection.count_documents({"community_id": community_id})
     memory_count = await memories_collection.count_documents({"community_id": community_id})
     thread_count = await threads_collection.count_documents({"community_id": community_id})
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
-    total_raised = await payments_collection.find({"community_id": community_id, "payment_status": "paid"}, {"_id": 0}).to_list(1000)
+    total_raised_docs = await payments_collection.find(
+        {"community_id": community_id, "payment_status": "paid"},
+        {"_id": 0, "amount": 1},
+    ).to_list(1000)
     upcoming_events = await events_collection.find({"community_id": community_id}, {"_id": 0}).sort("start_at", 1).to_list(5)
     recent_memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     recent_threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
 
     return {
         "community": community_doc,
-        "user": sanitize_doc({k: v for k, v in current_user.items() if k != "password_hash"}),
+        "user": sanitize_doc({key: value for key, value in current_user.items() if key != "password_hash"}),
         "stats": {
             "members": member_count,
             "events": event_count,
             "memories": memory_count,
             "threads": thread_count,
-            "funds_raised": round(sum(txn.get("amount", 0) for txn in total_raised), 2),
+            "funds_raised": round(sum(doc.get("amount", 0) for doc in total_raised_docs), 2),
         },
         "upcoming_events": upcoming_events,
         "recent_memories": recent_memories,
         "recent_threads": recent_threads,
         "pending_invites": pending_invites,
+    }
+
+
+@api_router.get("/courtyard/home")
+async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user)):
+    community_doc = await get_community_for_user(current_user)
+    community_id = current_user["community_id"]
+    members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).to_list(500)
+    subyards = await subyards_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1).to_list(50)
+    upcoming_events = await events_collection.find({"community_id": community_id}, {"_id": 0}).sort("start_at", 1).to_list(5)
+    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
+    threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
+    pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
+    paid_transactions = await payments_collection.find(
+        {"community_id": community_id, "payment_status": "paid"},
+        {"_id": 0, "amount": 1},
+    ).to_list(1000)
+    budgets = await budget_plans_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+
+    notifications = build_notifications(kinships, pending_invites, upcoming_events, budgets)
+    active_courtyards = [
+        {
+            "id": community_doc["id"],
+            "name": community_doc["name"],
+            "kind": "courtyard",
+            "members": len(members),
+            "upcoming_gatherings": len(upcoming_events),
+            "unread_updates": len(notifications),
+        }
+    ]
+    for subyard in subyards:
+        subyard_event_count = await events_collection.count_documents({"community_id": community_id, "subyard_id": subyard["id"]})
+        active_courtyards.append(
+            {
+                "id": subyard["id"],
+                "name": subyard["name"],
+                "kind": "subyard",
+                "members": len(members),
+                "upcoming_gatherings": subyard_event_count,
+                "unread_updates": max(len(subyard.get("role_focus", [])), 0),
+                "description": subyard["description"],
+            }
+        )
+
+    gatherings = []
+    for event in upcoming_events:
+        rsvp_records = event.get("rsvp_records", [])
+        gatherings.append(
+            {
+                **event,
+                "countdown_days": countdown_days(event.get("start_at")),
+                "rsvp_summary": {
+                    "going": len([record for record in rsvp_records if record.get("status") == "going"]),
+                    "maybe": len([record for record in rsvp_records if record.get("status") == "maybe"]),
+                    "not_going": len([record for record in rsvp_records if record.get("status") == "not-going"]),
+                },
+            }
+        )
+
+    return {
+        "courtyard": community_doc,
+        "user": sanitize_doc({key: value for key, value in current_user.items() if key != "password_hash"}),
+        "stats": {
+            "members": len(members),
+            "subyards": len(subyards),
+            "gatherings": len(upcoming_events),
+            "timeline_updates": len(memories) + len(threads),
+            "funds_total": round(sum(doc.get("amount", 0) for doc in paid_transactions), 2),
+        },
+        "upcoming_gatherings": gatherings,
+        "active_courtyards": active_courtyards,
+        "quick_actions": [
+            {"id": "plan-gathering", "label": "Plan New Gathering", "target": "/gatherings"},
+            {"id": "upload-story", "label": "Upload Photos/Stories", "target": "/timeline"},
+            {"id": "check-funds", "label": "Check Shared Funds", "target": "/funds-travel"},
+        ],
+        "notifications": notifications,
+        "relationship_groups": sorted({kinship["relationship_type"] for kinship in kinships})[:10],
+        "recent_timeline": [
+            *memories[:3],
+            *threads[:3],
+        ],
+        "role_catalog": [{"role": role, "tools": tools} for role, tools in ROLE_TOOLING.items()],
+    }
+
+
+@api_router.get("/courtyard/structure")
+async def courtyard_structure(current_user: dict[str, Any] = Depends(get_current_user)):
+    community_doc = await get_community_for_user(current_user)
+    community_id = current_user["community_id"]
+    subyards = await subyards_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    invites = await invites_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {
+        "courtyard": community_doc,
+        "subyards": subyards,
+        "kinships": kinships,
+        "members": members,
+        "invites": invites,
+        "role_catalog": [{"role": role, "tools": tools} for role, tools in ROLE_TOOLING.items()],
     }
 
 
@@ -486,6 +780,56 @@ async def get_members(current_user: dict[str, Any] = Depends(get_current_user)):
         {"_id": 0, "password_hash": 0},
     ).sort("created_at", -1).to_list(500)
     return {"members": members}
+
+
+@api_router.get("/subyards")
+async def list_subyards(current_user: dict[str, Any] = Depends(get_current_user)):
+    subyards = await subyards_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return {"subyards": subyards}
+
+
+@api_router.post("/subyards")
+async def create_subyard(payload: SubyardCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    role_focus = [role.strip().lower() for role in payload.role_focus if role.strip()]
+    subyard_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "name": payload.name.strip(),
+        "description": payload.description.strip(),
+        "inherited_roles": payload.inherited_roles,
+        "role_focus": role_focus,
+        "assigned_tools": sorted({tool for role in role_focus for tool in ROLE_TOOLING.get(role, [])}),
+        "visibility": payload.visibility,
+        "created_by": current_user["id"],
+        "created_at": now_iso(),
+    }
+    await subyards_collection.insert_one(subyard_doc.copy())
+    return subyard_doc
+
+
+@api_router.get("/kinship")
+async def list_kinship(current_user: dict[str, Any] = Depends(get_current_user)):
+    relationships = await kinships_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"relationships": relationships}
+
+
+@api_router.post("/kinship")
+async def create_kinship(payload: KinshipCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    relationship_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "person_name": payload.person_name.strip(),
+        "related_to_name": payload.related_to_name.strip(),
+        "relationship_type": payload.relationship_type.strip(),
+        "relationship_scope": payload.relationship_scope,
+        "notes": (payload.notes or "").strip(),
+        "last_seen_at": payload.last_seen_at,
+        "created_by": current_user["id"],
+        "created_at": now_iso(),
+    }
+    await kinships_collection.insert_one(relationship_doc.copy())
+    return relationship_doc
 
 
 @api_router.post("/invites", response_model=InvitePublic)
@@ -525,6 +869,12 @@ async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
 @api_router.post("/events", response_model=EventPublic)
 async def create_event(payload: EventCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
+    subyard_name = ""
+    if payload.subyard_id:
+        subyard_doc = await get_subyard_for_user(payload.subyard_id, current_user)
+        subyard_name = subyard_doc["name"]
+
+    assigned_roles = payload.assigned_roles or build_role_suggestions(payload.event_template)
     event_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -536,6 +886,14 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "map_url": (payload.map_url or "").strip(),
         "event_template": payload.event_template,
         "special_focus": (payload.special_focus or "").strip(),
+        "gathering_format": payload.gathering_format,
+        "max_attendees": payload.max_attendees,
+        "subyard_id": payload.subyard_id,
+        "subyard_name": subyard_name,
+        "assigned_roles": assigned_roles,
+        "planning_checklist": build_planning_checklist(payload.event_template, payload.gathering_format),
+        "travel_coordination_notes": (payload.travel_coordination_notes or "").strip(),
+        "suggested_contribution": float(payload.suggested_contribution or 0.0),
         "agenda": [],
         "volunteer_slots": [],
         "potluck_items": [],
@@ -569,16 +927,37 @@ async def add_agenda_item(event_id: str, payload: AgendaItemRequest, current_use
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     agenda = event_doc.get("agenda", [])
-    agenda.append(
-        {
-            "id": str(uuid.uuid4()),
-            "time_label": payload.time_label.strip(),
-            "title": payload.title.strip(),
-            "notes": (payload.notes or "").strip(),
-        }
-    )
+    agenda.append({"id": str(uuid.uuid4()), "time_label": payload.time_label.strip(), "title": payload.title.strip(), "notes": (payload.notes or "").strip()})
     event_doc["agenda"] = agenda
     await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
+    return event_doc
+
+
+@api_router.post("/events/{event_id}/checklist-items", response_model=EventPublic)
+async def add_checklist_item(event_id: str, payload: ChecklistItemRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    checklist = event_doc.get("planning_checklist", [])
+    checklist.append({"id": str(uuid.uuid4()), "category": payload.category.strip(), "title": payload.title.strip(), "completed": False})
+    event_doc["planning_checklist"] = checklist
+    await events_collection.update_one({"id": event_id}, {"$set": {"planning_checklist": checklist}})
+    return event_doc
+
+
+@api_router.post("/events/{event_id}/checklist-toggle", response_model=EventPublic)
+async def toggle_checklist_item(event_id: str, payload: ChecklistToggleRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    event_doc = await get_event_for_user(event_id, current_user)
+    checklist = event_doc.get("planning_checklist", [])
+    updated = False
+    for item in checklist:
+        if item.get("id") == payload.item_id:
+            item["completed"] = not item.get("completed", False)
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist item not found.")
+    event_doc["planning_checklist"] = checklist
+    await events_collection.update_one({"id": event_id}, {"$set": {"planning_checklist": checklist}})
     return event_doc
 
 
@@ -587,14 +966,7 @@ async def add_volunteer_slot(event_id: str, payload: VolunteerSlotRequest, curre
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     slots = event_doc.get("volunteer_slots", [])
-    slots.append(
-        {
-            "id": str(uuid.uuid4()),
-            "title": payload.title.strip(),
-            "needed_count": payload.needed_count,
-            "assigned_members": [],
-        }
-    )
+    slots.append({"id": str(uuid.uuid4()), "title": payload.title.strip(), "needed_count": payload.needed_count, "assigned_members": []})
     event_doc["volunteer_slots"] = slots
     await events_collection.update_one({"id": event_id}, {"$set": {"volunteer_slots": slots}})
     return event_doc
@@ -607,11 +979,11 @@ async def volunteer_signup(event_id: str, payload: VolunteerSignupRequest, curre
     updated = False
     for slot in slots:
         assigned_members = slot.get("assigned_members", [])
-        if slot.get("id") == payload.slot_id and current_user["full_name"] not in assigned_members:
-            if len(assigned_members) < slot.get("needed_count", 1):
-                assigned_members.append(current_user["full_name"])
-                slot["assigned_members"] = assigned_members
-                updated = True
+        if slot.get("id") == payload.slot_id and current_user["full_name"] not in assigned_members and len(assigned_members) < slot.get("needed_count", 1):
+            assigned_members.append(current_user["full_name"])
+            slot["assigned_members"] = assigned_members
+            updated = True
+            break
     if not updated:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This volunteer slot is already full or unavailable.")
     event_doc["volunteer_slots"] = slots
@@ -624,13 +996,7 @@ async def add_potluck_item(event_id: str, payload: PotluckItemRequest, current_u
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     items = event_doc.get("potluck_items", [])
-    items.append(
-        {
-            "id": str(uuid.uuid4()),
-            "item_name": payload.item_name.strip(),
-            "assigned_to": "",
-        }
-    )
+    items.append({"id": str(uuid.uuid4()), "item_name": payload.item_name.strip(), "assigned_to": ""})
     event_doc["potluck_items"] = items
     await events_collection.update_one({"id": event_id}, {"$set": {"potluck_items": items}})
     return event_doc
@@ -645,11 +1011,70 @@ async def claim_potluck_item(event_id: str, payload: PotluckClaimRequest, curren
         if item.get("id") == payload.item_id and not item.get("assigned_to"):
             item["assigned_to"] = current_user["full_name"]
             claimed = True
+            break
     if not claimed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This potluck item is already claimed or unavailable.")
     event_doc["potluck_items"] = items
     await events_collection.update_one({"id": event_id}, {"$set": {"potluck_items": items}})
     return event_doc
+
+
+@api_router.get("/timeline/archive")
+async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_user)):
+    community_id = current_user["community_id"]
+    events = await events_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+    threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+
+    timeline_items = []
+    for event in events:
+        timeline_items.append(
+            {
+                "id": event["id"],
+                "type": "gathering",
+                "title": event["title"],
+                "subtitle": event.get("subyard_name") or event.get("event_template"),
+                "description": event["description"],
+                "occurred_at": event["start_at"],
+                "tags": event.get("assigned_roles", []),
+            }
+        )
+    for memory in memories:
+        timeline_items.append(
+            {
+                "id": memory["id"],
+                "type": "memory",
+                "title": memory["title"],
+                "subtitle": memory["event_title"],
+                "description": memory.get("ai_summary") or memory["description"],
+                "occurred_at": memory["created_at"],
+                "tags": memory.get("tags", []),
+                "image_data_url": memory.get("image_data_url"),
+                "voice_note_data_url": memory.get("voice_note_data_url"),
+            }
+        )
+    for thread in threads:
+        timeline_items.append(
+            {
+                "id": thread["id"],
+                "type": "story",
+                "title": thread["title"],
+                "subtitle": thread.get("elder_name") or thread.get("category"),
+                "description": thread["body"],
+                "occurred_at": thread["created_at"],
+                "tags": [thread.get("category", "story")],
+                "voice_note_data_url": thread.get("voice_note_data_url"),
+            }
+        )
+
+    timeline_items.sort(key=lambda item: parse_datetime_safe(item.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    today = datetime.now(timezone.utc)
+    anniversaries = [
+        event for event in events
+        if (parsed := parse_datetime_safe(event.get("start_at"))) and parsed.month == today.month and parsed.day == today.day
+    ]
+    return {"timeline_items": timeline_items[:300], "on_this_day": anniversaries[:5]}
 
 
 @api_router.get("/memories", response_model=list[MemoryPublic])
@@ -673,7 +1098,6 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
         special_focus=event_doc.get("special_focus", ""),
         image_data_url=payload.image_data_url,
     )
-
     memory_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -698,14 +1122,7 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
 async def add_memory_comment(memory_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     memory_doc = await get_memory_for_user(memory_id, current_user)
     comments = memory_doc.get("comments", [])
-    comments.append(
-        {
-            "id": str(uuid.uuid4()),
-            "author_name": current_user["full_name"],
-            "text": payload.text.strip(),
-            "created_at": now_iso(),
-        }
-    )
+    comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
     memory_doc["comments"] = comments
     await memories_collection.update_one({"id": memory_id}, {"$set": {"comments": comments}})
     return memory_doc
@@ -740,31 +1157,107 @@ async def create_thread(payload: ThreadCreateRequest, current_user: dict[str, An
 async def add_thread_comment(thread_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     thread_doc = await get_thread_for_user(thread_id, current_user)
     comments = thread_doc.get("comments", [])
-    comments.append(
-        {
-            "id": str(uuid.uuid4()),
-            "author_name": current_user["full_name"],
-            "text": payload.text.strip(),
-            "created_at": now_iso(),
-        }
-    )
+    comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
     thread_doc["comments"] = comments
     await threads_collection.update_one({"id": thread_id}, {"$set": {"comments": comments}})
     return thread_doc
+
+
+@api_router.get("/travel-plans")
+async def list_travel_plans(
+    current_user: dict[str, Any] = Depends(get_current_user),
+    event_id: str | None = Query(default=None),
+):
+    query = {"community_id": current_user["community_id"]}
+    if event_id:
+        query["event_id"] = event_id
+    plans = await travel_plans_collection.find(query, {"_id": 0}).sort("created_at", -1).to_list(300)
+    return {"travel_plans": plans}
+
+
+@api_router.post("/travel-plans")
+async def create_travel_plan(payload: TravelPlanCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(payload.event_id, current_user)
+    travel_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "event_id": payload.event_id,
+        "event_title": event_doc["title"],
+        "title": payload.title.strip(),
+        "travel_type": payload.travel_type,
+        "details": payload.details.strip(),
+        "coordinator_name": (payload.coordinator_name or current_user["full_name"]).strip(),
+        "amount_estimate": float(payload.amount_estimate),
+        "payment_status": payload.payment_status,
+        "seats_available": payload.seats_available,
+        "assigned_members": [],
+        "created_at": now_iso(),
+    }
+    await travel_plans_collection.insert_one(travel_doc.copy())
+    return travel_doc
+
+
+@api_router.post("/travel-plans/{plan_id}/assign-self")
+async def assign_self_to_travel(plan_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    plan_doc = await travel_plans_collection.find_one({"id": plan_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    if not plan_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Travel plan not found.")
+    assigned = plan_doc.get("assigned_members", [])
+    if current_user["full_name"] not in assigned:
+        assigned.append(current_user["full_name"])
+    await travel_plans_collection.update_one({"id": plan_id}, {"$set": {"assigned_members": assigned}})
+    updated = await travel_plans_collection.find_one({"id": plan_id}, {"_id": 0})
+    return updated
+
+
+@api_router.get("/budget-plans")
+async def list_budget_plans(current_user: dict[str, Any] = Depends(get_current_user)):
+    budgets = await budget_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(300)
+    return {"budget_plans": budgets}
+
+
+@api_router.post("/budget-plans")
+async def create_budget_plan(payload: BudgetCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_title = ""
+    if payload.event_id:
+        event_doc = await get_event_for_user(payload.event_id, current_user)
+        event_title = event_doc["title"]
+    budget_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "event_id": payload.event_id,
+        "event_title": event_title,
+        "title": payload.title.strip(),
+        "target_amount": float(payload.target_amount),
+        "current_amount": float(payload.current_amount),
+        "suggested_contribution": float(payload.suggested_contribution),
+        "notes": (payload.notes or "").strip(),
+        "created_by": current_user["id"],
+        "created_at": now_iso(),
+    }
+    await budget_plans_collection.insert_one(budget_doc.copy())
+    return budget_doc
 
 
 @api_router.get("/payments/summary")
 async def payment_summary(current_user: dict[str, Any] = Depends(get_current_user)):
     transactions = await payments_collection.find(
         {"community_id": current_user["community_id"]},
-        {"_id": 0},
+        {"_id": 0, "id": 1, "session_id": 1, "package_id": 1, "contribution_label": 1, "amount": 1, "currency": 1, "status": 1, "payment_status": 1, "user_email": 1, "created_at": 1, "completed_at": 1},
     ).sort("created_at", -1).to_list(200)
     total_paid = round(sum(txn.get("amount", 0) for txn in transactions if txn.get("payment_status") == "paid"), 2)
-    return {
-        "packages": list(CONTRIBUTION_PACKAGES.values()),
-        "total_paid": total_paid,
-        "transactions": transactions,
-    }
+    return {"packages": list(CONTRIBUTION_PACKAGES.values()), "total_paid": total_paid, "transactions": transactions}
+
+
+@api_router.get("/funds-travel/overview")
+async def funds_travel_overview(current_user: dict[str, Any] = Depends(get_current_user)):
+    payment_summary_payload = await payment_summary(current_user)
+    budgets = await budget_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    travel_plans = await travel_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    pending_travel_total = round(sum(item.get("amount_estimate", 0) for item in travel_plans), 2)
+    return {**payment_summary_payload, "budgets": budgets, "travel_plans": travel_plans, "pending_travel_total": pending_travel_total}
 
 
 @api_router.post("/payments/checkout/session")
@@ -781,8 +1274,8 @@ async def create_checkout_session(
     checkout_request = CheckoutSessionRequest(
         amount=float(package["amount"]),
         currency="usd",
-        success_url=f"{payload.origin_url.rstrip('/')}/contributions?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{payload.origin_url.rstrip('/')}/contributions",
+        success_url=f"{payload.origin_url.rstrip('/')}/funds-travel?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{payload.origin_url.rstrip('/')}/funds-travel",
         metadata={
             "community_id": current_user["community_id"],
             "user_id": current_user["id"],
@@ -811,33 +1304,25 @@ async def create_checkout_session(
         "completed_at": None,
     }
     await payments_collection.insert_one(transaction_doc.copy())
-
     return {"url": session.url, "session_id": session.session_id}
 
 
 @api_router.get("/payments/checkout/status/{session_id}")
 async def get_checkout_status(session_id: str, request: Request, current_user: dict[str, Any] = Depends(get_current_user)):
-    transaction_doc = await payments_collection.find_one(
-        {"session_id": session_id, "community_id": current_user["community_id"]},
-        {"_id": 0},
-    )
+    transaction_doc = await payments_collection.find_one({"session_id": session_id, "community_id": current_user["community_id"]}, {"_id": 0})
     if not transaction_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment session not found.")
 
     stripe_checkout = build_stripe_checkout(request)
     checkout_status = await stripe_checkout.get_checkout_status(session_id)
-
-    next_status = checkout_status.status
-    next_payment_status = checkout_status.payment_status
     update_payload = {
-        "status": next_status,
-        "payment_status": next_payment_status,
+        "status": checkout_status.status,
+        "payment_status": checkout_status.payment_status,
         "amount": transaction_doc.get("amount", 0),
         "currency": transaction_doc.get("currency", "usd"),
     }
-    if next_payment_status == "paid" and not transaction_doc.get("completed_at"):
+    if checkout_status.payment_status == "paid" and not transaction_doc.get("completed_at"):
         update_payload["completed_at"] = now_iso()
-
     await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
     updated_transaction = await payments_collection.find_one({"session_id": session_id}, {"_id": 0})
     return {
@@ -850,6 +1335,81 @@ async def get_checkout_status(session_id: str, request: Request, current_user: d
     }
 
 
+@api_router.get("/legacy-table/status")
+async def legacy_table_status(current_user: dict[str, Any] = Depends(get_current_user)):
+    config = await legacy_table_collection.find_one({"community_id": current_user["community_id"]}, {"_id": 0})
+    if not config:
+        return {
+            "connection_status": "connection-ready",
+            "is_connected": False,
+            "base_url": "",
+            "auth_type": "api-key",
+            "message": "Legacy Table integration is architected and awaiting API docs or credentials.",
+            "sync_preferences": {
+                "members": True,
+                "stories": True,
+                "events": True,
+                "relationships": True,
+            },
+            "capabilities": ["member import", "kinship sync", "story export", "gathering export"],
+        }
+    return config
+
+
+@api_router.post("/legacy-table/config")
+async def save_legacy_table_config(payload: LegacyTableConfigRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    config_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "connection_status": "configured-awaiting-credentials",
+        "is_connected": False,
+        "base_url": (payload.base_url or "").strip(),
+        "auth_type": payload.auth_type,
+        "message": "Connection saved. Final live sync will activate when Legacy Table API details are provided.",
+        "sync_preferences": {
+            "members": payload.sync_members,
+            "stories": payload.sync_stories,
+            "events": payload.sync_events,
+            "relationships": payload.sync_relationships,
+        },
+        "capabilities": ["member import", "kinship sync", "story export", "gathering export"],
+        "last_sync_at": None,
+        "last_sync_result": "Not yet attempted",
+        "updated_at": now_iso(),
+    }
+    await legacy_table_collection.update_one(
+        {"community_id": current_user["community_id"]},
+        {"$set": config_doc},
+        upsert=True,
+    )
+    return config_doc
+
+
+@api_router.post("/legacy-table/sync-preview")
+async def legacy_table_sync_preview(current_user: dict[str, Any] = Depends(get_current_user)):
+    community_id = current_user["community_id"]
+    config = await legacy_table_collection.find_one({"community_id": community_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Save a Legacy Table configuration first.")
+
+    preview = {
+        "members": await users_collection.count_documents({"community_id": community_id}),
+        "kinships": await kinships_collection.count_documents({"community_id": community_id}),
+        "events": await events_collection.count_documents({"community_id": community_id}),
+        "memories": await memories_collection.count_documents({"community_id": community_id}),
+        "threads": await threads_collection.count_documents({"community_id": community_id}),
+    }
+    updated = {
+        **config,
+        "last_sync_at": now_iso(),
+        "last_sync_result": "Preview generated. Awaiting live credentials for external sync execution.",
+        "preview_counts": preview,
+    }
+    await legacy_table_collection.update_one({"community_id": community_id}, {"$set": updated})
+    return updated
+
+
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     stripe_checkout = build_stripe_checkout(request)
@@ -860,20 +1420,12 @@ async def stripe_webhook(request: Request):
     payment_status = getattr(webhook_response, "payment_status", None)
     event_type = getattr(webhook_response, "event_type", None)
     if session_id:
-        update_payload = {
-            "status": event_type or "webhook-received",
-            "payment_status": payment_status or "unpaid",
-        }
+        update_payload = {"status": event_type or "webhook-received", "payment_status": payment_status or "unpaid"}
         if payment_status == "paid":
             update_payload["completed_at"] = now_iso()
         await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
 
-    return {
-        "received": True,
-        "session_id": session_id,
-        "payment_status": payment_status,
-        "event_type": event_type,
-    }
+    return {"received": True, "session_id": session_id, "payment_status": payment_status, "event_type": event_type}
 
 
 app.include_router(api_router)
@@ -886,10 +1438,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
