@@ -228,7 +228,7 @@ class MemoryCreateRequest(BaseModel):
 
 
 class CommentRequest(BaseModel):
-    content: str = Field(min_length=1)
+    text: str = Field(min_length=1)
     author_name: str = ""
 
 
@@ -286,9 +286,12 @@ class DashboardOverview(BaseModel):
 
 class SubyardCreateRequest(BaseModel):
     name: str = Field(min_length=1)
-    purpose: str = ""
+    description: str = ""
     icon: str = ""
     privacy: str = "open"
+    inherited_roles: bool = True
+    role_focus: list[str] = Field(default_factory=list)
+    visibility: str = "shared"
     custom_roles: list[str] = Field(default_factory=list)
     members: list[str] = Field(default_factory=list)
 
@@ -296,6 +299,8 @@ class SubyardCreateRequest(BaseModel):
 class KinshipCreateRequest(BaseModel):
     person_name: str = Field(min_length=1)
     relationship_type: str = "cousin"
+    related_to_name: str = ""
+    relationship_scope: str = ""
     linked_user_id: str = ""
     birth_date: str = ""
     anniversary_date: str = ""
@@ -349,7 +354,7 @@ class AnnouncementCreateRequest(BaseModel):
 
 
 class ChatMessageCreateRequest(BaseModel):
-    content: str = ""
+    text: str = ""
     attachments: list[FileAttachmentPayload] = Field(default_factory=list)
 
 

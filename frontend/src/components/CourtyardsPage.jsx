@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, GitBranch, MessageSquare, Network, Pin, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { BellRing, GitBranch, MessageSquare, Network, Pin, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -213,6 +213,36 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
     }
   };
 
+  const handleDeleteAnnouncement = async (announcementId) => {
+    try {
+      await apiRequest(`/announcements/${announcementId}`, { method: "DELETE", token });
+      toast.success("Announcement deleted.");
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete announcement.");
+    }
+  };
+
+  const handleDeleteSubyard = async (subyardId) => {
+    try {
+      await apiRequest(`/subyards/${subyardId}`, { method: "DELETE", token });
+      toast.success("Subyard deleted.");
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete subyard.");
+    }
+  };
+
+  const handleDeleteChatMessage = async (roomId, messageId) => {
+    try {
+      await apiRequest(`/chat/rooms/${roomId}/messages/${messageId}`, { method: "DELETE", token });
+      toast.success("Message deleted.");
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete message.");
+    }
+  };
+
   const handleSendMessage = async (event) => {
     event.preventDefault();
     if (!activeRoomId) return;
@@ -367,8 +397,15 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                     <p className="text-lg font-semibold text-foreground">{subyard.name}</p>
                     <p className="mt-2 text-sm leading-7 text-muted-foreground">{subyard.description}</p>
                   </div>
-                  <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-subyard-visibility-${subyard.id}`}>
-                    {subyard.visibility}
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-subyard-visibility-${subyard.id}`}>
+                      {subyard.visibility}
+                    </div>
+                    {canManage && (
+                      <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-subyard-delete-${subyard.id}`} onClick={() => handleDeleteSubyard(subyard.id)} variant="ghost">
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -587,7 +624,14 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                     <p className="text-base font-semibold text-foreground">{announcement.title}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{announcement.scope} {announcement.subyard_name ? `· ${announcement.subyard_name}` : ""}</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">{announcement.created_by_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">{announcement.created_by_name}</p>
+                    {canManage && (
+                      <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-announcement-delete-${announcement.id}`} onClick={() => handleDeleteAnnouncement(announcement.id)} variant="ghost">
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground">{announcement.body}</p>
                 {announcement.attachments?.length ? (
@@ -688,6 +732,11 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                             {message.is_pinned ? "Unpin" : "Pin"}
                           </Button>
                         ) : null}
+                        {(message.user_id === user?.id || canManage) && (
+                          <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-chat-delete-${message.id}`} onClick={() => handleDeleteChatMessage(activeRoomId, message.id)} variant="ghost">
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">{message.text}</p>

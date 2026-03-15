@@ -1,0 +1,92 @@
+{
+  "summary": "Iteration 12 regression testing completed. Backend: 22/24 tests passed (91.67%). Model fixes for KinshipCreateRequest (related_to_name, relationship_scope) and SubyardCreateRequest (role_focus) are WORKING. All CRUD operations for subyards, kinship, announcements, budgets verified. TravelPlanCreateRequest model has MISMATCH with server expectations. Frontend: All pages load correctly, delete buttons visible for subyards (3), announcements (1). Polls page renders correctly with voting UI.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/travel-plans",
+        "issue": "Model/Server mismatch - TravelPlanCreateRequest model has (traveler_name, mode, origin, notes, estimated_cost) but server CREATE endpoint expects (title, travel_type, details, coordinator_name, amount_estimate, seats_available). Also requires valid event_id.",
+        "priority": "CRITICAL",
+        "root_cause": "Server create_travel_plan() at line 1783-1796 uses different field names than the model defines. Model fields are used in PUT but not POST."
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_regression.py",
+    "/app/test_reports/pytest/iter12_regression_results.xml"
+  ],
+  "action_items": [
+    "FIX CRITICAL: Align TravelPlanCreateRequest model with server.py create_travel_plan() expectations - either update model to have (title, travel_type, details, coordinator_name, amount_estimate, seats_available) OR update server to use model fields (traveler_name, mode, origin, notes, estimated_cost)"
+  ],
+  "critical_code_review_comments": [
+    "VERIFIED FIXED: KinshipCreateRequest now has related_to_name and relationship_scope fields - POST /api/kinship works",
+    "VERIFIED FIXED: SubyardCreateRequest now has role_focus field - POST/PUT /api/subyards works",
+    "BUG: TravelPlanCreateRequest model fields don't match server.py create_travel_plan() - server uses payload.title, payload.travel_type, payload.details but model has traveler_name, mode, origin",
+    "INCONSISTENCY: PUT /api/travel-plans uses model fields (traveler_name, mode) but POST uses different fields (title, travel_type) - schema needs alignment"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_regression.py"
+  ],
+  "success_rate": {
+    "backend": "91.67% (22/24 passed, 1 failed due to model bug, 1 skipped)",
+    "frontend": "100% - All pages load, delete buttons visible, forms functional"
+  },
+  "test_credentials": {
+    "email": "notiftest2@kindred.app",
+    "password": "Test1234!",
+    "role": "host"
+  },
+  "seed_data_creation": "Backend tests create disposable communities via /api/auth/bootstrap with TEST_ITER12_ prefix",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 12 verified model fixes for KinshipCreateRequest and SubyardCreateRequest - both now work correctly. TravelPlanCreateRequest still has model/server mismatch requiring fix. Frontend delete buttons work for subyards (3 visible), announcements (1 visible). Polls page fully functional. Login flow: /login -> click Sign in tab -> fill email/password -> click Sign in button.",
+  "features_tested": {
+    "passed": [
+      "GET /api/ health check",
+      "POST /api/auth/login with test credentials",
+      "GET /api/courtyard/home returns valid response",
+      "GET /api/polls returns polls list",
+      "GET /api/notifications/unread-count returns count",
+      "POST /api/subyards creates subyard with role_focus list",
+      "GET /api/subyards returns subyards list",
+      "PUT /api/subyards/{id} updates subyard",
+      "DELETE /api/subyards/{id} deletes subyard",
+      "POST /api/kinship creates kinship with related_to_name and relationship_scope",
+      "GET /api/kinship returns relationships list",
+      "DELETE /api/kinship/{id} deletes kinship",
+      "POST /api/announcements creates announcement",
+      "GET /api/announcements returns announcements list",
+      "PUT /api/announcements/{id} updates announcement",
+      "DELETE /api/announcements/{id} deletes announcement",
+      "POST /api/budget-plans creates budget plan",
+      "GET /api/budget-plans returns budgets list",
+      "PUT /api/budget-plans/{id} updates budget",
+      "DELETE /api/budget-plans/{id} deletes budget",
+      "GET /api/travel-plans returns travel plans list",
+      "POST/DELETE chat messages work",
+      "Frontend Courtyards page renders with delete buttons",
+      "Frontend Funds & Travel page renders with budget form",
+      "Frontend Polls page renders correctly with voting UI"
+    ],
+    "failed": [
+      "POST /api/travel-plans - 404 Event not found (requires valid event_id and has model mismatch)"
+    ],
+    "skipped": [
+      "DELETE /api/travel-plans/{id} - skipped due to create failure"
+    ]
+  },
+  "rca_of_issue": {
+    "TravelPlanCreateRequest_model_mismatch": {
+      "problem": "POST /api/travel-plans fails because model fields don't match server expectations",
+      "model_fields": ["event_id", "traveler_name", "mode", "origin", "departure_at", "arrival_at", "notes", "estimated_cost", "payment_status"],
+      "server_expects": ["event_id", "title", "travel_type", "details", "coordinator_name", "amount_estimate", "payment_status", "seats_available"],
+      "location": "models.py line 311-320 vs server.py line 1783-1796",
+      "fix_recommendation": "Update TravelPlanCreateRequest model to match server.py create_travel_plan() field names"
+    }
+  }
+}

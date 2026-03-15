@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Coins, CreditCard, Plane, Wallet } from "lucide-react";
+import { Coins, CreditCard, Plane, Trash2, Wallet } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,26 @@ export const FundsTravelPage = ({ token, user }) => {
     }
   };
 
+  const handleDeleteBudget = async (budgetId) => {
+    try {
+      await apiRequest(`/budget-plans/${budgetId}`, { method: "DELETE", token });
+      toast.success("Budget plan deleted.");
+      loadSummary();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete budget.");
+    }
+  };
+
+  const handleDeleteTravelPlan = async (planId) => {
+    try {
+      await apiRequest(`/travel-plans/${planId}`, { method: "DELETE", token });
+      toast.success("Travel plan deleted.");
+      loadSummary();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete travel plan.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="archival-card">
@@ -223,8 +243,22 @@ export const FundsTravelPage = ({ token, user }) => {
           <div className="mt-6 space-y-4">
             {summary?.budgets?.map((budget) => (
               <div className="soft-panel" data-testid={`funds-travel-budget-${budget.id}`} key={budget.id}>
-                <p className="text-base font-semibold text-foreground">{budget.title}</p>
-                <p className="mt-2 text-sm text-muted-foreground">{budget.event_title || "General courtyard budget"}</p>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-foreground">{budget.title}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{budget.event_title || "General courtyard budget"}</p>
+                  </div>
+                  {canManage && (
+                    <Button
+                      className="h-8 w-8 rounded-full p-0"
+                      data-testid={`funds-travel-budget-delete-${budget.id}`}
+                      onClick={() => handleDeleteBudget(budget.id)}
+                      variant="ghost"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                    </Button>
+                  )}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
                   <span>Target: {shortCurrency(budget.target_amount)}</span>
                   <span>Current: {shortCurrency(budget.current_amount)}</span>
@@ -291,9 +325,21 @@ export const FundsTravelPage = ({ token, user }) => {
                       <p className="text-base font-semibold text-foreground">{plan.title}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{plan.event_title} · {plan.travel_type}</p>
                     </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <p>{shortCurrency(plan.amount_estimate)}</p>
-                      <p>{plan.payment_status}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right text-sm text-muted-foreground">
+                        <p>{shortCurrency(plan.amount_estimate)}</p>
+                        <p>{plan.payment_status}</p>
+                      </div>
+                      {canManage && (
+                        <Button
+                          className="h-8 w-8 rounded-full p-0"
+                          data-testid={`funds-travel-plan-delete-${plan.id}`}
+                          onClick={() => handleDeleteTravelPlan(plan.id)}
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <p className="mt-3 text-sm leading-7 text-muted-foreground">{plan.details}</p>
