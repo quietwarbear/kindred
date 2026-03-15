@@ -26,6 +26,7 @@ Build “Kindred,” a private ecosystem for families, churches, and intentional
 - Courtyards page with parent courtyard overview, subyard creation, role tool mapping, kinship relationship graph entries, member roster, invite management, scoped announcements, and internal chat rooms
 - Timeline page with unified archive feed, On This Day reminders, memory uploads, and story thread creation
 - Gatherings page with template-based event creation, recurrence rules, auto-generated checklists, role assignment, RSVP, agenda, volunteers, potluck, and travel coordination records
+- Gatherings page now supports event-level invites from existing members plus manual guest emails, custom/multi-person role assignments, and Zoom-link-aware hybrid/online invitation records
 - Funds & Travel page with contribution packages, transaction ledger, event/family budgets, and travel overview
 - Settings page with Legacy Table connection profile and sync preview workflow
 - Backend APIs for subyards, kinship, timeline archive, travel plans, budget plans, gathering templates/checklists, recurring instances, announcements, chat rooms/messages, funds-travel overview, and Legacy Table settings
