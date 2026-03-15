@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, GitBranch, MessageSquare, Network, Pin, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ const initialAnnouncementForm = {
 };
 
 export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
+  const initialCommunicationLoadRef = useRef(false);
   const [structure, setStructure] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsUnread, setAnnouncementsUnread] = useState(0);
@@ -78,9 +79,12 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
       ]);
       setStructure(structurePayload);
       setAnnouncements(announcementPayload.announcements || []);
-      setAnnouncementsUnread(announcementPayload.unread_before_view || 0);
+      const unreadBeforeView = announcementPayload.unread_before_view || 0;
+      if (!initialCommunicationLoadRef.current || unreadBeforeView > 0) {
+        setAnnouncementsUnread(unreadBeforeView);
+      }
       setChatRooms(chatPayload.rooms || []);
-      setActiveRoomId((current) => current || chatPayload.rooms?.[0]?.id || "");
+      initialCommunicationLoadRef.current = true;
       onCommunicationsViewed?.();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to load courtyard structure.");
@@ -267,6 +271,34 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
         <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="courtyards-page-copy">
           Shape the parent courtyard, create subyards like cousins groups or elders councils, assign roles, and track kinship relationships that help with smarter invitations and more grounded memory-keeping.
         </p>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2" data-testid="courtyards-communications-summary-section">
+        <article className="archival-card" data-testid="courtyards-announcements-summary-card">
+          <p className="eyebrow-text">Announcements</p>
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-2xl text-foreground">Broadcast updates</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Unread updates clear as soon as you view the announcement list.</p>
+            </div>
+            <div className="rounded-full bg-primary/15 px-4 py-2 text-sm font-semibold text-primary" data-testid="courtyards-announcements-summary-badge">
+              {announcementsUnread} unread
+            </div>
+          </div>
+        </article>
+
+        <article className="archival-card" data-testid="courtyards-chat-summary-card">
+          <p className="eyebrow-text">Internal chat</p>
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-2xl text-foreground">Room activity</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Unread chat clears when you open the specific room.</p>
+            </div>
+            <div className="rounded-full bg-primary/15 px-4 py-2 text-sm font-semibold text-primary" data-testid="courtyards-chat-summary-badge">
+              {chatRooms.reduce((sum, room) => sum + (room.unread_count || 0), 0)} unread
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
