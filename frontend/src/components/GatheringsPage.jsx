@@ -97,9 +97,9 @@ export const GatheringsPage = ({ token, user }) => {
           suggested_contribution: Number(eventForm.suggested_contribution) || 0,
         },
       });
-      setEvents((current) => [...current, payload].sort((a, b) => new Date(a.start_at) - new Date(b.start_at)));
       setActiveEventId(payload.id);
       setEventForm(initialEventForm);
+      await loadData();
       toast.success("Gathering created with a smart checklist.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to create gathering.");
