@@ -47,7 +47,7 @@ legacy_table_collection = db.legacy_table_configs
 announcements_collection = db.announcements
 chat_rooms_collection = db.chat_rooms
 
-app = FastAPI(title="Gathering Cypher API")
+app = FastAPI(title="Kindred API")
 api_router = APIRouter(prefix="/api")
 bearer_scheme = HTTPBearer(auto_error=False)
 ROLE_ORDER = {"member": 1, "organizer": 2, "host": 3}
@@ -615,7 +615,7 @@ class ChatMessageCreateRequest(BaseModel):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Gathering Cypher API is ready."}
+    return {"message": "Kindred API is ready."}
 
 
 @api_router.get("/gatherings/templates")

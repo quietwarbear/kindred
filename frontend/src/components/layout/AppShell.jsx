@@ -39,8 +39,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="eyebrow-text">Digital Courtyard</p>
-                  <h1 className="font-display text-2xl text-foreground">Gathering Cypher</h1>
+                  <p className="eyebrow-text">Where your circles gather and grow.</p>
+                  <h1 className="font-display text-2xl text-foreground">Kindred</h1>
                 </div>
               </div>
               <div className="soft-panel space-y-2">
@@ -99,7 +99,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
           <main className="space-y-6">
             <div className="archival-card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="eyebrow-text">Kinship infrastructure</p>
+                <p className="eyebrow-text">Where your circles gather and grow.</p>
                 <h2 className="font-display text-3xl text-foreground sm:text-4xl" data-testid="shell-header-title">
                   Plan gatherings like a platform, not a patchwork.
                 </h2>

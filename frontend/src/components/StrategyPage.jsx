@@ -2,7 +2,7 @@ import { ArrowRight, BrainCircuit, Compass, Gem, LayoutTemplate, LineChart, Shie
 import { Link } from "react-router-dom";
 
 const namingConcepts = [
-  { name: "Gathering Cypher", note: "Signals intimacy, coordination, and cultural code-switching power." },
+  { name: "Kindred", note: "Warm, memorable, and expansive enough for family, faith, and cultural circles." },
   { name: "Kinfolk Commons", note: "Warm, familial, and rooted in collective ownership." },
   { name: "Legacy Hearth", note: "Evokes memory, warmth, continuity, and home." },
   { name: "Diaspora Table", note: "Strong fit for trans-local and cultural gathering communities." },
@@ -43,19 +43,19 @@ const roadmap = [
 const competition = [
   {
     label: "Facebook Groups",
-    edge: "Gathering Cypher wins on privacy, non-algorithmic visibility, and archival intentionality.",
+    edge: "Kindred wins on privacy, non-algorithmic visibility, and archival intentionality.",
   },
   {
     label: "WhatsApp + Google Drive",
-    edge: "Gathering Cypher consolidates conversation, planning, media, and giving in one place.",
+    edge: "Kindred consolidates conversation, planning, media, and giving in one place.",
   },
   {
     label: "Church management software",
-    edge: "Gathering Cypher feels more relational, story-centered, and media-rich for community memory.",
+    edge: "Kindred feels more relational, story-centered, and media-rich for community memory.",
   },
   {
     label: "Event-only tools",
-    edge: "Gathering Cypher extends beyond RSVPs into legacy, identity, and long-term engagement.",
+    edge: "Kindred extends beyond RSVPs into legacy, identity, and long-term engagement.",
   },
 ];
 
@@ -63,7 +63,7 @@ const sections = [
   {
     icon: Compass,
     title: "Venture pitch framing",
-    copy: "Gathering Cypher is digital sovereignty infrastructure for cultural communities that need private gathering logistics, enduring memory, and recurring coordination.",
+    copy: "Kindred is community infrastructure for families, churches, and circles that need private gathering logistics, enduring memory, and recurring coordination.",
   },
   {
     icon: BrainCircuit,
@@ -84,7 +84,7 @@ export const StrategyPage = ({ mode = "public" }) => {
       <div className="archival-card">
         <p className="eyebrow-text">Strategy deck</p>
         <h1 className="mt-3 font-display text-4xl text-foreground sm:text-5xl" data-testid="strategy-page-title">
-          Product framing for a private, legacy-centered community platform.
+          Kindred — Where your circles gather and grow.
         </h1>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="strategy-page-subtitle">
           This deck packages the concept across wireframe flow, naming, venture narrative, feature prioritization, and competitor positioning.
@@ -167,7 +167,7 @@ export const StrategyPage = ({ mode = "public" }) => {
 
         <article className="archival-card" data-testid="strategy-competition">
           <p className="eyebrow-text">Competitive landscape</p>
-          <h2 className="mt-3 font-display text-3xl text-foreground">Where Gathering Cypher wins</h2>
+          <h2 className="mt-3 font-display text-3xl text-foreground">Where Kindred wins</h2>
           <div className="mt-6 space-y-4">
             {competition.map((item) => (
               <div className="soft-panel" data-testid={`strategy-competitor-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} key={item.label}>

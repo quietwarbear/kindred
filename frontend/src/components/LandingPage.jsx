@@ -54,7 +54,7 @@ export const LandingPage = ({ isAuthenticated }) => {
                     A private ecosystem for communities to gather, plan, remember, and build.
                   </h1>
                   <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="landing-subheadline">
-                    Gathering Cypher gives families, churches, and intentional communities ownership over memory,
+                    Kindred gives families, churches, and intentional communities ownership over memory,
                     coordination, and narrative without ads, public profiles, or algorithmic interference.
                   </p>
                 </div>
@@ -103,10 +103,10 @@ export const LandingPage = ({ isAuthenticated }) => {
               <div className="absolute bottom-6 left-6 right-6 rounded-[24px] border border-white/20 bg-stone-950/45 p-5 text-white backdrop-blur-md">
                 <p className="eyebrow-text text-orange-200">Positioning</p>
                 <p className="mt-2 font-display text-2xl" data-testid="landing-positioning-title">
-                  Digital sovereignty for cultural communities.
+                  Where your circles gather and grow.
                 </p>
                 <p className="mt-2 text-sm text-stone-100/80" data-testid="landing-positioning-copy">
-                  A permanent home for gathering logistics, oral history, and contributions that belong to the people inside it.
+                  A permanent home for gathering logistics, oral history, contributions, and kinship coordination.
                 </p>
               </div>
             </div>

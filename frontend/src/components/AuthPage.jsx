@@ -166,7 +166,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
                   <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
                 </label>
                 <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Opening community..." : "Launch Gathering Cypher"}
+                  {isSubmitting ? "Opening community..." : "Launch Kindred"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </form>

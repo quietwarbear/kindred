@@ -32,7 +32,7 @@ export const HomePage = ({ token }) => {
       <section className="archival-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="eyebrow-text">Digital Courtyard</p>
+            <p className="eyebrow-text">Kindred · Where your circles gather and grow.</p>
             <h2 className="mt-3 font-display text-3xl text-foreground sm:text-4xl" data-testid="home-page-title">
               Everything your people need to gather, remember, and move together.
             </h2>

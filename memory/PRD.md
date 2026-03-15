@@ -1,7 +1,7 @@
-# Gathering Cypher / Digital Courtyard PRD
+# Kindred / Digital Courtyard PRD
 
 ## Original Problem Statement
-Build “Gathering Cypher,” a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. Initial deliverables included an MVP app and strategy pack. Follow-up direction requested preserving the same color scheme and overall appearance while reshaping the product into a Digital Courtyard layout with courtyards/subyards, kinship mapping, smart gathering planning, timeline archive, shared funds/travel, and Legacy Table connection settings. Latest follow-up requested recurring events, announcements, and internal chat for the gathering ecosystem.
+Build “Kindred,” a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. Initial deliverables included an MVP app and strategy pack. Follow-up direction requested preserving the same color scheme and overall appearance while reshaping the product into a Digital Courtyard layout with courtyards/subyards, kinship mapping, smart gathering planning, timeline archive, shared funds/travel, and Legacy Table connection settings. Latest follow-up requested recurring events, announcements, and internal chat for the gathering ecosystem.
 
 ## User Choices
 - Build both MVP app + strategy pack initially

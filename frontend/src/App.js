@@ -15,7 +15,7 @@ const APP_STATE_KEY = "gathering-cypher-auth";
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
     <div className="archival-card max-w-xl text-center">
-      <p className="eyebrow-text mb-3">Gathering Cypher</p>
+      <p className="eyebrow-text mb-3">Kindred</p>
       <h1 className="font-display text-4xl text-foreground">{title}</h1>
       <p className="mt-4 text-sm text-muted-foreground sm:text-base">{copy}</p>
     </div>
