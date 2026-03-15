@@ -377,6 +377,7 @@ async def log_notification_event(
         "description": description,
         "related_id": related_id,
         "audience_scope": audience_scope,
+        "read_by_user_ids": [],
         "created_at": now_iso(),
     }
     await notification_events_collection.insert_one(event_doc.copy())
@@ -1719,6 +1720,9 @@ async def communications_unread_summary(current_user: dict[str, Any] = Depends(g
 @api_router.get("/notifications/history")
 async def notification_history(current_user: dict[str, Any] = Depends(get_current_user)):
     items = await notification_events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    for item in items:
+        item["is_read"] = current_user["id"] in item.get("read_by_user_ids", [])
+        item.pop("read_by_user_ids", None)
     return {"items": items}
 
 
@@ -1747,6 +1751,27 @@ async def update_notification_preferences(payload: NotificationPreferencesUpdate
         upsert=True,
     )
     return prefs_doc
+
+
+@api_router.get("/notifications/unread-count")
+async def notification_unread_count(current_user: dict[str, Any] = Depends(get_current_user)):
+    count = await notification_events_collection.count_documents({
+        "community_id": current_user["community_id"],
+        "read_by_user_ids": {"$nin": [current_user["id"]]},
+    })
+    return {"unread_count": count}
+
+
+@api_router.post("/notifications/mark-read")
+async def mark_notifications_read(current_user: dict[str, Any] = Depends(get_current_user)):
+    result = await notification_events_collection.update_many(
+        {
+            "community_id": current_user["community_id"],
+            "read_by_user_ids": {"$nin": [current_user["id"]]},
+        },
+        {"$addToSet": {"read_by_user_ids": current_user["id"]}},
+    )
+    return {"marked_count": result.modified_count}
 
 
 @api_router.post("/gatherings/{event_id}/send-reminders")
@@ -1857,6 +1882,15 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
                 }
             )
         await events_collection.insert_many([item.copy() for item in recurring_docs])
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="event-create",
+        title=f"New gathering: {event_doc['title']}",
+        description=f"{current_user['full_name']} created a {payload.gathering_format} gathering at {event_doc['location']}.",
+        related_id=event_doc["id"],
+        audience_scope="community",
+    )
     return event_doc
 
 

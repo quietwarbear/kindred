@@ -421,11 +421,14 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           <div className="mt-6 space-y-4">
             {notificationHistory.length ? (
               notificationHistory.map((item) => (
-                <div className="soft-panel" data-testid={`settings-notification-history-item-${item.id}`} key={item.id}>
+                <div className={`soft-panel ${item.is_read ? "opacity-70" : ""}`} data-testid={`settings-notification-history-item-${item.id}`} key={item.id}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-base font-semibold text-foreground">{item.title}</p>
-                      <p className="mt-2 text-sm leading-7 text-muted-foreground">{item.description}</p>
+                    <div className="flex items-start gap-2">
+                      {!item.is_read && <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />}
+                      <div>
+                        <p className="text-base font-semibold text-foreground">{item.title}</p>
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">{item.description}</p>
+                      </div>
                     </div>
                     <div className="text-right text-xs uppercase tracking-[0.16em] text-primary">
                       <p>{item.event_type}</p>

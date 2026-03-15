@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { NotificationPanel } from "@/components/layout/NotificationPanel";
 import { ContributionsPage } from "@/components/ContributionsPage";
 import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
@@ -99,7 +100,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               ))}
             </nav>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <NotificationPanel token={token} />
               <Button
                 className="rounded-full"
                 data-testid="theme-toggle-button"
