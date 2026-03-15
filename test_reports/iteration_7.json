@@ -1,0 +1,63 @@
+{
+  "summary": "Completed backend + frontend validation for unread communication badges, recurring smart invite reminders, and courtyards/gatherings regression flows using public preview URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CourtyardsPage",
+        "issue": "Courtyards-level unread badges for announcements/chat do not render even when sidebar unread badge shows pending unread (reproducible with fresh seeded data).",
+        "selector": "[data-testid='courtyards-announcements-unread-badge'], [data-testid='courtyards-chat-unread-badge']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Unread badges on Courtyards page cards",
+        "issue": "Sidebar unread badge appears before entering Courtyards and clears after entering, but Courtyards page-level announcement/chat unread badges remain absent during that transition.",
+        "affected_selectors": [
+          "[data-testid='nav-link-courtyards-unread-badge']",
+          "[data-testid='courtyards-announcements-unread-badge']",
+          "[data-testid='courtyards-chat-unread-badge']"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_unread_badges_and_recurring_reminders.py",
+    "/app/backend/tests/test_gathering_cypher_api.py",
+    "/app/backend/tests/test_gatherings_invites_roles_zoom.py",
+    "/app/backend/tests/test_recurrence_announcements_chat.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/root/.emergent/automation_output/20260315_030117/console_20260315_030117.log",
+    "/root/.emergent/automation_output/20260315_030219/console_20260315_030219.log",
+    "/root/.emergent/automation_output/20260315_030300/console_20260315_030300.log"
+  ],
+  "action_items": [
+    "Fix Courtyards unread badge rendering logic so announcement/chat unread indicators are visible on Courtyards page cards when unread exists before read-marking completes.",
+    "Recheck Courtyards load flow for double-fetch/auto-clear behavior (announcement list read-mark + auto room open) so card badges align with sidebar unread state.",
+    "Retest with a fresh invited member: expect sidebar unread > 0, courtyards card badges visible initially, then clear after announcements list and chat room view are processed."
+  ],
+  "critical_code_review_comments": [
+    "Potential UX regression in unread flow: GET /api/announcements mutates read state immediately and CourtyardsPage auto-views first chat room on load, which can clear unread before on-page unread card badges become visible.",
+    "backend/server.py remains oversized (>700 lines), increasing regression risk across auth/courtyard/gathering/communications domains."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_unread_badges_and_recurring_reminders.py",
+    "/app/tests/seed_unread_ui_data.py",
+    "/app/backend/tests/test_seeded_member_reminder_debug.py",
+    "/app/test_reports/iteration_7.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "90%"
+  },
+  "seed_data_creation": "Created multiple TEST host/member communities and recurring events via public APIs (script: /app/tests/seed_unread_ui_data.py) to validate member unread + reminder scenarios.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite currently passes 32/32, including new unread/reminder coverage. Frontend repro is stable: sidebar Courtyards unread badge shows before visiting /courtyards, clears after opening /courtyards, but Courtyards card-level unread badges are not rendered (fresh seed validated twice). Gatherings reminder card appears for invited member when given adequate load time.",
+  "rca of the issue": "RCA hypothesis: Courtyards page mount flow combines immediate read-side effects (GET /announcements marks all as read, auto-selection/view of first chat room marks messages read) with render timing; unread can be cleared before card-level badge UI captures and displays transitional unread counts. Repro: seed one unread announcement + one unread chat message for invited member, login as member, observe sidebar unread badge >0, navigate to /courtyards, observe nav badge clears but card-level unread badges remain absent. Mitigation: decouple read-marking from initial fetch or preserve pre-read unread snapshot in UI state before mutating reads, then clear after explicit view acknowledgement."
+}

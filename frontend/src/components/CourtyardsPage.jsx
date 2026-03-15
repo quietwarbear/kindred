@@ -34,9 +34,10 @@ const initialAnnouncementForm = {
   subyard_id: "",
 };
 
-export const CourtyardsPage = ({ token, user }) => {
+export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
   const [structure, setStructure] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
+  const [announcementsUnread, setAnnouncementsUnread] = useState(0);
   const [chatRooms, setChatRooms] = useState([]);
   const [activeRoomId, setActiveRoomId] = useState("");
   const [subyardForm, setSubyardForm] = useState(initialSubyardForm);
@@ -77,16 +78,34 @@ export const CourtyardsPage = ({ token, user }) => {
       ]);
       setStructure(structurePayload);
       setAnnouncements(announcementPayload.announcements || []);
+      setAnnouncementsUnread(announcementPayload.unread_before_view || 0);
       setChatRooms(chatPayload.rooms || []);
       setActiveRoomId((current) => current || chatPayload.rooms?.[0]?.id || "");
+      onCommunicationsViewed?.();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to load courtyard structure.");
     }
-  }, [token]);
+  }, [onCommunicationsViewed, token]);
 
   useEffect(() => {
     loadStructure();
   }, [loadStructure]);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+
+    const viewRoom = async () => {
+      try {
+        const payload = await apiRequest(`/chat/rooms/${activeRoomId}`, { token });
+        setChatRooms((current) => current.map((room) => (room.id === payload.id ? payload : room)));
+        onCommunicationsViewed?.();
+      } catch {
+        // no-op
+      }
+    };
+
+    viewRoom();
+  }, [activeRoomId, onCommunicationsViewed, token]);
 
   const handleCreateSubyard = async (event) => {
     event.preventDefault();
@@ -481,7 +500,14 @@ export const CourtyardsPage = ({ token, user }) => {
             <BellRing className="h-5 w-5 text-primary" />
             <div>
               <p className="eyebrow-text">Announcements</p>
-              <h3 className="mt-2 font-display text-3xl text-foreground">Courtyard + subyard broadcasts</h3>
+              <div className="mt-2 flex items-center gap-3">
+                <h3 className="font-display text-3xl text-foreground">Courtyard + subyard broadcasts</h3>
+                {announcementsUnread > 0 ? (
+                  <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary" data-testid="courtyards-announcements-unread-badge">
+                    {announcementsUnread} new
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
           {canManage ? (
@@ -565,7 +591,14 @@ export const CourtyardsPage = ({ token, user }) => {
             <MessageSquare className="h-5 w-5 text-primary" />
             <div>
               <p className="eyebrow-text">Internal chat</p>
-              <h3 className="mt-2 font-display text-3xl text-foreground">Courtyard + subyard rooms</h3>
+              <div className="mt-2 flex items-center gap-3">
+                <h3 className="font-display text-3xl text-foreground">Courtyard + subyard rooms</h3>
+                {chatRooms.reduce((sum, room) => sum + (room.unread_count || 0), 0) > 0 ? (
+                  <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary" data-testid="courtyards-chat-unread-badge">
+                    {chatRooms.reduce((sum, room) => sum + (room.unread_count || 0), 0)} unread
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -577,7 +610,14 @@ export const CourtyardsPage = ({ token, user }) => {
                 onClick={() => setActiveRoomId(room.id)}
                 type="button"
               >
-                {room.name}
+                <span className="flex items-center gap-2">
+                  <span>{room.name}</span>
+                  {room.unread_count ? (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary" data-testid={`courtyard-chat-room-badge-${room.id}`}>
+                      {room.unread_count}
+                    </span>
+                  ) : null}
+                </span>
               </button>
             ))}
           </div>

@@ -51,6 +51,7 @@ export const GatheringsPage = ({ token, user }) => {
   const [subyards, setSubyards] = useState([]);
   const [members, setMembers] = useState([]);
   const [events, setEvents] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [travelPlans, setTravelPlans] = useState([]);
   const [activeEventId, setActiveEventId] = useState("");
   const [eventForm, setEventForm] = useState(initialEventForm);
@@ -76,17 +77,19 @@ export const GatheringsPage = ({ token, user }) => {
 
   const loadData = useCallback(async () => {
     try {
-      const [templatePayload, subyardPayload, memberPayload, eventPayload, travelPayload] = await Promise.all([
+      const [templatePayload, subyardPayload, memberPayload, eventPayload, reminderPayload, travelPayload] = await Promise.all([
         apiRequest("/gatherings/templates", { token }),
         apiRequest("/subyards", { token }),
         apiRequest("/community/members", { token }),
         apiRequest("/events", { token }),
+        apiRequest("/gatherings/reminders", { token }),
         apiRequest("/travel-plans", { token }),
       ]);
       setTemplates(templatePayload.templates || []);
       setSubyards(subyardPayload.subyards || []);
       setMembers(memberPayload.members || []);
       setEvents(eventPayload || []);
+      setReminders(reminderPayload.reminders || []);
       setTravelPlans(travelPayload.travel_plans || []);
       setActiveEventId((current) => current || eventPayload?.[0]?.id || "");
     } catch (error) {
@@ -341,6 +344,21 @@ export const GatheringsPage = ({ token, user }) => {
           This is the hero feature: choose a template, assign event roles, auto-generate the planning checklist, and coordinate the logistics people usually have to manage across too many tools.
         </p>
       </section>
+
+      {reminders.length ? (
+        <section className="archival-card" data-testid="gatherings-reminders-card">
+          <p className="eyebrow-text">Smart invite reminders</p>
+          <h3 className="mt-2 font-display text-3xl text-foreground">Recurring gatherings that still need RSVP attention</h3>
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            {reminders.map((reminder) => (
+              <div className="soft-panel" data-testid={`gatherings-reminder-${reminder.id}`} key={reminder.id}>
+                <p className="text-base font-semibold text-foreground">{reminder.title}</p>
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">{reminder.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {canCreate ? (
         <section className="archival-card" data-testid="gatherings-create-section">

@@ -1,0 +1,12 @@
+{
+  "host": {
+    "email": "test_ui_host_489842a7@example.com",
+    "password": "SecurePass123!"
+  },
+  "member": {
+    "email": "test_ui_member_489842a7@example.com",
+    "password": "SecurePass123!"
+  },
+  "event_id": "d166dc32-e604-4b6b-bfec-965800962a4c",
+  "room_id": "0ad678a0-6b94-41f2-9e1a-660eca1aaf11"
+}

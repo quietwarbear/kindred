@@ -1,6 +1,7 @@
 import { Menu, MoonStar, Sparkles, SunMedium } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { ContributionsPage } from "@/components/ContributionsPage";
@@ -15,6 +16,7 @@ import { StrategyPage } from "@/components/StrategyPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
 import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
+import { apiRequest } from "@/lib/api";
 
 const navItems = [
   { label: "Home", path: "/home" },
@@ -27,6 +29,21 @@ const navItems = [
 
 export const AppShell = ({ token, user, community, onLogout, onSessionRefresh }) => {
   const { resolvedTheme, setTheme } = useTheme();
+  const location = useLocation();
+  const [unreadSummary, setUnreadSummary] = useState({ announcements_unread: 0, chat_unread: 0, total_unread: 0 });
+
+  const refreshUnreadSummary = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/communications/unread-summary", { token });
+      setUnreadSummary(payload);
+    } catch {
+      setUnreadSummary({ announcements_unread: 0, chat_unread: 0, total_unread: 0 });
+    }
+  }, [token]);
+
+  useEffect(() => {
+    refreshUnreadSummary();
+  }, [location.pathname, refreshUnreadSummary]);
 
   return (
     <div className="app-canvas min-h-screen pb-10">
@@ -70,7 +87,14 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   key={item.path}
                   to={item.path}
                 >
-                  {item.label}
+                  <span className="flex items-center justify-between gap-3">
+                    <span>{item.label}</span>
+                    {item.path === "/courtyards" && unreadSummary.total_unread > 0 ? (
+                      <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary" data-testid="nav-link-courtyards-unread-badge">
+                        {unreadSummary.total_unread}
+                      </span>
+                    ) : null}
+                  </span>
                 </NavLink>
               ))}
             </nav>
@@ -119,7 +143,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             <Routes>
               <Route element={<HomePage token={token} />} path="dashboard" />
               <Route element={<HomePage token={token} />} path="home" />
-              <Route element={<CourtyardsPage token={token} user={user} />} path="courtyards" />
+              <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />

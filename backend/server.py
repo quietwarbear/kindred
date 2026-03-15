@@ -180,6 +180,7 @@ def build_notifications(
     upcoming_events: list[dict[str, Any]],
     budgets: list[dict[str, Any]],
     announcements: list[dict[str, Any]] | None = None,
+    invite_reminders: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     notifications: list[dict[str, Any]] = []
 
@@ -238,7 +239,51 @@ def build_notifications(
             }
         )
 
+    if invite_reminders:
+        notifications.extend(invite_reminders[:3])
+
     return notifications[:6]
+
+
+def build_invite_reminders_for_user(user: dict[str, Any], events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    reminders: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+    for event in events:
+        if event.get("recurrence_frequency") == "none":
+            continue
+        start_at = parse_datetime_safe(event.get("start_at"))
+        if not start_at:
+            continue
+        days_until = (start_at - now).days
+        if days_until < 0 or days_until > 14:
+            continue
+
+        invites = event.get("event_invites", [])
+        pending_invites = [invite for invite in invites if invite.get("rsvp_status", "pending") == "pending"]
+        if user.get("role") in {"host", "organizer"} and pending_invites:
+            reminders.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "invite-reminder",
+                    "title": f"Recurring reminder: {event['title']}",
+                    "description": f"{len(pending_invites)} invitee(s) still have not RSVPed for the next {event.get('recurrence_frequency')} gathering.",
+                    "event_id": event["id"],
+                }
+            )
+            continue
+
+        if any(normalize_email(invite.get("email", "")) == normalize_email(user.get("email", "")) and invite.get("rsvp_status", "pending") == "pending" for invite in invites):
+            reminders.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "invite-reminder",
+                    "title": f"RSVP reminder for {event['title']}",
+                    "description": f"You're invited to this upcoming recurring {event.get('recurrence_frequency')} gathering. Please RSVP soon.",
+                    "event_id": event["id"],
+                }
+            )
+
+    return reminders[:6]
 
 
 async def ensure_chat_rooms_for_community(
@@ -716,6 +761,12 @@ class AnnouncementCreateRequest(BaseModel):
 class ChatMessageCreateRequest(BaseModel):
     text: str
     attachments: list[FileAttachmentPayload] = Field(default_factory=list)
+
+
+class CommunicationUnreadSummary(BaseModel):
+    announcements_unread: int
+    chat_unread: int
+    total_unread: int
 
 
 @api_router.get("/")
@@ -1211,8 +1262,9 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
     budgets = await budget_plans_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
     kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     announcements = await announcements_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(10)
+    invite_reminders = build_invite_reminders_for_user(current_user, upcoming_events)
 
-    notifications = build_notifications(kinships, pending_invites, upcoming_events, budgets, announcements)
+    notifications = build_notifications(kinships, pending_invites, upcoming_events, budgets, announcements, invite_reminders)
     active_courtyards = [
         {
             "id": community_doc["id"],
@@ -1270,6 +1322,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
             {"id": "check-funds", "label": "Check Shared Funds", "target": "/funds-travel"},
         ],
         "notifications": notifications,
+        "invite_reminders": invite_reminders,
         "relationship_groups": sorted({kinship["relationship_type"] for kinship in kinships})[:10],
         "recent_timeline": [
             *memories[:3],
@@ -1390,8 +1443,16 @@ async def list_invites(current_user: dict[str, Any] = Depends(get_current_user))
 
 @api_router.get("/announcements")
 async def list_announcements(current_user: dict[str, Any] = Depends(get_current_user)):
+    unread_before_view = await announcements_collection.count_documents({
+        "community_id": current_user["community_id"],
+        "read_by_ids": {"$ne": current_user["id"]},
+    })
+    await announcements_collection.update_many(
+        {"community_id": current_user["community_id"]},
+        {"$addToSet": {"read_by_ids": current_user["id"]}},
+    )
     announcements = await announcements_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return {"announcements": announcements}
+    return {"announcements": announcements, "unread_before_view": unread_before_view}
 
 
 @api_router.post("/announcements")
@@ -1414,6 +1475,7 @@ async def create_announcement(payload: AnnouncementCreateRequest, current_user: 
         "body": payload.body.strip(),
         "attachments": [item.model_dump() for item in payload.attachments],
         "comments": [],
+        "read_by_ids": [current_user["id"]],
         "created_by": current_user["id"],
         "created_by_name": current_user["full_name"],
         "created_at": now_iso(),
@@ -1429,8 +1491,12 @@ async def add_announcement_comment(announcement_id: str, payload: CommentRequest
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Announcement not found.")
     comments = announcement_doc.get("comments", [])
     comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
-    await announcements_collection.update_one({"id": announcement_id}, {"$set": {"comments": comments}})
+    await announcements_collection.update_one(
+        {"id": announcement_id},
+        {"$set": {"comments": comments}, "$addToSet": {"read_by_ids": current_user["id"]}},
+    )
     announcement_doc["comments"] = comments
+    announcement_doc["read_by_ids"] = list(set(announcement_doc.get("read_by_ids", []) + [current_user["id"]]))
     return announcement_doc
 
 
@@ -1440,7 +1506,27 @@ async def list_chat_rooms(current_user: dict[str, Any] = Depends(get_current_use
     subyards = await subyards_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).to_list(200)
     await ensure_chat_rooms_for_community(current_user["community_id"], community_doc["name"], subyards)
     rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    for room in rooms:
+        room["unread_count"] = len([message for message in room.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
     return {"rooms": rooms}
+
+
+@api_router.get("/chat/rooms/{room_id}")
+async def view_chat_room(room_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    room_doc = await get_chat_room_for_user(room_id, current_user)
+    messages = room_doc.get("messages", [])
+    changed = False
+    for message in messages:
+        readers = message.get("read_by_ids", [])
+        if current_user["id"] not in readers:
+            readers.append(current_user["id"])
+            message["read_by_ids"] = readers
+            changed = True
+    if changed:
+        await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": messages}})
+    room_doc["messages"] = messages
+    room_doc["unread_count"] = 0
+    return room_doc
 
 
 @api_router.post("/chat/rooms/{room_id}/messages")
@@ -1456,11 +1542,13 @@ async def create_chat_message(room_id: str, payload: ChatMessageCreateRequest, c
             "attachments": [item.model_dump() for item in payload.attachments],
             "comments": [],
             "is_pinned": False,
+            "read_by_ids": [current_user["id"]],
             "created_at": now_iso(),
         }
     )
     await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": messages}})
     room_doc["messages"] = messages
+    room_doc["unread_count"] = len([message for message in messages if current_user["id"] not in message.get("read_by_ids", [])])
     return room_doc
 
 
@@ -1477,6 +1565,7 @@ async def pin_chat_message(room_id: str, message_id: str, current_user: dict[str
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
     await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": room_doc.get("messages", [])}})
+    room_doc["unread_count"] = len([message for message in room_doc.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
     return room_doc
 
 
@@ -1489,12 +1578,36 @@ async def comment_on_chat_message(room_id: str, message_id: str, payload: Commen
             comments = message.get("comments", [])
             comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
             message["comments"] = comments
+            readers = message.get("read_by_ids", [])
+            if current_user["id"] not in readers:
+                readers.append(current_user["id"])
+                message["read_by_ids"] = readers
             updated = True
             break
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
     await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": room_doc.get("messages", [])}})
+    room_doc["unread_count"] = len([message for message in room_doc.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
     return room_doc
+
+
+@api_router.get("/communications/unread-summary", response_model=CommunicationUnreadSummary)
+async def communications_unread_summary(current_user: dict[str, Any] = Depends(get_current_user)):
+    announcements_unread = await announcements_collection.count_documents({
+        "community_id": current_user["community_id"],
+        "read_by_ids": {"$ne": current_user["id"]},
+    })
+    rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0, "messages": 1}).to_list(200)
+    chat_unread = 0
+    for room in rooms:
+        chat_unread += len([message for message in room.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
+    return {"announcements_unread": announcements_unread, "chat_unread": chat_unread, "total_unread": announcements_unread + chat_unread}
+
+
+@api_router.get("/gatherings/reminders")
+async def gatherings_reminders(current_user: dict[str, Any] = Depends(get_current_user)):
+    events = await events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("start_at", 1).to_list(200)
+    return {"reminders": build_invite_reminders_for_user(current_user, events)}
 
 
 @api_router.get("/events", response_model=list[EventPublic])
@@ -1593,7 +1706,12 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
         }
     )
     event_doc["rsvp_records"] = next_records
-    await events_collection.update_one({"id": event_id}, {"$set": {"rsvp_records": next_records}})
+    event_invites = event_doc.get("event_invites", [])
+    for invite in event_invites:
+        if normalize_email(invite.get("email", "")) == normalize_email(current_user.get("email", "")):
+            invite["rsvp_status"] = payload.status
+    event_doc["event_invites"] = event_invites
+    await events_collection.update_one({"id": event_id}, {"$set": {"rsvp_records": next_records, "event_invites": event_invites}})
     return event_doc
 
 
@@ -1630,6 +1748,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                     "email": member["email"],
                     "invite_source": "member",
                     "status": "invited",
+                    "rsvp_status": "pending",
                     "note": (payload.note or "").strip(),
                     "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
                     "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
@@ -1650,6 +1769,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                 "email": email,
                 "invite_source": "guest",
                 "status": "invited",
+                "rsvp_status": "pending",
                 "note": (payload.note or "").strip(),
                 "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
                 "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
