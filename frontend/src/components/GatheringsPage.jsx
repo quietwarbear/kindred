@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ClipboardList, HandHelping, Plane, Soup, UsersRound } from "lucide-react";
+import { CalendarDays, ClipboardList, HandHelping, Link2, MailPlus, Plane, Soup, UsersRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ const initialEventForm = {
   suggested_contribution: 0,
   travel_coordination_notes: "",
   recurrence_frequency: "none",
+  zoom_link: "",
 };
 
 const initialChecklistForm = { category: "experience", title: "" };
@@ -35,10 +36,20 @@ const initialTravelForm = {
   payment_status: "pending",
   seats_available: 0,
 };
+const initialInviteForm = {
+  member_ids: [],
+  guest_emails: "",
+  note: "",
+};
+const initialRoleForm = {
+  role_name: "",
+  assignees: "",
+};
 
 export const GatheringsPage = ({ token, user }) => {
   const [templates, setTemplates] = useState([]);
   const [subyards, setSubyards] = useState([]);
+  const [members, setMembers] = useState([]);
   const [events, setEvents] = useState([]);
   const [travelPlans, setTravelPlans] = useState([]);
   const [activeEventId, setActiveEventId] = useState("");
@@ -49,6 +60,9 @@ export const GatheringsPage = ({ token, user }) => {
   const [volunteerCount, setVolunteerCount] = useState(1);
   const [potluckItem, setPotluckItem] = useState("");
   const [travelForm, setTravelForm] = useState(initialTravelForm);
+  const [inviteForm, setInviteForm] = useState(initialInviteForm);
+  const [roleForm, setRoleForm] = useState(initialRoleForm);
+  const [zoomLinkDraft, setZoomLinkDraft] = useState("");
   const [rsvpStatus, setRsvpStatus] = useState("going");
   const [guestCount, setGuestCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,14 +76,16 @@ export const GatheringsPage = ({ token, user }) => {
 
   const loadData = useCallback(async () => {
     try {
-      const [templatePayload, subyardPayload, eventPayload, travelPayload] = await Promise.all([
+      const [templatePayload, subyardPayload, memberPayload, eventPayload, travelPayload] = await Promise.all([
         apiRequest("/gatherings/templates", { token }),
         apiRequest("/subyards", { token }),
+        apiRequest("/community/members", { token }),
         apiRequest("/events", { token }),
         apiRequest("/travel-plans", { token }),
       ]);
       setTemplates(templatePayload.templates || []);
       setSubyards(subyardPayload.subyards || []);
+      setMembers(memberPayload.members || []);
       setEvents(eventPayload || []);
       setTravelPlans(travelPayload.travel_plans || []);
       setActiveEventId((current) => current || eventPayload?.[0]?.id || "");
@@ -81,6 +97,10 @@ export const GatheringsPage = ({ token, user }) => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setZoomLinkDraft(activeEvent?.zoom_link || "");
+  }, [activeEvent?.id, activeEvent?.zoom_link]);
 
   const handleCreateEvent = async (event) => {
     event.preventDefault();
@@ -230,6 +250,71 @@ export const GatheringsPage = ({ token, user }) => {
     }
   };
 
+  const handleSaveMeetingLink = async () => {
+    if (!activeEvent) return;
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}/meeting-link`, {
+        method: "POST",
+        token,
+        data: { zoom_link: zoomLinkDraft },
+      });
+      mergeEvent(payload);
+      toast.success("Meeting link saved.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to save meeting link.");
+    }
+  };
+
+  const handleToggleInviteMember = (memberId) => {
+    setInviteForm((current) => ({
+      ...current,
+      member_ids: current.member_ids.includes(memberId)
+        ? current.member_ids.filter((item) => item !== memberId)
+        : [...current.member_ids, memberId],
+    }));
+  };
+
+  const handleCreateInvites = async (event) => {
+    event.preventDefault();
+    if (!activeEvent) return;
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}/invites`, {
+        method: "POST",
+        token,
+        data: {
+          member_ids: inviteForm.member_ids,
+          guest_emails: inviteForm.guest_emails.split(",").map((item) => item.trim()).filter(Boolean),
+          note: inviteForm.note,
+        },
+      });
+      mergeEvent(payload);
+      setInviteForm(initialInviteForm);
+      toast.success("Event invites created.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to create invites.");
+    }
+  };
+
+  const handleAssignRoles = async (event) => {
+    event.preventDefault();
+    if (!activeEvent) return;
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}/role-assignments`, {
+        method: "POST",
+        token,
+        data: {
+          role_name: roleForm.role_name,
+          assignees: roleForm.assignees.split(",").map((item) => item.trim()).filter(Boolean),
+        },
+      });
+      mergeEvent(payload);
+      setRoleForm(initialRoleForm);
+      toast.success("Event role assignments updated.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to assign event roles.");
+    }
+  };
+
   const handleTravelAssign = async (planId) => {
     try {
       await apiRequest(`/travel-plans/${planId}/assign-self`, { method: "POST", token });
@@ -337,6 +422,12 @@ export const GatheringsPage = ({ token, user }) => {
               <span className="field-label">Special focus</span>
               <Input className="field-input" data-testid="gatherings-special-focus-input" onChange={(e) => setEventForm((current) => ({ ...current, special_focus: e.target.value }))} value={eventForm.special_focus} />
             </label>
+            {eventForm.gathering_format !== "in-person" ? (
+              <label>
+                <span className="field-label">Zoom link for invites</span>
+                <Input className="field-input" data-testid="gatherings-zoom-link-input" onChange={(e) => setEventForm((current) => ({ ...current, zoom_link: e.target.value }))} placeholder="https://zoom.us/j/..." value={eventForm.zoom_link} />
+              </label>
+            ) : null}
             <label className="xl:col-span-2">
               <span className="field-label">Description</span>
               <Textarea className="field-textarea" data-testid="gatherings-description-input" onChange={(e) => setEventForm((current) => ({ ...current, description: e.target.value }))} required value={eventForm.description} />
@@ -404,6 +495,21 @@ export const GatheringsPage = ({ token, user }) => {
                   <span data-testid="gatherings-active-suggested-contribution">Suggested contribution: {shortCurrency(activeEvent.suggested_contribution || 0)}</span>
                   <span data-testid="gatherings-active-recurrence">Recurs: {activeEvent.recurrence_frequency === "none" ? "One-time" : activeEvent.recurrence_frequency}</span>
                 </div>
+                {activeEvent.gathering_format !== "in-person" ? (
+                  <div className="soft-panel mt-5" data-testid="gatherings-meeting-link-panel">
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold text-foreground">Meeting link for hybrid/online invites</p>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <Input className="field-input" data-testid="gatherings-meeting-link-input" onChange={(e) => setZoomLinkDraft(e.target.value)} placeholder="https://zoom.us/j/..." value={zoomLinkDraft} />
+                      <Button className="rounded-full" data-testid="gatherings-meeting-link-save-button" onClick={handleSaveMeetingLink} type="button">
+                        Save Zoom link
+                      </Button>
+                    </div>
+                    {activeEvent.zoom_link ? <p className="mt-3 text-sm text-muted-foreground" data-testid="gatherings-meeting-link-display">{activeEvent.zoom_link}</p> : null}
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-6 xl:grid-cols-2">
@@ -466,6 +572,63 @@ export const GatheringsPage = ({ token, user }) => {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                <div className="soft-panel" data-testid="gatherings-invites-panel">
+                  <div className="flex items-center gap-3">
+                    <MailPlus className="h-4 w-4 text-primary" />
+                    <p className="text-lg font-semibold text-foreground">Invite people to this gathering</p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {members.map((member) => (
+                      <button
+                        className={`rounded-full px-3 py-2 text-xs font-semibold transition ${inviteForm.member_ids.includes(member.id) ? "bg-primary text-primary-foreground" : "border border-border bg-background/80 text-foreground"}`}
+                        data-testid={`gatherings-invite-member-${member.id}`}
+                        key={member.id}
+                        onClick={() => handleToggleInviteMember(member.id)}
+                        type="button"
+                      >
+                        {member.full_name}
+                      </button>
+                    ))}
+                  </div>
+                  <form className="mt-4 space-y-3" onSubmit={handleCreateInvites}>
+                    <Input className="field-input" data-testid="gatherings-invite-guests-input" onChange={(e) => setInviteForm((current) => ({ ...current, guest_emails: e.target.value }))} placeholder="guest1@example.com, guest2@example.com" value={inviteForm.guest_emails} />
+                    <Textarea className="field-textarea" data-testid="gatherings-invite-note-input" onChange={(e) => setInviteForm((current) => ({ ...current, note: e.target.value }))} placeholder="Optional note for invitees" value={inviteForm.note} />
+                    <Button className="w-full rounded-full" data-testid="gatherings-invite-submit-button" type="submit" variant="secondary">
+                      Create gathering invites
+                    </Button>
+                  </form>
+                  <div className="mt-4 space-y-3">
+                    {activeEvent.event_invites?.map((invite) => (
+                      <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-event-invite-${invite.id}`} key={invite.id}>
+                        <p className="text-sm font-semibold text-foreground">{invite.invitee_name} · {invite.email}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{invite.invite_source} · {invite.delivery_status}</p>
+                        {invite.note ? <p className="mt-2 text-sm text-muted-foreground">{invite.note}</p> : null}
+                        {invite.zoom_link ? <p className="mt-2 text-sm text-primary" data-testid={`gatherings-event-invite-zoom-${invite.id}`}>Zoom: {invite.zoom_link}</p> : null}
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground" data-testid={`gatherings-event-invite-message-${invite.id}`}>{invite.share_message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="soft-panel" data-testid="gatherings-role-assignments-panel">
+                  <p className="text-lg font-semibold text-foreground">Assign event roles</p>
+                  <div className="mt-4 space-y-3">
+                    {activeEvent.event_role_assignments?.map((assignment) => (
+                      <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-role-assignment-${assignment.id}`} key={assignment.id}>
+                        <p className="text-sm font-semibold text-foreground">{assignment.role_name}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{assignment.assignees?.join(", ") || "No one assigned yet."}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <form className="mt-4 space-y-3" onSubmit={handleAssignRoles}>
+                    <Input className="field-input" data-testid="gatherings-role-name-input" onChange={(e) => setRoleForm((current) => ({ ...current, role_name: e.target.value }))} placeholder="Zoom host, greeter, prayer lead" required value={roleForm.role_name} />
+                    <Input className="field-input" data-testid="gatherings-role-assignees-input" onChange={(e) => setRoleForm((current) => ({ ...current, assignees: e.target.value }))} placeholder="Name or email, multiple separated by commas" required value={roleForm.assignees} />
+                    <Button className="w-full rounded-full" data-testid="gatherings-role-submit-button" type="submit" variant="secondary">
+                      Save role assignment
+                    </Button>
+                  </form>
                 </div>
 
                 <div className="soft-panel" data-testid="gatherings-agenda-panel">

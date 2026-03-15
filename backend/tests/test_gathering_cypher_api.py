@@ -60,7 +60,7 @@ def test_api_root_health(api_client):
     # Health check endpoint
     response = api_client.get(f"{BASE_URL}/api/", timeout=20)
     assert response.status_code == 200
-    assert response.json()["message"] == "Gathering Cypher API is ready."
+    assert response.json()["message"] == "Kindred API is ready."
 
 
 def test_auth_bootstrap_context(test_context):

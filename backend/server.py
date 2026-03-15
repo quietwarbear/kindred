@@ -435,6 +435,7 @@ class EventCreateRequest(BaseModel):
     suggested_contribution: float = Field(default=0.0, ge=0.0)
     travel_coordination_notes: str | None = ""
     recurrence_frequency: Literal["none", "daily", "weekly", "monthly", "yearly"] = "none"
+    zoom_link: str | None = ""
 
 
 class ChecklistItemRequest(BaseModel):
@@ -444,6 +445,21 @@ class ChecklistItemRequest(BaseModel):
 
 class ChecklistToggleRequest(BaseModel):
     item_id: str
+
+
+class EventInviteCreateRequest(BaseModel):
+    member_ids: list[str] = Field(default_factory=list)
+    guest_emails: list[str] = Field(default_factory=list)
+    note: str | None = ""
+
+
+class EventRoleAssignmentRequest(BaseModel):
+    role_name: str
+    assignees: list[str] = Field(default_factory=list)
+
+
+class EventMeetingLinkRequest(BaseModel):
+    zoom_link: str
 
 
 class EventPublic(BaseModel):
@@ -471,6 +487,9 @@ class EventPublic(BaseModel):
     series_id: str | None = ""
     is_recurring_instance: bool = False
     parent_event_id: str | None = ""
+    zoom_link: str | None = ""
+    event_invites: list[dict[str, Any]] = Field(default_factory=list)
+    event_role_assignments: list[dict[str, Any]] = Field(default_factory=list)
     agenda: list[dict[str, Any]] = Field(default_factory=list)
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
@@ -1104,6 +1123,12 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "series_id": series_id,
         "is_recurring_instance": False,
         "parent_event_id": "",
+        "zoom_link": (payload.zoom_link or "").strip(),
+        "event_invites": [],
+        "event_role_assignments": [
+            {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
+            for role in assigned_roles
+        ],
         "agenda": [],
         "volunteer_slots": [],
         "potluck_items": [],
@@ -1124,6 +1149,11 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
                     "start_at": next_start,
                     "is_recurring_instance": True,
                     "parent_event_id": event_doc["id"],
+                    "event_invites": [],
+                    "event_role_assignments": [
+                        {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
+                        for role in assigned_roles
+                    ],
                     "agenda": [],
                     "volunteer_slots": [],
                     "potluck_items": [],
@@ -1151,6 +1181,104 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
     )
     event_doc["rsvp_records"] = next_records
     await events_collection.update_one({"id": event_id}, {"$set": {"rsvp_records": next_records}})
+    return event_doc
+
+
+@api_router.post("/events/{event_id}/meeting-link", response_model=EventPublic)
+async def save_meeting_link(event_id: str, payload: EventMeetingLinkRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    event_doc["zoom_link"] = payload.zoom_link.strip()
+    await events_collection.update_one({"id": event_id}, {"$set": {"zoom_link": event_doc["zoom_link"]}})
+    return event_doc
+
+
+@api_router.post("/events/{event_id}/invites", response_model=EventPublic)
+async def create_event_invites(event_id: str, payload: EventInviteCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    existing_invites = event_doc.get("event_invites", [])
+    existing_emails = {invite.get("email", "").lower() for invite in existing_invites}
+    invite_records = existing_invites[:]
+
+    if payload.member_ids:
+        members = await users_collection.find(
+            {"community_id": current_user["community_id"], "id": {"$in": payload.member_ids}},
+            {"_id": 0, "password_hash": 0},
+        ).to_list(500)
+        for member in members:
+            email = member["email"].lower()
+            if email in existing_emails:
+                continue
+            invite_records.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "invitee_name": member["full_name"],
+                    "email": member["email"],
+                    "invite_source": "member",
+                    "status": "invited",
+                    "note": (payload.note or "").strip(),
+                    "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
+                    "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
+                    "delivery_status": "ready-for-email",
+                    "created_at": now_iso(),
+                }
+            )
+            existing_emails.add(email)
+
+    for guest_email in payload.guest_emails:
+        email = normalize_email(guest_email)
+        if not email or email in existing_emails:
+            continue
+        invite_records.append(
+            {
+                "id": str(uuid.uuid4()),
+                "invitee_name": email.split("@")[0],
+                "email": email,
+                "invite_source": "guest",
+                "status": "invited",
+                "note": (payload.note or "").strip(),
+                "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
+                "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
+                "delivery_status": "ready-for-email",
+                "created_at": now_iso(),
+            }
+        )
+        existing_emails.add(email)
+
+    event_doc["event_invites"] = invite_records
+    await events_collection.update_one({"id": event_id}, {"$set": {"event_invites": invite_records}})
+    return event_doc
+
+
+@api_router.post("/events/{event_id}/role-assignments", response_model=EventPublic)
+async def assign_event_roles(event_id: str, payload: EventRoleAssignmentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    assignments = event_doc.get("event_role_assignments", [])
+    normalized_role = payload.role_name.strip().lower()
+    normalized_assignees = []
+    for assignee in payload.assignees:
+        clean = assignee.strip()
+        if clean and clean not in normalized_assignees:
+            normalized_assignees.append(clean)
+
+    updated = False
+    for assignment in assignments:
+        if assignment.get("role_name", "").lower() == normalized_role:
+            existing = assignment.get("assignees", [])
+            for assignee in normalized_assignees:
+                if assignee not in existing:
+                    existing.append(assignee)
+            assignment["assignees"] = existing
+            updated = True
+            break
+
+    if not updated:
+        assignments.append({"id": str(uuid.uuid4()), "role_name": payload.role_name.strip(), "assignees": normalized_assignees})
+
+    event_doc["event_role_assignments"] = assignments
+    await events_collection.update_one({"id": event_id}, {"$set": {"event_role_assignments": assignments}})
     return event_doc
 
 
