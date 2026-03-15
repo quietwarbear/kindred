@@ -118,6 +118,7 @@ function App() {
     () => <AuthPage onAuthSuccess={handleAuthSuccess} session={session} />,
     [session]
   );
+  const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
 
   if (hasGoogleSessionId && !session?.token) {
     return <FullScreenMessage copy="Completing your Google sign-in." title="Opening Kindred" />;
@@ -138,7 +139,7 @@ function App() {
               path="/login"
             />
             <Route
-              element={session?.token ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/login" />}
+              element={session?.token ? (needsGoogleOnboarding ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/home" />) : <Navigate replace to="/login" />}
               path="/welcome"
             />
             <Route element={<StrategyPage mode="public" />} path="/strategy" />

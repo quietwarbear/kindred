@@ -25,6 +25,7 @@ Build “Kindred,” a private ecosystem for families, churches, and intentional
 - Home page with upcoming gatherings, active courtyards/subyards, quick actions, role catalog, and relationship/funding prompts
 - Courtyards page with parent courtyard overview, subyard creation, role tool mapping, kinship relationship graph entries, member roster, invite management, scoped announcements, and internal chat rooms
 - Auth page now includes Google sign-in/sign-up, password recovery by email code, and Settings includes a profile page with name, nickname, avatar/profile image, email, phone number, and member type
+- Added Google first-time onboarding with a guided 5-step flow covering profile, circle personalization, first subyard, first gathering, and first invites; onboarding now redirects completed users back to Home and supports everyone signing in with Google for the first time
 - Timeline page with unified archive feed, On This Day reminders, memory uploads, and story thread creation
 - Gatherings page with template-based event creation, recurrence rules, auto-generated checklists, role assignment, RSVP, agenda, volunteers, potluck, and travel coordination records
 - Gatherings page now supports event-level invites from existing members plus manual guest emails, custom/multi-person role assignments, and Zoom-link-aware hybrid/online invitation records
