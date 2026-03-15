@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CircleUserRound, DatabaseZap, LockKeyhole, RefreshCcw, Settings2 } from "lucide-react";
+import { AlertTriangle, CircleUserRound, DatabaseZap, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,9 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -149,6 +152,23 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
       toast.error(error.response?.data?.detail || "Unable to generate sync preview.");
     } finally {
       setIsPreviewing(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      await apiRequest("/auth/account", {
+        method: "DELETE",
+        token,
+        data: { password: deletePassword },
+      });
+      localStorage.removeItem("gathering-cypher-auth");
+      window.location.href = "/login";
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete account.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -444,6 +464,77 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
             )}
           </div>
         </article>
+      </section>
+
+      <section className="archival-card border-destructive/30" data-testid="settings-delete-account-card">
+        <div className="flex items-center gap-3">
+          <Trash2 className="h-5 w-5 text-destructive" />
+          <div>
+            <p className="eyebrow-text text-destructive/80">Danger zone</p>
+            <h3 className="mt-2 font-display text-3xl text-foreground">Delete your account</h3>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-7 text-muted-foreground" data-testid="settings-delete-account-info">
+          Permanently remove your account and all associated data. This action cannot be undone. If you are the community owner, you must transfer ownership before deleting unless you are the only member.
+        </p>
+
+        {!showDeleteConfirm ? (
+          <Button
+            className="mt-4 rounded-full"
+            data-testid="settings-delete-account-button"
+            onClick={() => setShowDeleteConfirm(true)}
+            variant="destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete my account
+          </Button>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/[0.03] p-5 space-y-4" data-testid="settings-delete-confirm-panel">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Are you absolutely sure?</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This will permanently delete your profile, preferences, votes, and all personal data. {user?.role === "host" ? "As the community owner, your entire community will also be deleted if you are the only member." : ""}
+                </p>
+              </div>
+            </div>
+
+            {user?.auth_provider !== "google" && (
+              <label>
+                <span className="field-label">Enter your password to confirm</span>
+                <Input
+                  className="field-input"
+                  data-testid="settings-delete-password-input"
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Your current password"
+                  type="password"
+                  value={deletePassword}
+                />
+              </label>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                className="rounded-full"
+                data-testid="settings-delete-confirm-button"
+                disabled={isDeleting || (user?.auth_provider !== "google" && !deletePassword)}
+                onClick={handleDeleteAccount}
+                variant="destructive"
+              >
+                {isDeleting ? "Deleting..." : "Permanently delete account"}
+              </Button>
+              <Button
+                className="rounded-full"
+                data-testid="settings-delete-cancel-button"
+                onClick={() => { setShowDeleteConfirm(false); setDeletePassword(""); }}
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

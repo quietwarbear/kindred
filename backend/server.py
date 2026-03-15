@@ -493,6 +493,10 @@ class PasswordRecoveryVerifyRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class AccountDeleteRequest(BaseModel):
+    password: str = ""
+
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str
     nickname: str | None = ""
@@ -1164,6 +1168,63 @@ async def update_profile(payload: ProfileUpdateRequest, current_user: dict[str, 
     updated_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
     updated_user.pop("password_hash", None)
     return updated_user
+
+
+@api_router.delete("/auth/account")
+async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    user_id = current_user["id"]
+    community_id = current_user["community_id"]
+
+    # Verify password for password-auth users
+    if current_user.get("auth_provider") != "google":
+        if not payload.password:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required to delete your account.")
+        full_user = await users_collection.find_one({"id": user_id}, {"_id": 0})
+        if not full_user or not verify_password(payload.password, full_user.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password.")
+
+    # Check community ownership
+    community_doc = await communities_collection.find_one({"id": community_id}, {"_id": 0})
+    is_owner = community_doc and community_doc.get("owner_user_id") == user_id
+    member_count = await users_collection.count_documents({"community_id": community_id})
+
+    if is_owner and member_count > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are the community owner. Transfer ownership to another member before deleting your account.",
+        )
+
+    # Delete user data across all collections
+    await notification_preferences_collection.delete_many({"user_id": user_id})
+    await password_resets_collection.delete_many({"email": current_user.get("email", "")})
+    await user_sessions_collection.delete_many({"user_id": user_id})
+
+    # Remove user votes from polls
+    await polls_collection.update_many(
+        {"community_id": community_id},
+        {"$pull": {"options.$[].voter_ids": user_id}},
+    )
+
+    # If sole owner, delete the entire community and all its data
+    if is_owner and member_count <= 1:
+        await events_collection.delete_many({"community_id": community_id})
+        await announcements_collection.delete_many({"community_id": community_id})
+        await chat_rooms_collection.delete_many({"community_id": community_id})
+        await subyards_collection.delete_many({"community_id": community_id})
+        await kinships_collection.delete_many({"community_id": community_id})
+        await memories_collection.delete_many({"community_id": community_id})
+        await threads_collection.delete_many({"community_id": community_id})
+        await payments_collection.delete_many({"community_id": community_id})
+        await travel_plans_collection.delete_many({"community_id": community_id})
+        await budget_plans_collection.delete_many({"community_id": community_id})
+        await invites_collection.delete_many({"community_id": community_id})
+        await notification_events_collection.delete_many({"community_id": community_id})
+        await polls_collection.delete_many({"community_id": community_id})
+        await communities_collection.delete_one({"id": community_id})
+
+    # Delete the user
+    await users_collection.delete_one({"id": user_id})
+    return {"ok": True, "message": "Account deleted permanently."}
 
 
 @api_router.post("/auth/onboarding/complete", response_model=AuthResponse)
