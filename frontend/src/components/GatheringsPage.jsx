@@ -67,6 +67,7 @@ export const GatheringsPage = ({ token, user }) => {
   const [rsvpStatus, setRsvpStatus] = useState("going");
   const [guestCount, setGuestCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sendingReminderEventId, setSendingReminderEventId] = useState("");
 
   const canCreate = useMemo(() => ["host", "organizer"].includes(user?.role), [user?.role]);
   const activeEvent = useMemo(() => events.find((item) => item.id === activeEventId) || null, [activeEventId, events]);
@@ -318,6 +319,19 @@ export const GatheringsPage = ({ token, user }) => {
     }
   };
 
+  const handleSendReminders = async (eventId) => {
+    setSendingReminderEventId(eventId);
+    try {
+      const payload = await apiRequest(`/gatherings/${eventId}/send-reminders`, { method: "POST", token });
+      toast.success(`${payload.sent_count} reminder(s) prepared. Delivery: ${payload.delivery_status}.`);
+      await loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to prepare reminders.");
+    } finally {
+      setSendingReminderEventId("");
+    }
+  };
+
   const handleTravelAssign = async (planId) => {
     try {
       await apiRequest(`/travel-plans/${planId}/assign-self`, { method: "POST", token });
@@ -354,6 +368,11 @@ export const GatheringsPage = ({ token, user }) => {
               <div className="soft-panel" data-testid={`gatherings-reminder-${reminder.id}`} key={reminder.id}>
                 <p className="text-base font-semibold text-foreground">{reminder.title}</p>
                 <p className="mt-2 text-sm leading-7 text-muted-foreground">{reminder.description}</p>
+                {canCreate ? (
+                  <Button className="mt-4 rounded-full" data-testid={`gatherings-reminder-send-${reminder.event_id}`} disabled={sendingReminderEventId === reminder.event_id} onClick={() => handleSendReminders(reminder.event_id)} type="button" variant="secondary">
+                    {sendingReminderEventId === reminder.event_id ? "Preparing..." : "Prepare reminder batch"}
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>

@@ -53,6 +53,8 @@ budget_plans_collection = db.budget_plans
 legacy_table_collection = db.legacy_table_configs
 announcements_collection = db.announcements
 chat_rooms_collection = db.chat_rooms
+notification_events_collection = db.notification_events
+notification_preferences_collection = db.notification_preferences
 
 app = FastAPI(title="Kindred API")
 api_router = APIRouter(prefix="/api")
@@ -333,6 +335,51 @@ async def get_chat_room_for_user(room_id: str, user: dict[str, Any]) -> dict[str
     if not room_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room not found.")
     return room_doc
+
+
+async def get_notification_preferences_for_user(user: dict[str, Any]) -> dict[str, Any]:
+    prefs = await notification_preferences_collection.find_one(
+        {"community_id": user["community_id"], "user_id": user["id"]},
+        {"_id": 0},
+    )
+    if prefs:
+        return prefs
+    return {
+        "user_id": user["id"],
+        "community_id": user["community_id"],
+        "reminder_notifications": True,
+        "announcement_notifications": True,
+        "chat_notifications": True,
+        "invite_notifications": True,
+        "rsvp_notifications": True,
+        "muted_room_ids": [],
+        "muted_announcement_scopes": [],
+        "updated_at": now_iso(),
+    }
+
+
+async def log_notification_event(
+    *,
+    community_id: str,
+    actor_name: str,
+    event_type: str,
+    title: str,
+    description: str,
+    related_id: str = "",
+    audience_scope: str = "community",
+):
+    event_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": community_id,
+        "actor_name": actor_name,
+        "event_type": event_type,
+        "title": title,
+        "description": description,
+        "related_id": related_id,
+        "audience_scope": audience_scope,
+        "created_at": now_iso(),
+    }
+    await notification_events_collection.insert_one(event_doc.copy())
 
 
 async def get_user_from_session_token(session_token: str) -> dict[str, Any] | None:
@@ -767,6 +814,16 @@ class CommunicationUnreadSummary(BaseModel):
     announcements_unread: int
     chat_unread: int
     total_unread: int
+
+
+class NotificationPreferencesUpdateRequest(BaseModel):
+    reminder_notifications: bool = True
+    announcement_notifications: bool = True
+    chat_notifications: bool = True
+    invite_notifications: bool = True
+    rsvp_notifications: bool = True
+    muted_room_ids: list[str] = Field(default_factory=list)
+    muted_announcement_scopes: list[str] = Field(default_factory=list)
 
 
 @api_router.get("/")
@@ -1432,6 +1489,15 @@ async def create_invite(payload: InviteCreateRequest, current_user: dict[str, An
         "created_at": now_iso(),
     }
     await invites_collection.insert_one(invite_doc.copy())
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="member-invite",
+        title=f"Member invite created for {invite_doc['email']}",
+        description=f"Role assigned: {invite_doc['role']}",
+        related_id=invite_doc["id"],
+        audience_scope="community",
+    )
     return invite_doc
 
 
@@ -1443,15 +1509,19 @@ async def list_invites(current_user: dict[str, Any] = Depends(get_current_user))
 
 @api_router.get("/announcements")
 async def list_announcements(current_user: dict[str, Any] = Depends(get_current_user)):
+    prefs = await get_notification_preferences_for_user(current_user)
+    base_query = {"community_id": current_user["community_id"]}
+    if prefs.get("muted_announcement_scopes"):
+        base_query["scope"] = {"$nin": prefs.get("muted_announcement_scopes", [])}
     unread_before_view = await announcements_collection.count_documents({
-        "community_id": current_user["community_id"],
+        **base_query,
         "read_by_ids": {"$ne": current_user["id"]},
     })
     await announcements_collection.update_many(
-        {"community_id": current_user["community_id"]},
+        base_query,
         {"$addToSet": {"read_by_ids": current_user["id"]}},
     )
-    announcements = await announcements_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    announcements = await announcements_collection.find(base_query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return {"announcements": announcements, "unread_before_view": unread_before_view}
 
 
@@ -1481,6 +1551,15 @@ async def create_announcement(payload: AnnouncementCreateRequest, current_user: 
         "created_at": now_iso(),
     }
     await announcements_collection.insert_one(announcement_doc.copy())
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="announcement",
+        title=f"Announcement posted: {announcement_doc['title']}",
+        description=announcement_doc["body"],
+        related_id=announcement_doc["id"],
+        audience_scope=announcement_doc["scope"],
+    )
     return announcement_doc
 
 
@@ -1497,6 +1576,15 @@ async def add_announcement_comment(announcement_id: str, payload: CommentRequest
     )
     announcement_doc["comments"] = comments
     announcement_doc["read_by_ids"] = list(set(announcement_doc.get("read_by_ids", []) + [current_user["id"]]))
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="announcement-comment",
+        title=f"Comment on announcement: {announcement_doc['title']}",
+        description=payload.text.strip(),
+        related_id=announcement_id,
+        audience_scope=announcement_doc.get("scope", "community"),
+    )
     return announcement_doc
 
 
@@ -1505,9 +1593,11 @@ async def list_chat_rooms(current_user: dict[str, Any] = Depends(get_current_use
     community_doc = await get_community_for_user(current_user)
     subyards = await subyards_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).to_list(200)
     await ensure_chat_rooms_for_community(current_user["community_id"], community_doc["name"], subyards)
+    prefs = await get_notification_preferences_for_user(current_user)
     rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
     for room in rooms:
-        room["unread_count"] = len([message for message in room.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
+        room["is_muted"] = room["id"] in prefs.get("muted_room_ids", [])
+        room["unread_count"] = 0 if room["is_muted"] else len([message for message in room.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
     return {"rooms": rooms}
 
 
@@ -1549,6 +1639,15 @@ async def create_chat_message(room_id: str, payload: ChatMessageCreateRequest, c
     await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": messages}})
     room_doc["messages"] = messages
     room_doc["unread_count"] = len([message for message in messages if current_user["id"] not in message.get("read_by_ids", [])])
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="chat-message",
+        title=f"New message in {room_doc['name']}",
+        description=payload.text.strip(),
+        related_id=room_id,
+        audience_scope=room_doc.get("room_scope", "community"),
+    )
     return room_doc
 
 
@@ -1566,6 +1665,15 @@ async def pin_chat_message(room_id: str, message_id: str, current_user: dict[str
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
     await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": room_doc.get("messages", [])}})
     room_doc["unread_count"] = len([message for message in room_doc.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="chat-comment",
+        title=f"New reply in {room_doc['name']}",
+        description=payload.text.strip(),
+        related_id=room_id,
+        audience_scope=room_doc.get("room_scope", "community"),
+    )
     return room_doc
 
 
@@ -1593,15 +1701,75 @@ async def comment_on_chat_message(room_id: str, message_id: str, payload: Commen
 
 @api_router.get("/communications/unread-summary", response_model=CommunicationUnreadSummary)
 async def communications_unread_summary(current_user: dict[str, Any] = Depends(get_current_user)):
+    prefs = await get_notification_preferences_for_user(current_user)
     announcements_unread = await announcements_collection.count_documents({
         "community_id": current_user["community_id"],
+        "scope": {"$nin": prefs.get("muted_announcement_scopes", [])},
         "read_by_ids": {"$ne": current_user["id"]},
     })
     rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0, "messages": 1}).to_list(200)
     chat_unread = 0
     for room in rooms:
+        if room.get("id") in prefs.get("muted_room_ids", []):
+            continue
         chat_unread += len([message for message in room.get("messages", []) if current_user["id"] not in message.get("read_by_ids", [])])
     return {"announcements_unread": announcements_unread, "chat_unread": chat_unread, "total_unread": announcements_unread + chat_unread}
+
+
+@api_router.get("/notifications/history")
+async def notification_history(current_user: dict[str, Any] = Depends(get_current_user)):
+    items = await notification_events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"items": items}
+
+
+@api_router.get("/notifications/preferences")
+async def notification_preferences(current_user: dict[str, Any] = Depends(get_current_user)):
+    return await get_notification_preferences_for_user(current_user)
+
+
+@api_router.put("/notifications/preferences")
+async def update_notification_preferences(payload: NotificationPreferencesUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    prefs_doc = {
+        "user_id": current_user["id"],
+        "community_id": current_user["community_id"],
+        "reminder_notifications": payload.reminder_notifications,
+        "announcement_notifications": payload.announcement_notifications,
+        "chat_notifications": payload.chat_notifications,
+        "invite_notifications": payload.invite_notifications,
+        "rsvp_notifications": payload.rsvp_notifications,
+        "muted_room_ids": payload.muted_room_ids,
+        "muted_announcement_scopes": payload.muted_announcement_scopes,
+        "updated_at": now_iso(),
+    }
+    await notification_preferences_collection.update_one(
+        {"community_id": current_user["community_id"], "user_id": current_user["id"]},
+        {"$set": prefs_doc},
+        upsert=True,
+    )
+    return prefs_doc
+
+
+@api_router.post("/gatherings/{event_id}/send-reminders")
+async def send_gathering_reminders(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    pending_invites = [invite for invite in event_doc.get("event_invites", []) if invite.get("rsvp_status", "pending") == "pending"]
+    delivery_status = "email-ready" if os.environ.get("RESEND_API_KEY") else "connection-ready"
+    sent_at = now_iso()
+    for invite in pending_invites:
+        invite["reminder_sent_at"] = sent_at
+        invite["reminder_delivery_status"] = delivery_status
+    await events_collection.update_one({"id": event_id}, {"$set": {"event_invites": event_doc.get("event_invites", [])}})
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="reminder-send",
+        title=f"Reminder batch created for {event_doc['title']}",
+        description=f"{len(pending_invites)} recurring invite reminder(s) prepared.",
+        related_id=event_id,
+        audience_scope="event",
+    )
+    return {"sent_count": len(pending_invites), "delivery_status": delivery_status, "event": event_doc}
 
 
 @api_router.get("/gatherings/reminders")
@@ -1712,6 +1880,15 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
             invite["rsvp_status"] = payload.status
     event_doc["event_invites"] = event_invites
     await events_collection.update_one({"id": event_id}, {"$set": {"rsvp_records": next_records, "event_invites": event_invites}})
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="rsvp-update",
+        title=f"RSVP updated for {event_doc['title']}",
+        description=f"{current_user['full_name']} responded: {payload.status}",
+        related_id=event_id,
+        audience_scope="event",
+    )
     return event_doc
 
 
@@ -1781,6 +1958,15 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
 
     event_doc["event_invites"] = invite_records
     await events_collection.update_one({"id": event_id}, {"$set": {"event_invites": invite_records}})
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="event-invite",
+        title=f"Gathering invites prepared for {event_doc['title']}",
+        description=f"{len(invite_records)} invite record(s) currently attached to this gathering.",
+        related_id=event_id,
+        audience_scope="event",
+    )
     return event_doc
 
 

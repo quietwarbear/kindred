@@ -17,6 +17,17 @@ const initialConfig = {
 
 export const SettingsPage = ({ token, user, onSessionRefresh }) => {
   const [statusData, setStatusData] = useState(null);
+  const [notificationHistory, setNotificationHistory] = useState([]);
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    reminder_notifications: true,
+    announcement_notifications: true,
+    chat_notifications: true,
+    invite_notifications: true,
+    rsvp_notifications: true,
+    muted_room_ids: [],
+    muted_announcement_scopes: [],
+  });
+  const [chatRooms, setChatRooms] = useState([]);
   const [profileForm, setProfileForm] = useState({
     full_name: user?.full_name || "",
     nickname: user?.nickname || "",
@@ -28,15 +39,30 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
-      const [legacyPayload, mePayload] = await Promise.all([
+      const [legacyPayload, mePayload, historyPayload, preferencePayload, chatPayload] = await Promise.all([
         apiRequest("/legacy-table/status", { token }),
         apiRequest("/auth/me", { token }),
+        apiRequest("/notifications/history", { token }),
+        apiRequest("/notifications/preferences", { token }),
+        apiRequest("/chat/rooms", { token }),
       ]);
       const profileUser = mePayload.user;
       setStatusData(legacyPayload);
+      setNotificationHistory(historyPayload.items || []);
+      setNotificationPreferences({
+        reminder_notifications: preferencePayload.reminder_notifications ?? true,
+        announcement_notifications: preferencePayload.announcement_notifications ?? true,
+        chat_notifications: preferencePayload.chat_notifications ?? true,
+        invite_notifications: preferencePayload.invite_notifications ?? true,
+        rsvp_notifications: preferencePayload.rsvp_notifications ?? true,
+        muted_room_ids: preferencePayload.muted_room_ids || [],
+        muted_announcement_scopes: preferencePayload.muted_announcement_scopes || [],
+      });
+      setChatRooms(chatPayload.rooms || []);
       setConfigForm({
         base_url: legacyPayload.base_url || "",
         auth_type: legacyPayload.auth_type || "api-key",
@@ -55,6 +81,24 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
       toast.error(error.response?.data?.detail || "Unable to load settings.");
     }
   }, [token]);
+
+  const handleNotificationSave = async (event) => {
+    event.preventDefault();
+    setIsSavingNotifications(true);
+    try {
+      await apiRequest("/notifications/preferences", {
+        method: "PUT",
+        token,
+        data: notificationPreferences,
+      });
+      toast.success("Notification preferences updated.");
+      loadStatus();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to save notification preferences.");
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
 
   useEffect(() => {
     loadStatus();
@@ -281,6 +325,122 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
         <p className="mt-3 text-sm text-muted-foreground" data-testid="settings-current-user-role">
           Current role: {user?.role}
         </p>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="archival-card" data-testid="settings-notification-preferences-card">
+          <div className="flex items-center gap-3">
+            <Settings2 className="h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Notification preferences</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Control what reaches you</h3>
+            </div>
+          </div>
+          <form className="mt-6 grid gap-4" onSubmit={handleNotificationSave}>
+            {[
+              ["reminder_notifications", "Recurring invite reminders"],
+              ["announcement_notifications", "Announcements"],
+              ["chat_notifications", "Chat activity"],
+              ["invite_notifications", "Invite updates"],
+              ["rsvp_notifications", "RSVP updates"],
+            ].map(([key, label]) => (
+              <label className="soft-panel flex items-center justify-between gap-3" data-testid={`settings-notification-toggle-${key}`} key={key}>
+                <span className="text-sm font-semibold text-foreground">{label}</span>
+                <input
+                  checked={Boolean(notificationPreferences[key])}
+                  onChange={(e) => setNotificationPreferences((current) => ({ ...current, [key]: e.target.checked }))}
+                  type="checkbox"
+                />
+              </label>
+            ))}
+
+            <div className="soft-panel" data-testid="settings-muted-announcement-scopes-panel">
+              <p className="text-sm font-semibold text-foreground">Mute announcement scopes</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {["courtyard", "subyard"].map((scope) => {
+                  const isMuted = notificationPreferences.muted_announcement_scopes.includes(scope);
+                  return (
+                    <button
+                      className={`rounded-full px-4 py-2 text-sm font-semibold ${isMuted ? "bg-primary text-primary-foreground" : "border border-border bg-background/80 text-foreground"}`}
+                      data-testid={`settings-muted-scope-${scope}`}
+                      key={scope}
+                      onClick={() => setNotificationPreferences((current) => ({
+                        ...current,
+                        muted_announcement_scopes: isMuted
+                          ? current.muted_announcement_scopes.filter((item) => item !== scope)
+                          : [...current.muted_announcement_scopes, scope],
+                      }))}
+                      type="button"
+                    >
+                      {scope}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="soft-panel" data-testid="settings-muted-rooms-panel">
+              <p className="text-sm font-semibold text-foreground">Mute specific chat rooms</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {chatRooms.map((room) => {
+                  const isMuted = notificationPreferences.muted_room_ids.includes(room.id);
+                  return (
+                    <button
+                      className={`rounded-full px-4 py-2 text-sm font-semibold ${isMuted ? "bg-primary text-primary-foreground" : "border border-border bg-background/80 text-foreground"}`}
+                      data-testid={`settings-muted-room-${room.id}`}
+                      key={room.id}
+                      onClick={() => setNotificationPreferences((current) => ({
+                        ...current,
+                        muted_room_ids: isMuted
+                          ? current.muted_room_ids.filter((item) => item !== room.id)
+                          : [...current.muted_room_ids, room.id],
+                      }))}
+                      type="button"
+                    >
+                      {room.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Button className="rounded-full" data-testid="settings-notification-save-button" disabled={isSavingNotifications} type="submit">
+              {isSavingNotifications ? "Saving..." : "Save notification preferences"}
+            </Button>
+          </form>
+        </article>
+
+        <article className="archival-card" data-testid="settings-notification-history-card">
+          <div className="flex items-center gap-3">
+            <RefreshCcw className="h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Notification history</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">What happened recently</h3>
+            </div>
+          </div>
+          <div className="mt-6 space-y-4">
+            {notificationHistory.length ? (
+              notificationHistory.map((item) => (
+                <div className="soft-panel" data-testid={`settings-notification-history-item-${item.id}`} key={item.id}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-base font-semibold text-foreground">{item.title}</p>
+                      <p className="mt-2 text-sm leading-7 text-muted-foreground">{item.description}</p>
+                    </div>
+                    <div className="text-right text-xs uppercase tracking-[0.16em] text-primary">
+                      <p>{item.event_type}</p>
+                      <p className="mt-1 text-muted-foreground">{item.actor_name}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="soft-panel" data-testid="settings-notification-history-empty-state">
+                <p className="text-sm text-muted-foreground">Notification history will appear here as your circle posts announcements, sends invites, updates RSVPs, and chats.</p>
+              </div>
+            )}
+          </div>
+        </article>
       </section>
     </div>
   );
