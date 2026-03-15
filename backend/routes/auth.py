@@ -573,3 +573,17 @@ async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_u
     refreshed_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
     community_doc = await get_community_for_user(refreshed_user)
     return build_auth_response(refreshed_user, community_doc)
+
+
+
+@router.post("/auth/push-token")
+async def save_push_token(body: dict, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Store device push token for native push notifications."""
+    push_token = body.get("push_token", "")
+    if not push_token:
+        return {"ok": False}
+    await users_collection.update_one(
+        {"id": current_user["id"]},
+        {"$addToSet": {"push_tokens": push_token}},
+    )
+    return {"ok": True}

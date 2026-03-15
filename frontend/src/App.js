@@ -8,8 +8,12 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthPage } from "@/components/AuthPage";
 import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
+import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { StrategyPage } from "@/components/StrategyPage";
+import { SupportPage } from "@/components/SupportPage";
+import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
+import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
 
 const APP_STATE_KEY = "gathering-cypher-auth";
 
@@ -103,6 +107,29 @@ function App() {
     validateSession();
   }, [session?.token]);
 
+  // Initialize native features when running in Capacitor
+  useEffect(() => {
+    if (isNative()) {
+      configureStatusBar();
+      setupAppListeners();
+      if (session?.token) {
+        registerPush(
+          (pushToken) => {
+            // Send push token to backend for server-side push
+            apiRequest("/auth/push-token", {
+              method: "POST",
+              token: session.token,
+              data: { push_token: pushToken },
+            }).catch(() => {});
+          },
+          (notification) => {
+            console.log("[Kindred] Push received:", notification);
+          }
+        );
+      }
+    }
+  }, [session?.token]);
+
   const handleLogout = () => {
     localStorage.removeItem(APP_STATE_KEY);
     setSession(null);
@@ -143,6 +170,9 @@ function App() {
               path="/welcome"
             />
             <Route element={<StrategyPage mode="public" />} path="/strategy" />
+            <Route element={<PrivacyPolicyPage />} path="/privacy" />
+            <Route element={<TermsOfServicePage />} path="/terms" />
+            <Route element={<SupportPage />} path="/support" />
             <Route
               element={
                 <ProtectedApp

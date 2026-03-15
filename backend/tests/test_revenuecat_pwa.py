@@ -4,7 +4,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://circle-gather.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://kindred-gather.preview.emergentagent.com").rstrip("/")
 
 TEST_EMAIL = "refactor-test@kindred.app"
 TEST_PASSWORD = "Test1234!"

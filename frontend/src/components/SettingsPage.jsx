@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, FileText, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -579,6 +580,27 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           )}
         </section>
       )}
+
+      <section className="archival-card" data-testid="settings-legal-card">
+        <div className="flex items-center gap-3">
+          <FileText className="h-5 w-5 text-primary" />
+          <div>
+            <p className="eyebrow-text">Legal</p>
+            <h3 className="mt-2 font-display text-3xl text-foreground">Privacy &amp; Terms</h3>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-7 text-muted-foreground">
+          Review our data practices and the terms that govern your use of Kindred.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link className="pill-button-secondary inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent/70 transition-colors" data-testid="settings-privacy-link" to="/privacy">
+            Privacy Policy
+          </Link>
+          <Link className="pill-button-secondary inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-accent/70 transition-colors" data-testid="settings-terms-link" to="/terms">
+            Terms of Service
+          </Link>
+        </div>
+      </section>
 
       <section className="archival-card border-destructive/30" data-testid="settings-delete-account-card">
         <div className="flex items-center gap-3">

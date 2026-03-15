@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, LockKeyhole, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -286,6 +286,18 @@ export const AuthPage = ({ onAuthSuccess }) => {
           </Tabs>
         </div>
       </div>
+
+      <footer className="page-section border-t border-border/40 py-6 mt-8" data-testid="auth-footer">
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="auth-footer-privacy-link" to="/privacy">
+            Privacy Policy
+          </Link>
+          <span className="hidden sm:inline text-xs text-muted-foreground">·</span>
+          <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="auth-footer-terms-link" to="/terms">
+            Terms of Service
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 };

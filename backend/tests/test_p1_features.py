@@ -83,7 +83,7 @@ class TestAddOnsCheckout:
             headers=auth_headers,
             json={
                 "addon_id": "storage-10gb",
-                "origin_url": "https://circle-gather.preview.emergentagent.com/subscription"
+                "origin_url": "https://kindred-gather.preview.emergentagent.com/subscription"
             }
         )
         assert response.status_code == 200, f"Checkout failed: {response.text}"
@@ -114,7 +114,7 @@ class TestAddOnsCheckout:
                 headers=auth_headers,
                 json={
                     "addon_id": addon_id,
-                    "origin_url": "https://circle-gather.preview.emergentagent.com/subscription"
+                    "origin_url": "https://kindred-gather.preview.emergentagent.com/subscription"
                 }
             )
             assert response.status_code == 200, f"Checkout failed for {addon_id}: {response.text}"

@@ -228,6 +228,18 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 Sign out
               </Button>
             </div>
+
+            <div className="border-t border-border/40 pt-4 flex gap-4" data-testid="shell-legal-links">
+              <NavLink className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="sidebar-privacy-link" to="/privacy">
+                Privacy
+              </NavLink>
+              <NavLink className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="sidebar-terms-link" to="/terms">
+                Terms
+              </NavLink>
+              <NavLink className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="sidebar-support-link" to="/support">
+                Support
+              </NavLink>
+            </div>
           </aside>
 
           <main className="space-y-6">

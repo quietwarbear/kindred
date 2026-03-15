@@ -172,7 +172,7 @@ class TestSubscriptionEndpoints:
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "sapling",
             "billing_cycle": "monthly",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         assert response.status_code == 200
@@ -190,7 +190,7 @@ class TestSubscriptionEndpoints:
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "oak",
             "billing_cycle": "monthly",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         assert response.status_code == 403
@@ -201,7 +201,7 @@ class TestSubscriptionEndpoints:
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "invalid-tier-xyz",
             "billing_cycle": "monthly",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         assert response.status_code == 400
@@ -213,7 +213,7 @@ class TestSubscriptionEndpoints:
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "elder-grove",
             "billing_cycle": "monthly",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         assert response.status_code == 400
@@ -225,7 +225,7 @@ class TestSubscriptionEndpoints:
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "oak",
             "billing_cycle": "annual",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         assert response.status_code == 200
@@ -249,7 +249,7 @@ class TestSubscriptionEndpoints:
         checkout_response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "seedling",
             "billing_cycle": "monthly",
-            "origin_url": "https://circle-gather.preview.emergentagent.com"
+            "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
         if checkout_response.status_code != 200:
