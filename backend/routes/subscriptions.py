@@ -187,3 +187,100 @@ async def check_feature_access(feature_key: str, current_user: dict[str, Any] = 
     limits = tier.get("limits", {})
     allowed = limits.get(feature_key, False)
     return {"feature_key": feature_key, "allowed": allowed, "tier_id": tier["id"], "tier_name": tier["name"]}
+
+
+ADDONS_CATALOG = [
+    {
+        "id": "storage-10gb",
+        "name": "Extra Media Storage",
+        "description": "10 GB additional storage for photos, voice notes, and files.",
+        "price_cents": 1000,
+        "price_display": "$10.00",
+        "billing": "one-time",
+        "category": "storage",
+    },
+    {
+        "id": "storage-25gb",
+        "name": "Premium Media Storage",
+        "description": "25 GB additional storage with priority upload speeds.",
+        "price_cents": 2500,
+        "price_display": "$25.00",
+        "billing": "one-time",
+        "category": "storage",
+    },
+    {
+        "id": "templates-premium",
+        "name": "Premium Event Templates",
+        "description": "12 curated event templates for weddings, reunions, graduations, and more.",
+        "price_cents": 999,
+        "price_display": "$9.99",
+        "billing": "one-time",
+        "category": "templates",
+    },
+    {
+        "id": "sms-100",
+        "name": "SMS Reminder Pack (100)",
+        "description": "100 SMS text reminders for events and RSVPs.",
+        "price_cents": 999,
+        "price_display": "$9.99",
+        "billing": "one-time",
+        "category": "sms",
+    },
+    {
+        "id": "sms-500",
+        "name": "SMS Reminder Pack (500)",
+        "description": "500 SMS text reminders with analytics.",
+        "price_cents": 3999,
+        "price_display": "$39.99",
+        "billing": "one-time",
+        "category": "sms",
+    },
+]
+
+
+@router.get("/addons/catalog")
+async def list_addons():
+    """Return available add-on products."""
+    return {"addons": ADDONS_CATALOG}
+
+
+@router.post("/addons/checkout")
+async def addon_checkout(
+    body: dict,
+    request: Request,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Create a Stripe checkout session for an add-on purchase."""
+    addon_id = body.get("addon_id", "")
+    origin_url = body.get("origin_url", "")
+    addon = next((a for a in ADDONS_CATALOG if a["id"] == addon_id), None)
+    if not addon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Add-on not found.")
+
+    stripe_checkout = build_stripe_checkout(request)
+    checkout_request = CheckoutSessionRequest(
+        amount=float(addon["price_cents"] / 100),
+        currency="usd",
+        success_url=f"{origin_url}?addon_success={addon_id}",
+        cancel_url=f"{origin_url}?addon_cancel=1",
+        metadata={
+            "type": "addon",
+            "user_id": current_user["id"],
+            "community_id": current_user["community_id"],
+            "addon_id": addon_id,
+            "addon_name": addon["name"],
+        },
+    )
+    session = await stripe_checkout.create_checkout_session(checkout_request)
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+
+@router.get("/addons/purchased")
+async def list_purchased_addons(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Return add-ons purchased by this community."""
+    from db import payments_collection
+    purchases = await payments_collection.find(
+        {"community_id": current_user["community_id"], "metadata.type": "addon"},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+    return {"purchases": purchases}

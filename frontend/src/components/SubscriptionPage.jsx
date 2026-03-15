@@ -161,6 +161,98 @@ const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, curr
   );
 };
 
+const ADDON_ICONS = {
+  storage: "HardDrive",
+  templates: "LayoutTemplate",
+  sms: "MessageSquareText",
+};
+
+const ADDON_COLORS = {
+  storage: "text-blue-600 bg-blue-50 dark:bg-blue-950/40",
+  templates: "text-purple-600 bg-purple-50 dark:bg-purple-950/40",
+  sms: "text-green-600 bg-green-50 dark:bg-green-950/40",
+};
+
+const AddOnsSection = ({ token }) => {
+  const [addons, setAddons] = useState([]);
+  const [purchasing, setPurchasing] = useState("");
+
+  const loadAddons = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/addons/catalog", { token });
+      setAddons(payload.addons || []);
+    } catch { /* ignore */ }
+  }, [token]);
+
+  useEffect(() => { loadAddons(); }, [loadAddons]);
+
+  const handlePurchase = async (addonId) => {
+    setPurchasing(addonId);
+    try {
+      const payload = await apiRequest("/addons/checkout", {
+        method: "POST",
+        token,
+        data: { addon_id: addonId, origin_url: window.location.href.split("?")[0] },
+      });
+      if (payload.checkout_url) {
+        window.location.href = payload.checkout_url;
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to start checkout.");
+    } finally {
+      setPurchasing("");
+    }
+  };
+
+  if (!addons.length) return null;
+
+  return (
+    <div className="archival-card" data-testid="addons-section">
+      <div className="flex items-center gap-3 mb-1">
+        <Sparkles className="h-5 w-5 text-primary" />
+        <h2 className="font-display text-xl text-foreground">Add-Ons</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">Enhance your community with extras.</p>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {addons.map((addon) => (
+          <div
+            className="rounded-2xl border border-border/60 bg-background p-5 space-y-3 hover:shadow-md transition-shadow"
+            data-testid={`addon-card-${addon.id}`}
+            key={addon.id}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">{addon.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{addon.description}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ADDON_COLORS[addon.category] || "text-muted-foreground bg-muted"}`}>
+                {addon.category}
+              </span>
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <p className="font-display text-lg font-bold text-foreground">{addon.price_display}</p>
+              <Button
+                className="rounded-full"
+                data-testid={`addon-buy-${addon.id}`}
+                disabled={purchasing === addon.id}
+                onClick={() => handlePurchase(addon.id)}
+                size="sm"
+              >
+                {purchasing === addon.id ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ChevronRight className="mr-1 h-3.5 w-3.5" />
+                )}
+                Purchase
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const SubscriptionPage = ({ token, user }) => {
   const [plans, setPlans] = useState([]);
   const [currentSub, setCurrentSub] = useState(null);
@@ -372,24 +464,8 @@ export const SubscriptionPage = ({ token, user }) => {
         ))}
       </div>
 
-      {/* Add-Ons Teaser */}
-      <div className="archival-card" data-testid="addons-section">
-        <h2 className="font-display text-xl text-foreground">Optional Add-Ons</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Enhance your plan with extras (coming soon).</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          {[
-            { label: "Extra Media Storage", desc: "10GB additional storage for photos & files", price: "$10–$25/mo" },
-            { label: "Premium Templates", desc: "Curated event templates for special occasions", price: "$5–$10/event" },
-            { label: "SMS Reminders", desc: "Text message reminders for events & RSVPs", price: "$10/mo" },
-          ].map((addon) => (
-            <div className="soft-panel space-y-1" key={addon.label}>
-              <p className="text-sm font-semibold text-foreground">{addon.label}</p>
-              <p className="text-xs text-muted-foreground">{addon.desc}</p>
-              <p className="font-mono text-xs text-primary">{addon.price}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Add-Ons Section */}
+      <AddOnsSection token={token} />
 
       {/* FAQ / Notes */}
       <div className="archival-card" data-testid="subscription-faq">

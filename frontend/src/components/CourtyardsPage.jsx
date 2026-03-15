@@ -44,6 +44,8 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
   const [subyardForm, setSubyardForm] = useState(initialSubyardForm);
   const [kinshipForm, setKinshipForm] = useState(initialKinshipForm);
   const [inviteForm, setInviteForm] = useState(initialInviteForm);
+  const [kinshipGroups, setKinshipGroups] = useState({ groups: {}, members: [] });
+  const [showKinshipInvite, setShowKinshipInvite] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState(initialAnnouncementForm);
   const [announcementFiles, setAnnouncementFiles] = useState([]);
   const [chatFiles, setChatFiles] = useState([]);
@@ -94,6 +96,29 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
   useEffect(() => {
     loadStructure();
   }, [loadStructure]);
+
+  const loadKinshipGroups = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/kinship/groups", { token });
+      setKinshipGroups(payload);
+    } catch { /* ignore */ }
+  }, [token]);
+
+  useEffect(() => { loadKinshipGroups(); }, [loadKinshipGroups]);
+
+  const handleQuickInvite = async (email) => {
+    if (!email) return;
+    setIsSubmitting(true);
+    try {
+      await apiRequest("/invites", { method: "POST", token, data: { email, role: "member" } });
+      toast.success(`Invite sent to ${email}`);
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || `Unable to invite ${email}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!activeRoomId) return;
@@ -570,6 +595,50 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
               <h3 className="mt-2 font-display text-3xl text-foreground">Bring people in deliberately</h3>
             </div>
           </div>
+
+          {canManage && Object.keys(kinshipGroups.groups).length > 0 && (
+            <div className="mt-5" data-testid="kinship-invite-shortcuts">
+              <button
+                className="flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                data-testid="kinship-invite-toggle"
+                onClick={() => setShowKinshipInvite(!showKinshipInvite)}
+              >
+                <Users className="h-4 w-4" />
+                Quick invite from kinship groups {showKinshipInvite ? "(hide)" : "(show)"}
+              </button>
+              {showKinshipInvite && (
+                <div className="mt-3 space-y-3" data-testid="kinship-invite-panel">
+                  {Object.entries(kinshipGroups.groups).map(([type, rels]) => (
+                    <div className="soft-panel" key={type}>
+                      <p className="text-sm font-semibold text-foreground capitalize">{type}s</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {kinshipGroups.members
+                          .filter((m) => rels.some((r) => r.person_name === m.full_name || r.related_to_name === m.full_name))
+                          .map((member) => (
+                            <button
+                              className="flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-primary/10 hover:border-primary/30 transition-all"
+                              data-testid={`kinship-quick-invite-${member.id}`}
+                              disabled={isSubmitting}
+                              key={member.id}
+                              onClick={() => handleQuickInvite(member.email)}
+                            >
+                              <UserPlus className="h-3 w-3" />
+                              {member.full_name}
+                            </button>
+                          ))}
+                        {rels.filter((r) => !kinshipGroups.members.some((m) => m.full_name === r.person_name || m.full_name === r.related_to_name)).length > 0 && (
+                          <span className="text-xs text-muted-foreground italic">
+                            {rels.filter((r) => !kinshipGroups.members.some((m) => m.full_name === r.person_name || m.full_name === r.related_to_name)).length} not yet registered
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {canManage ? (
             <form className="mt-6 grid gap-4" onSubmit={handleCreateInvite}>
               <label>
