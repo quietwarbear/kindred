@@ -1,7 +1,7 @@
 # Kindred / Digital Courtyard PRD
 
 ## Original Problem Statement
-Build "Kindred," a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build.
+Build "Kindred," a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. Tagline: "Where your circles gather and grow."
 
 ## Architecture
 - **Frontend**: React SPA (PWA + Capacitor native)
@@ -15,7 +15,7 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 ## All Implemented Features
 
 ### Core Infrastructure
-- Modular backend (server.py → 11 route files)
+- Modular backend (server.py -> 11 route files)
 - Full auth (JWT, Google OAuth, password recovery, account deletion)
 - Multi-courtyard membership + community switcher
 - PWA: service worker, manifest, offline fallback, install prompt
@@ -46,6 +46,18 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Stripe: one-time + subscriptions + add-on marketplace
 - RevenueCat: webhook, offerings, restore, receipt validation
 - 5-tier subscription system
+
+### Legal Compliance (Completed March 15, 2026)
+- Privacy Policy page at /privacy (10 sections)
+- Terms of Service page at /terms (13 sections)
+- Footer links on Landing page, Auth page
+- Legal section in Settings page
+- Sidebar links in AppShell
+
+### Code Quality (Completed March 15, 2026)
+- GatheringsPage refactored from 953 lines to ~477 lines + 8 sub-components
+  - GatheringChecklist, GatheringRsvp, GatheringInvites, GatheringRoles
+  - GatheringAgenda, GatheringVolunteers, GatheringPotluck, GatheringTravel
 
 ## Remaining Backlog
 - Community Mood Board (sentiment trend visualization)
