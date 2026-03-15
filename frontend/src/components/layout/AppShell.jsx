@@ -12,6 +12,7 @@ import { GatheringsPage } from "@/components/GatheringsPage";
 import { HomePage } from "@/components/HomePage";
 import { MemoryVaultPage } from "@/components/MemoryVaultPage";
 import { MembersPage } from "@/components/MembersPage";
+import { PollsPage } from "@/components/PollsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { StrategyPage } from "@/components/StrategyPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
@@ -24,6 +25,7 @@ const navItems = [
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline" },
   { label: "Gatherings", path: "/gatherings" },
+  { label: "Polls", path: "/polls" },
   { label: "Funds & Travel", path: "/funds-travel" },
   { label: "Settings", path: "/settings" },
 ];
@@ -148,6 +150,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
+              <Route element={<PollsPage token={token} user={user} />} path="polls" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
               <Route element={<SettingsPage onSessionRefresh={onSessionRefresh} token={token} user={user} />} path="settings" />
               <Route

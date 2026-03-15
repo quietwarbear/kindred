@@ -55,6 +55,7 @@ announcements_collection = db.announcements
 chat_rooms_collection = db.chat_rooms
 notification_events_collection = db.notification_events
 notification_preferences_collection = db.notification_preferences
+polls_collection = db.polls
 
 app = FastAPI(title="Kindred API")
 api_router = APIRouter(prefix="/api")
@@ -827,6 +828,22 @@ class NotificationPreferencesUpdateRequest(BaseModel):
     muted_announcement_scopes: list[str] = Field(default_factory=list)
 
 
+class PollOptionRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+
+
+class PollCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    options: list[PollOptionRequest] = Field(min_length=2, max_length=10)
+    allow_multiple: bool = False
+    closes_at: str = ""
+
+
+class PollVoteRequest(BaseModel):
+    option_ids: list[str] = Field(min_length=1)
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Kindred API is ready."}
@@ -1278,10 +1295,11 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
     memory_count = await memories_collection.count_documents({"community_id": community_id})
     thread_count = await threads_collection.count_documents({"community_id": community_id})
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
-    total_raised_docs = await payments_collection.find(
-        {"community_id": community_id, "payment_status": "paid"},
-        {"_id": 0, "amount": 1},
-    ).to_list(1000)
+    funds_agg = await payments_collection.aggregate([
+        {"$match": {"community_id": community_id, "payment_status": "paid"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]).to_list(1)
+    funds_raised = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
     upcoming_events = await events_collection.find({"community_id": community_id}, {"_id": 0}).sort("start_at", 1).to_list(5)
     recent_memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     recent_threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
@@ -1294,7 +1312,7 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
             "events": event_count,
             "memories": memory_count,
             "threads": thread_count,
-            "funds_raised": round(sum(doc.get("amount", 0) for doc in total_raised_docs), 2),
+            "funds_raised": funds_raised,
         },
         "upcoming_events": upcoming_events,
         "recent_memories": recent_memories,
@@ -1313,10 +1331,11 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
     memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
-    paid_transactions = await payments_collection.find(
-        {"community_id": community_id, "payment_status": "paid"},
-        {"_id": 0, "amount": 1},
-    ).to_list(1000)
+    funds_agg = await payments_collection.aggregate([
+        {"$match": {"community_id": community_id, "payment_status": "paid"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]).to_list(1)
+    funds_total = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
     budgets = await budget_plans_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
     kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     announcements = await announcements_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(10)
@@ -1370,7 +1389,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
             "subyards": len(subyards),
             "gatherings": len(upcoming_events),
             "timeline_updates": len(memories) + len(threads),
-            "funds_total": round(sum(doc.get("amount", 0) for doc in paid_transactions), 2),
+            "funds_total": funds_total,
         },
         "upcoming_gatherings": gatherings,
         "active_courtyards": active_courtyards,
@@ -2360,7 +2379,11 @@ async def payment_summary(current_user: dict[str, Any] = Depends(get_current_use
         {"community_id": current_user["community_id"]},
         {"_id": 0, "id": 1, "session_id": 1, "package_id": 1, "contribution_label": 1, "amount": 1, "currency": 1, "status": 1, "payment_status": 1, "user_email": 1, "created_at": 1, "completed_at": 1},
     ).sort("created_at", -1).to_list(200)
-    total_paid = round(sum(txn.get("amount", 0) for txn in transactions if txn.get("payment_status") == "paid"), 2)
+    paid_agg = await payments_collection.aggregate([
+        {"$match": {"community_id": current_user["community_id"], "payment_status": "paid"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]).to_list(1)
+    total_paid = round(paid_agg[0]["total"], 2) if paid_agg else 0.0
     return {"packages": list(CONTRIBUTION_PACKAGES.values()), "total_paid": total_paid, "transactions": transactions}
 
 
@@ -2539,6 +2562,122 @@ async def stripe_webhook(request: Request):
         await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
 
     return {"received": True, "session_id": session_id, "payment_status": payment_status, "event_type": event_type}
+
+
+@api_router.get("/polls")
+async def list_polls(current_user: dict[str, Any] = Depends(get_current_user)):
+    polls = await polls_collection.find(
+        {"community_id": current_user["community_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    for poll in polls:
+        for option in poll.get("options", []):
+            option["vote_count"] = len(option.get("voter_ids", []))
+            option["voted_by_me"] = current_user["id"] in option.get("voter_ids", [])
+            option.pop("voter_ids", None)
+        poll["total_votes"] = sum(o["vote_count"] for o in poll.get("options", []))
+    return {"polls": polls}
+
+
+@api_router.post("/polls")
+async def create_poll(payload: PollCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    poll_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "created_by": current_user["id"],
+        "created_by_name": current_user["full_name"],
+        "title": payload.title.strip(),
+        "description": payload.description.strip(),
+        "options": [
+            {"id": str(uuid.uuid4()), "text": opt.text.strip(), "voter_ids": []}
+            for opt in payload.options
+        ],
+        "allow_multiple": payload.allow_multiple,
+        "is_active": True,
+        "closes_at": payload.closes_at,
+        "created_at": now_iso(),
+    }
+    await polls_collection.insert_one(poll_doc.copy())
+    await log_notification_event(
+        community_id=current_user["community_id"],
+        actor_name=current_user["full_name"],
+        event_type="poll-create",
+        title=f"New poll: {poll_doc['title']}",
+        description=f"{current_user['full_name']} started a vote with {len(payload.options)} options.",
+        related_id=poll_doc["id"],
+        audience_scope="community",
+    )
+    for option in poll_doc["options"]:
+        option["vote_count"] = 0
+        option["voted_by_me"] = False
+        option.pop("voter_ids", None)
+    poll_doc["total_votes"] = 0
+    return poll_doc
+
+
+@api_router.post("/polls/{poll_id}/vote")
+async def vote_on_poll(poll_id: str, payload: PollVoteRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    poll_doc = await polls_collection.find_one(
+        {"id": poll_id, "community_id": current_user["community_id"]}, {"_id": 0}
+    )
+    if not poll_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found.")
+    if not poll_doc.get("is_active", True):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This poll is closed.")
+
+    options = poll_doc.get("options", [])
+    valid_option_ids = {o["id"] for o in options}
+    for oid in payload.option_ids:
+        if oid not in valid_option_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid option: {oid}")
+
+    if not poll_doc.get("allow_multiple") and len(payload.option_ids) > 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This poll only allows a single vote.")
+
+    # Remove existing votes from this user
+    for option in options:
+        voter_ids = option.get("voter_ids", [])
+        if current_user["id"] in voter_ids:
+            voter_ids.remove(current_user["id"])
+        option["voter_ids"] = voter_ids
+
+    # Add new votes
+    for option in options:
+        if option["id"] in payload.option_ids:
+            option["voter_ids"].append(current_user["id"])
+
+    await polls_collection.update_one({"id": poll_id}, {"$set": {"options": options}})
+
+    for option in options:
+        option["vote_count"] = len(option.get("voter_ids", []))
+        option["voted_by_me"] = current_user["id"] in option.get("voter_ids", [])
+        option.pop("voter_ids", None)
+    poll_doc["options"] = options
+    poll_doc["total_votes"] = sum(o["vote_count"] for o in options)
+    return poll_doc
+
+
+@api_router.post("/polls/{poll_id}/close")
+async def close_poll(poll_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    poll_doc = await polls_collection.find_one(
+        {"id": poll_id, "community_id": current_user["community_id"]}, {"_id": 0}
+    )
+    if not poll_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found.")
+    await polls_collection.update_one({"id": poll_id}, {"$set": {"is_active": False}})
+    return {"status": "closed"}
+
+
+@api_router.delete("/polls/{poll_id}")
+async def delete_poll(poll_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    result = await polls_collection.delete_one(
+        {"id": poll_id, "community_id": current_user["community_id"]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found.")
+    return {"status": "deleted"}
 
 
 app.include_router(api_router)
