@@ -1,9 +1,10 @@
-import { Menu, MoonStar, Sparkles, SunMedium } from "lucide-react";
+import { ChevronDown, Menu, MoonStar, Sparkles, SunMedium } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NotificationPanel } from "@/components/layout/NotificationPanel";
 import { ActivityFeedPage } from "@/components/ActivityFeedPage";
 import { ContributionsPage } from "@/components/ContributionsPage";
@@ -23,6 +24,7 @@ import { ThreadsPage } from "@/components/ThreadsPage";
 import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
 import { apiRequest } from "@/lib/api";
+import { toast } from "@/components/ui/sonner";
 
 const navItems = [
   { label: "Home", path: "/home" },
@@ -42,6 +44,9 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   const { resolvedTheme, setTheme } = useTheme();
   const location = useLocation();
   const [unreadSummary, setUnreadSummary] = useState({ announcements_unread: 0, chat_unread: 0, total_unread: 0 });
+  const [myCommunities, setMyCommunities] = useState([]);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
 
   const refreshUnreadSummary = useCallback(async () => {
     try {
@@ -52,9 +57,39 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
     }
   }, [token]);
 
-  useEffect(() => {
-    refreshUnreadSummary();
-  }, [location.pathname, refreshUnreadSummary]);
+  const loadMyCommunities = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/communities/mine", { token });
+      setMyCommunities(payload.communities || []);
+    } catch {
+      /* ignore */
+    }
+  }, [token]);
+
+  useEffect(() => { refreshUnreadSummary(); }, [location.pathname, refreshUnreadSummary]);
+  useEffect(() => { loadMyCommunities(); }, [loadMyCommunities]);
+
+  const handleSwitchCommunity = async (communityId) => {
+    try {
+      await apiRequest("/communities/switch", { method: "POST", token, data: { community_id: communityId } });
+      setShowSwitcher(false);
+      onSessionRefresh();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleJoinCommunity = async () => {
+    if (!joinCode.trim()) return;
+    try {
+      await apiRequest("/communities/join", { method: "POST", token, data: { invite_code: joinCode } });
+      setJoinCode("");
+      setShowSwitcher(false);
+      onSessionRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to join community.");
+    }
+  };
 
   return (
     <div className="app-canvas min-h-screen pb-10">
@@ -72,15 +107,53 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 </div>
               </div>
               <div className="soft-panel space-y-2">
-                <p className="text-lg font-semibold text-foreground" data-testid="shell-community-name">
-                  {community?.name}
-                </p>
-                <p className="text-sm text-muted-foreground" data-testid="shell-community-metadata">
-                  {community?.community_type} courtyard · {community?.location}
-                </p>
+                <button
+                  className="flex w-full items-center justify-between text-left"
+                  data-testid="community-switcher-toggle"
+                  onClick={() => setShowSwitcher(!showSwitcher)}
+                >
+                  <div>
+                    <p className="text-lg font-semibold text-foreground" data-testid="shell-community-name">
+                      {community?.name}
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="shell-community-metadata">
+                      {community?.community_type} courtyard · {community?.location}
+                    </p>
+                  </div>
+                  {myCommunities.length > 1 && (
+                    <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showSwitcher ? "rotate-180" : ""}`} />
+                  )}
+                </button>
                 <p className="text-sm text-muted-foreground" data-testid="shell-user-identity">
                   Signed in as {user?.full_name} ({user?.role})
                 </p>
+                {showSwitcher && (
+                  <div className="mt-2 space-y-2 border-t border-border/50 pt-2" data-testid="community-switcher-panel">
+                    {myCommunities.filter((c) => !c.is_active).map((c) => (
+                      <button
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm text-foreground hover:bg-accent/70 transition-colors"
+                        data-testid={`switch-community-${c.id}`}
+                        key={c.id}
+                        onClick={() => handleSwitchCommunity(c.id)}
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        <span className="text-xs text-muted-foreground">{c.member_count} members</span>
+                      </button>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <Input
+                        className="field-input h-8 text-xs flex-1"
+                        data-testid="join-community-input"
+                        onChange={(e) => setJoinCode(e.target.value)}
+                        placeholder="Invite code"
+                        value={joinCode}
+                      />
+                      <Button className="rounded-full h-8" data-testid="join-community-btn" disabled={!joinCode.trim()} onClick={handleJoinCommunity} size="sm" variant="secondary">
+                        Join
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

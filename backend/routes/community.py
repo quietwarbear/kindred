@@ -388,3 +388,71 @@ async def kinship_groups(current_user: dict[str, Any] = Depends(get_current_user
     ).to_list(500)
 
     return {"groups": groups, "members": members}
+
+
+@router.get("/communities/mine")
+async def list_my_communities(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Return all communities the current user belongs to."""
+    community_ids = current_user.get("community_ids", [current_user["community_id"]])
+    communities = await communities_collection.find(
+        {"id": {"$in": community_ids}}, {"_id": 0}
+    ).to_list(50)
+    # Enrich with member count
+    for c in communities:
+        c["member_count"] = await users_collection.count_documents({"community_id": c["id"]})
+        c["is_active"] = c["id"] == current_user["community_id"]
+    return {"communities": communities, "active_community_id": current_user["community_id"]}
+
+
+@router.post("/communities/switch")
+async def switch_community(body: dict, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Switch the user's active community."""
+    from dependencies import build_auth_response
+    target_id = body.get("community_id", "")
+    if not target_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="community_id is required.")
+
+    community_ids = current_user.get("community_ids", [current_user["community_id"]])
+    if target_id not in community_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of that community.")
+
+    await users_collection.update_one({"id": current_user["id"]}, {"$set": {"community_id": target_id}})
+    user_doc = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    community_doc = await communities_collection.find_one({"id": target_id}, {"_id": 0})
+    return build_auth_response(user_doc, community_doc)
+
+
+@router.post("/communities/join")
+async def join_community_with_invite(body: dict, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Join an additional community using an invite code (while already logged in)."""
+    from dependencies import build_auth_response
+    invite_code = (body.get("invite_code") or "").strip().upper()
+    if not invite_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_code is required.")
+
+    invite_doc = await invites_collection.find_one({"code": invite_code, "status": "pending"}, {"_id": 0})
+    if not invite_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite code is invalid or already used.")
+
+    email = current_user["email"]
+    if normalize_email(invite_doc.get("email", "")) != normalize_email(email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This invite was not sent to your email address.")
+
+    target_community_id = invite_doc["community_id"]
+    community_ids = current_user.get("community_ids", [current_user["community_id"]])
+    if target_community_id in community_ids:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You are already a member of this community.")
+
+    new_ids = list(set(community_ids + [target_community_id]))
+    await users_collection.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"community_id": target_community_id, "community_ids": new_ids}},
+    )
+    await invites_collection.update_one(
+        {"id": invite_doc["id"]},
+        {"$set": {"status": "accepted", "accepted_at": now_iso()}},
+    )
+
+    user_doc = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    community_doc = await communities_collection.find_one({"id": target_community_id}, {"_id": 0})
+    return build_auth_response(user_doc, community_doc)

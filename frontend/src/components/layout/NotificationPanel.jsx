@@ -55,11 +55,40 @@ export const NotificationPanel = ({ token }) => {
     }
   }, [token]);
 
+  const prevUnreadRef = useRef(0);
+
+  const requestPushPermission = useCallback(async () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    requestPushPermission();
+  }, [requestPushPermission]);
+
   useEffect(() => {
     fetchUnreadCount();
     intervalRef.current = setInterval(fetchUnreadCount, 30_000);
     return () => clearInterval(intervalRef.current);
   }, [fetchUnreadCount]);
+
+  useEffect(() => {
+    // Show browser push notification for new notifications
+    if (
+      unreadCount > prevUnreadRef.current &&
+      prevUnreadRef.current > 0 &&
+      !open &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      new Notification("Kindred", {
+        body: `You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`,
+        icon: "/favicon.ico",
+      });
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount, open]);
 
   useEffect(() => {
     if (open) fetchHistory();
