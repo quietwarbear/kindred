@@ -406,6 +406,24 @@ class ProfileUpdateRequest(BaseModel):
     profile_image_url: str | None = ""
 
 
+class GoogleOnboardingRequest(BaseModel):
+    full_name: str
+    nickname: str | None = ""
+    phone_number: str | None = ""
+    profile_image_url: str | None = ""
+    community_name: str | None = ""
+    community_type: str | None = ""
+    location: str | None = ""
+    motto: str | None = ""
+    first_subyard_name: str | None = ""
+    first_subyard_description: str | None = ""
+    first_gathering_title: str | None = ""
+    first_gathering_template: str | None = ""
+    first_gathering_start_at: str | None = None
+    first_gathering_location: str | None = ""
+    invite_emails: list[EmailStr] = Field(default_factory=list)
+
+
 class CommunityPublic(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -432,6 +450,7 @@ class UserPublic(BaseModel):
     role: str
     community_id: str
     auth_provider: str | None = "password"
+    onboarding_completed: bool = True
     created_at: str
 
 
@@ -742,6 +761,7 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         "role": "host",
         "community_id": community_id,
         "auth_provider": "password",
+        "onboarding_completed": True,
         "created_at": created_at,
     }
 
@@ -799,6 +819,7 @@ async def register_with_invite(payload: InviteRegistrationRequest):
         "role": invite_doc["role"],
         "community_id": invite_doc["community_id"],
         "auth_provider": "password",
+        "onboarding_completed": True,
         "created_at": created_at,
     }
     await users_collection.insert_one(user_doc.copy())
@@ -850,15 +871,16 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
 
     user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
     if user_doc:
+        update_payload = {
+            "full_name": google_user.get("name") or user_doc.get("full_name"),
+            "google_picture": google_user.get("picture", ""),
+            "auth_provider": "google",
+        }
+        if user_doc.get("auth_provider") != "google" or "onboarding_completed" not in user_doc:
+            update_payload["onboarding_completed"] = False
         await users_collection.update_one(
             {"id": user_doc["id"]},
-            {
-                "$set": {
-                    "full_name": google_user.get("name") or user_doc.get("full_name"),
-                    "google_picture": google_user.get("picture", ""),
-                    "auth_provider": "google",
-                }
-            },
+            {"$set": update_payload},
         )
         user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
     else:
@@ -879,6 +901,7 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
                 "role": invite_doc["role"],
                 "community_id": invite_doc["community_id"],
                 "auth_provider": "google",
+                "onboarding_completed": False,
                 "created_at": created_at,
             }
             await users_collection.insert_one(user_doc.copy())
@@ -908,6 +931,7 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
                 "role": "host",
                 "community_id": community_id,
                 "auth_provider": "google",
+                "onboarding_completed": False,
                 "created_at": created_at,
             }
             await communities_collection.insert_one(community_doc.copy())
@@ -1014,6 +1038,126 @@ async def update_profile(payload: ProfileUpdateRequest, current_user: dict[str, 
     updated_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
     updated_user.pop("password_hash", None)
     return updated_user
+
+
+@api_router.post("/auth/onboarding/complete", response_model=AuthResponse)
+async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    profile_updates = {
+        "full_name": payload.full_name.strip() or current_user.get("full_name", ""),
+        "nickname": (payload.nickname or "").strip(),
+        "phone_number": (payload.phone_number or "").strip(),
+        "profile_image_url": (payload.profile_image_url or "").strip(),
+        "onboarding_completed": True,
+    }
+    await users_collection.update_one({"id": current_user["id"]}, {"$set": profile_updates})
+
+    refreshed_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    community_doc = await get_community_for_user(refreshed_user)
+
+    if refreshed_user["role"] in {"host", "organizer"}:
+        community_updates = {
+            "name": (payload.community_name or community_doc.get("name", "")).strip() or community_doc.get("name", ""),
+            "community_type": normalize_community_type(payload.community_type or community_doc.get("community_type", "community")),
+            "location": (payload.location or community_doc.get("location", "")).strip(),
+            "motto": (payload.motto or community_doc.get("motto", "")).strip(),
+        }
+        await communities_collection.update_one({"id": community_doc["id"]}, {"$set": community_updates})
+        community_doc = await communities_collection.find_one({"id": community_doc["id"]}, {"_id": 0})
+
+        if (payload.first_subyard_name or "").strip():
+            existing_subyard = await subyards_collection.find_one(
+                {"community_id": community_doc["id"], "name": payload.first_subyard_name.strip()},
+                {"_id": 0},
+            )
+            if not existing_subyard:
+                subyard_doc = {
+                    "id": str(uuid.uuid4()),
+                    "community_id": community_doc["id"],
+                    "name": payload.first_subyard_name.strip(),
+                    "description": (payload.first_subyard_description or "").strip() or "Starter subyard created during onboarding.",
+                    "inherited_roles": True,
+                    "role_focus": ["organizer", "historian"],
+                    "assigned_tools": sorted({tool for role in ["organizer", "historian"] for tool in ROLE_TOOLING.get(role, [])}),
+                    "visibility": "shared",
+                    "created_by": refreshed_user["id"],
+                    "created_at": now_iso(),
+                }
+                await subyards_collection.insert_one(subyard_doc.copy())
+                await ensure_chat_rooms_for_community(community_doc["id"], community_doc["name"], [subyard_doc])
+
+        if (
+            (payload.first_gathering_title or "").strip()
+            and payload.first_gathering_start_at
+            and (payload.first_gathering_location or "").strip()
+        ):
+            existing_event = await events_collection.find_one(
+                {
+                    "community_id": community_doc["id"],
+                    "title": payload.first_gathering_title.strip(),
+                    "start_at": payload.first_gathering_start_at,
+                },
+                {"_id": 0},
+            )
+            if not existing_event:
+                template = payload.first_gathering_template or "reunion"
+                event_doc = {
+                    "id": str(uuid.uuid4()),
+                    "community_id": community_doc["id"],
+                    "created_by": refreshed_user["id"],
+                    "title": payload.first_gathering_title.strip(),
+                    "description": "Starter gathering created during Google onboarding.",
+                    "start_at": payload.first_gathering_start_at,
+                    "location": payload.first_gathering_location.strip(),
+                    "map_url": "",
+                    "event_template": template,
+                    "special_focus": "",
+                    "gathering_format": "in-person",
+                    "max_attendees": None,
+                    "subyard_id": "",
+                    "subyard_name": "",
+                    "assigned_roles": build_role_suggestions(template),
+                    "planning_checklist": build_planning_checklist(template, "in-person"),
+                    "travel_coordination_notes": "",
+                    "suggested_contribution": 0.0,
+                    "recurrence_frequency": "none",
+                    "series_id": "",
+                    "is_recurring_instance": False,
+                    "parent_event_id": "",
+                    "zoom_link": "",
+                    "event_invites": [],
+                    "event_role_assignments": [
+                        {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
+                        for role in build_role_suggestions(template)
+                    ],
+                    "agenda": [],
+                    "volunteer_slots": [],
+                    "potluck_items": [],
+                    "rsvp_records": [],
+                    "created_at": now_iso(),
+                }
+                await events_collection.insert_one(event_doc.copy())
+
+        for invite_email in payload.invite_emails:
+            email = normalize_email(invite_email)
+            existing_member = await users_collection.find_one({"community_id": community_doc["id"], "email": email}, {"_id": 0})
+            existing_invite = await invites_collection.find_one({"community_id": community_doc["id"], "email": email, "status": "pending"}, {"_id": 0})
+            if existing_member or existing_invite:
+                continue
+            invite_doc = {
+                "id": str(uuid.uuid4()),
+                "code": uuid.uuid4().hex[:8].upper(),
+                "email": email,
+                "role": "member",
+                "status": "pending",
+                "community_id": community_doc["id"],
+                "created_by": refreshed_user["id"],
+                "created_at": now_iso(),
+            }
+            await invites_collection.insert_one(invite_doc.copy())
+
+    refreshed_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    community_doc = await get_community_for_user(refreshed_user)
+    return build_auth_response(refreshed_user, community_doc)
 
 
 @api_router.get("/community/overview", response_model=DashboardOverview)

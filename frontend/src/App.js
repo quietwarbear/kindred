@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeProvider } from "next-themes";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthPage } from "@/components/AuthPage";
 import { LandingPage } from "@/components/LandingPage";
+import { OnboardingPage } from "@/components/OnboardingPage";
 import { StrategyPage } from "@/components/StrategyPage";
 import { apiRequest } from "@/lib/api";
 
@@ -23,8 +24,18 @@ const FullScreenMessage = ({ title, copy }) => (
 );
 
 const ProtectedApp = ({ session, onLogout, onSessionRefresh }) => {
+  const location = useLocation();
   if (!session?.token) {
     return <Navigate replace to="/login" />;
+  }
+
+  const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
+  if (needsGoogleOnboarding && location.pathname !== "/welcome") {
+    return <Navigate replace to="/welcome" />;
+  }
+
+  if (!needsGoogleOnboarding && location.pathname === "/welcome") {
+    return <Navigate replace to="/home" />;
   }
 
   return (
@@ -125,6 +136,10 @@ function App() {
             <Route
               element={session?.token ? <Navigate replace to="/dashboard" /> : publicAuthPage}
               path="/login"
+            />
+            <Route
+              element={session?.token ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/login" />}
+              path="/welcome"
             />
             <Route element={<StrategyPage mode="public" />} path="/strategy" />
             <Route
