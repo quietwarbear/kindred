@@ -7,15 +7,15 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - **Frontend**: React SPA, Tailwind CSS, Shadcn UI
 - **Backend**: FastAPI + MongoDB (refactored modular structure)
 - **Auth**: JWT + Google OAuth
-- **Payments**: Stripe (test key in env)
+- **Payments**: Stripe (test key in env) — one-time checkout + subscription tiers
 
 ## Backend Structure
 ```
 /app/backend/
-├── server.py         # ~2200 lines - API routes
-├── db.py             # Database connection + collections
-├── models.py         # ~395 lines - Pydantic models
-├── dependencies.py   # ~370 lines - Shared helpers, auth, constants
+├── server.py         # ~2400 lines - API routes
+├── db.py             # Database connection + collections (including subscriptions)
+├── models.py         # ~400 lines - Pydantic models
+├── dependencies.py   # ~450 lines - Shared helpers, auth, constants, SUBSCRIPTION_TIERS
 ├── security.py       # JWT + password hashing
 ├── courtyard_helpers.py
 ├── ai_tagging.py
@@ -57,6 +57,25 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Click-to-edit announcements (title, body)
 - Save/Cancel buttons + Enter/Escape keyboard shortcuts
 
+### Subscription Monetization (NEW - Feb 2026)
+- 5-tier subscription system: Seedling, Sapling, Oak, Redwood, Elder Grove
+- Monthly & annual billing with ~15% annual discount
+- Stripe checkout integration for plan upgrades
+- Feature gating by tier (subyards, travel, funds, analytics, branding, multi-admin)
+- Subscription management: checkout, status polling, cancel
+- Beautiful pricing page with plan comparison cards
+- Add-on teasers (media storage, premium templates, SMS reminders)
+- Elder Grove "Contact Sales" flow for enterprise communities
+
+#### Pricing Tiers
+| Tier | Members | Monthly | Annual |
+|------|---------|---------|--------|
+| Seedling | 1–10 | $19 | $194 |
+| Sapling | 11–25 | $49 | $500 |
+| Oak | 26–50 | $79 | $806 |
+| Redwood | 51–100 | $129 | $1,316 |
+| Elder Grove | 100+ | Custom | Custom |
+
 ## Prioritized Backlog
 
 ### P1
@@ -70,4 +89,5 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Push notifications
 - Legacy Threads & Kinship Map visualization
 - Memory Vault with AI auto-tagging + voice notes
-- Monetization (tiered subscriptions)
+- Add-on purchases (storage, templates, SMS)
+- App Store Connect / Google Play Billing SDK integration (RevenueCat)
