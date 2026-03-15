@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, GitBranch, MessageSquare, Network, Pin, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { BellRing, Check, GitBranch, MessageSquare, Network, Pencil, Pin, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,6 +243,31 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
     }
   };
 
+  const [editingSubyard, setEditingSubyard] = useState(null);
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
+
+  const handleSaveSubyard = async (subyardId, updates) => {
+    try {
+      await apiRequest(`/subyards/${subyardId}`, { method: "PUT", token, data: updates });
+      toast.success("Subyard updated.");
+      setEditingSubyard(null);
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to update subyard.");
+    }
+  };
+
+  const handleSaveAnnouncement = async (announcementId, updates) => {
+    try {
+      await apiRequest(`/announcements/${announcementId}`, { method: "PUT", token, data: { ...updates, scope: "courtyard", subyard_id: "" } });
+      toast.success("Announcement updated.");
+      setEditingAnnouncement(null);
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to update announcement.");
+    }
+  };
+
   const handleSendMessage = async (event) => {
     event.preventDefault();
     if (!activeRoomId) return;
@@ -392,22 +417,40 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
           <div className="mt-6 space-y-4">
             {structure?.subyards?.map((subyard) => (
               <div className="soft-panel" data-testid={`courtyard-subyard-${subyard.id}`} key={subyard.id}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-lg font-semibold text-foreground">{subyard.name}</p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">{subyard.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-subyard-visibility-${subyard.id}`}>
-                      {subyard.visibility}
+                {editingSubyard?.id === subyard.id ? (
+                  <InlineEditForm
+                    fields={[
+                      { key: "name", label: "Name", value: editingSubyard.name },
+                      { key: "description", label: "Description", value: editingSubyard.description, multiline: true },
+                    ]}
+                    onChange={(key, val) => setEditingSubyard((e) => ({ ...e, [key]: val }))}
+                    onCancel={() => setEditingSubyard(null)}
+                    onSave={() => handleSaveSubyard(subyard.id, { name: editingSubyard.name, description: editingSubyard.description })}
+                    testIdPrefix={`courtyard-subyard-edit-${subyard.id}`}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-lg font-semibold text-foreground">{subyard.name}</p>
+                      <p className="mt-2 text-sm leading-7 text-muted-foreground">{subyard.description}</p>
                     </div>
-                    {canManage && (
-                      <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-subyard-delete-${subyard.id}`} onClick={() => handleDeleteSubyard(subyard.id)} variant="ghost">
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-subyard-visibility-${subyard.id}`}>
+                        {subyard.visibility}
+                      </div>
+                      {canManage && (
+                        <>
+                          <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-subyard-edit-${subyard.id}`} onClick={() => setEditingSubyard({ id: subyard.id, name: subyard.name, description: subyard.description || "" })} variant="ghost">
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
+                          </Button>
+                          <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-subyard-delete-${subyard.id}`} onClick={() => handleDeleteSubyard(subyard.id)} variant="ghost">
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {subyard.role_focus.map((role) => (
                     <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-foreground" data-testid={`courtyard-subyard-role-${subyard.id}-${role.replace(/\s+/g, "-")}`} key={role}>
@@ -619,21 +662,41 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
           <div className="mt-6 space-y-4">
             {announcements.map((announcement) => (
               <div className="soft-panel" data-testid={`courtyard-announcement-${announcement.id}`} key={announcement.id}>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-base font-semibold text-foreground">{announcement.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{announcement.scope} {announcement.subyard_name ? `· ${announcement.subyard_name}` : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm text-muted-foreground">{announcement.created_by_name}</p>
-                    {canManage && (
-                      <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-announcement-delete-${announcement.id}`} onClick={() => handleDeleteAnnouncement(announcement.id)} variant="ghost">
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">{announcement.body}</p>
+                {editingAnnouncement?.id === announcement.id ? (
+                  <InlineEditForm
+                    fields={[
+                      { key: "title", label: "Title", value: editingAnnouncement.title },
+                      { key: "body", label: "Body", value: editingAnnouncement.body, multiline: true },
+                    ]}
+                    onChange={(key, val) => setEditingAnnouncement((e) => ({ ...e, [key]: val }))}
+                    onCancel={() => setEditingAnnouncement(null)}
+                    onSave={() => handleSaveAnnouncement(announcement.id, { title: editingAnnouncement.title, body: editingAnnouncement.body })}
+                    testIdPrefix={`courtyard-announcement-edit-${announcement.id}`}
+                  />
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-foreground">{announcement.title}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{announcement.scope} {announcement.subyard_name ? `· ${announcement.subyard_name}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-muted-foreground">{announcement.created_by_name}</p>
+                        {canManage && (
+                          <>
+                            <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-announcement-edit-${announcement.id}`} onClick={() => setEditingAnnouncement({ id: announcement.id, title: announcement.title, body: announcement.body || "" })} variant="ghost">
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
+                            </Button>
+                            <Button className="h-7 w-7 rounded-full p-0" data-testid={`courtyard-announcement-delete-${announcement.id}`} onClick={() => handleDeleteAnnouncement(announcement.id)} variant="ghost">
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{announcement.body}</p>
+                  </>
+                )}
                 {announcement.attachments?.length ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {announcement.attachments.map((attachment, index) => (
@@ -774,6 +837,56 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
           )}
         </article>
       </section>
+    </div>
+  );
+};
+
+
+const InlineEditForm = ({ fields, onChange, onSave, onCancel, testIdPrefix }) => {
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      onSave();
+    }
+    if (e.key === "Escape") onCancel();
+  };
+
+  return (
+    <div className="space-y-3" data-testid={`${testIdPrefix}-form`}>
+      {fields.map((field) =>
+        field.multiline ? (
+          <textarea
+            autoFocus={fields[0].key === field.key}
+            className="w-full rounded-xl border border-primary/30 bg-background px-4 py-2.5 text-sm text-foreground outline-none ring-1 ring-primary/20 focus:ring-primary/50 transition-all"
+            data-testid={`${testIdPrefix}-${field.key}`}
+            key={field.key}
+            onChange={(e) => onChange(field.key, e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={field.label}
+            rows={3}
+            value={field.value}
+          />
+        ) : (
+          <input
+            autoFocus={fields[0].key === field.key}
+            className="w-full rounded-xl border border-primary/30 bg-background px-4 py-2.5 text-sm font-semibold text-foreground outline-none ring-1 ring-primary/20 focus:ring-primary/50 transition-all"
+            data-testid={`${testIdPrefix}-${field.key}`}
+            key={field.key}
+            onChange={(e) => onChange(field.key, e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={field.label}
+            value={field.value}
+          />
+        )
+      )}
+      <div className="flex gap-2">
+        <Button className="rounded-full" data-testid={`${testIdPrefix}-save`} onClick={onSave} size="sm">
+          <Check className="mr-1 h-3 w-3" /> Save
+        </Button>
+        <Button className="rounded-full" data-testid={`${testIdPrefix}-cancel`} onClick={onCancel} size="sm" variant="ghost">
+          <X className="mr-1 h-3 w-3" /> Cancel
+        </Button>
+      </div>
     </div>
   );
 };
