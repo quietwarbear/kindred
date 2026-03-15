@@ -236,6 +236,9 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <NavLink className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="sidebar-terms-link" to="/terms">
                 Terms
               </NavLink>
+              <NavLink className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="sidebar-support-link" to="/support">
+                Support
+              </NavLink>
             </div>
           </aside>
 

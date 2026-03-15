@@ -163,6 +163,9 @@ export const LandingPage = ({ isAuthenticated }) => {
             <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-terms-link" to="/terms">
               Terms of Service
             </Link>
+            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-support-link" to="/support">
+              Support
+            </Link>
           </nav>
         </div>
       </footer>

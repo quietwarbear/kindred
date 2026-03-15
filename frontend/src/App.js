@@ -10,6 +10,7 @@ import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { StrategyPage } from "@/components/StrategyPage";
+import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
 import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
@@ -171,6 +172,7 @@ function App() {
             <Route element={<StrategyPage mode="public" />} path="/strategy" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
             <Route element={<TermsOfServicePage />} path="/terms" />
+            <Route element={<SupportPage />} path="/support" />
             <Route
               element={
                 <ProtectedApp
