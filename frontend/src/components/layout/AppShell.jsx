@@ -15,6 +15,7 @@ import { MembersPage } from "@/components/MembersPage";
 import { PollsPage } from "@/components/PollsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { StrategyPage } from "@/components/StrategyPage";
+import { SubscriptionPage } from "@/components/SubscriptionPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
 import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
@@ -27,6 +28,7 @@ const navItems = [
   { label: "Gatherings", path: "/gatherings" },
   { label: "Polls", path: "/polls" },
   { label: "Funds & Travel", path: "/funds-travel" },
+  { label: "Subscription", path: "/subscription" },
   { label: "Settings", path: "/settings" },
 ];
 
@@ -153,6 +155,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<PollsPage token={token} user={user} />} path="polls" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
               <Route element={<SettingsPage onSessionRefresh={onSessionRefresh} token={token} user={user} />} path="settings" />
+              <Route element={<SubscriptionPage token={token} user={user} />} path="subscription" />
               <Route
                 element={<MembersPage onSessionRefresh={onSessionRefresh} token={token} user={user} />}
                 path="members"

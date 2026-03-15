@@ -1,0 +1,406 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  Check,
+  ChevronRight,
+  Crown,
+  Leaf,
+  Loader2,
+  Sparkles,
+  TreeDeciduous,
+  TreePine,
+  Trees,
+  X,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/api";
+import { toast } from "@/components/ui/sonner";
+
+const TIER_ICONS = {
+  seedling: Leaf,
+  sapling: TreePine,
+  oak: TreeDeciduous,
+  redwood: Trees,
+  "elder-grove": Crown,
+};
+
+const TIER_COLORS = {
+  seedling: "from-emerald-500/15 to-emerald-600/5 border-emerald-500/30",
+  sapling: "from-teal-500/15 to-teal-600/5 border-teal-500/30",
+  oak: "from-amber-500/15 to-amber-600/5 border-amber-500/30",
+  redwood: "from-primary/15 to-primary/5 border-primary/30",
+  "elder-grove": "from-violet-500/15 to-violet-600/5 border-violet-500/30",
+};
+
+const TIER_ACCENT = {
+  seedling: "text-emerald-600 dark:text-emerald-400",
+  sapling: "text-teal-600 dark:text-teal-400",
+  oak: "text-amber-600 dark:text-amber-400",
+  redwood: "text-primary",
+  "elder-grove": "text-violet-600 dark:text-violet-400",
+};
+
+const TIER_BTN = {
+  seedling: "bg-emerald-600 hover:bg-emerald-700 text-white",
+  sapling: "bg-teal-600 hover:bg-teal-700 text-white",
+  oak: "bg-amber-600 hover:bg-amber-700 text-white",
+  redwood: "bg-primary hover:bg-primary/90 text-primary-foreground",
+  "elder-grove": "bg-violet-600 hover:bg-violet-700 text-white",
+};
+
+const formatPrice = (val) =>
+  val === 0
+    ? "Custom"
+    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
+
+const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, currentTierId }) => {
+  const Icon = TIER_ICONS[plan.id] || Leaf;
+  const isElderGrove = plan.id === "elder-grove";
+  const price = billingCycle === "annual" ? plan.annual_price : plan.monthly_price;
+  const monthlyEquivalent = billingCycle === "annual" && plan.annual_price > 0 ? (plan.annual_price / 12).toFixed(0) : null;
+  const isPopular = plan.id === "oak";
+
+  const tierOrder = ["seedling", "sapling", "oak", "redwood", "elder-grove"];
+  const currentIdx = tierOrder.indexOf(currentTierId || "seedling");
+  const thisIdx = tierOrder.indexOf(plan.id);
+  const isDowngrade = thisIdx < currentIdx;
+  const isUpgrade = thisIdx > currentIdx;
+
+  return (
+    <div
+      className={`relative flex flex-col rounded-2xl border bg-gradient-to-b p-6 transition-all duration-300 hover:shadow-lg ${TIER_COLORS[plan.id]} ${isCurrentTier ? "ring-2 ring-primary shadow-lg" : ""} ${isPopular ? "md:-translate-y-2" : ""}`}
+      data-testid={`plan-card-${plan.id}`}
+    >
+      {isPopular && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <span className="rounded-full bg-amber-600 px-4 py-1 text-xs font-semibold text-white shadow-md" data-testid="popular-badge">
+            Most Popular
+          </span>
+        </div>
+      )}
+
+      {isCurrentTier && (
+        <div className="absolute -top-3 right-4">
+          <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md" data-testid="current-plan-badge">
+            Current Plan
+          </span>
+        </div>
+      )}
+
+      <div className="mb-4 flex items-center gap-3">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-background/80 shadow-sm ${TIER_ACCENT[plan.id]}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="font-display text-lg font-semibold text-foreground" data-testid={`plan-name-${plan.id}`}>
+            {plan.name}
+          </h3>
+          <p className="text-xs text-muted-foreground">Up to {plan.max_members} members</p>
+        </div>
+      </div>
+
+      <p className="mb-4 text-sm text-muted-foreground">{plan.tagline}</p>
+
+      <div className="mb-5">
+        {isElderGrove ? (
+          <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`}>Custom</p>
+        ) : (
+          <>
+            <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`} data-testid={`plan-price-${plan.id}`}>
+              {formatPrice(price)}
+              <span className="text-base font-normal text-muted-foreground">
+                /{billingCycle === "annual" ? "yr" : "mo"}
+              </span>
+            </p>
+            {monthlyEquivalent && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                ~${monthlyEquivalent}/mo · Save {billingCycle === "annual" ? "~15%" : ""}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <ul className="mb-6 flex-1 space-y-2.5">
+        {plan.features.map((feat, i) => (
+          <li className="flex items-start gap-2 text-sm text-foreground" key={i}>
+            <Check className={`mt-0.5 h-4 w-4 flex-shrink-0 ${TIER_ACCENT[plan.id]}`} />
+            <span>{feat}</span>
+          </li>
+        ))}
+      </ul>
+
+      {isCurrentTier ? (
+        <Button className="w-full rounded-full" disabled variant="outline" data-testid={`plan-select-${plan.id}`}>
+          Current Plan
+        </Button>
+      ) : isElderGrove ? (
+        <Button
+          className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
+          onClick={() => toast.info("Contact us at hello@kindred.community for Elder Grove pricing.")}
+          data-testid={`plan-select-${plan.id}`}
+        >
+          Contact Sales
+        </Button>
+      ) : (
+        <Button
+          className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
+          disabled={isLoading}
+          onClick={() => onSelect(plan.id)}
+          data-testid={`plan-select-${plan.id}`}
+        >
+          {isLoading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <ChevronRight className="mr-1 h-4 w-4" />
+          )}
+          {isDowngrade ? "Downgrade" : isUpgrade ? "Upgrade" : "Select Plan"}
+        </Button>
+      )}
+    </div>
+  );
+};
+
+export const SubscriptionPage = ({ token, user }) => {
+  const [plans, setPlans] = useState([]);
+  const [currentSub, setCurrentSub] = useState(null);
+  const [currentTier, setCurrentTier] = useState(null);
+  const [usage, setUsage] = useState({});
+  const [billingCycle, setBillingCycle] = useState("monthly");
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [pollingSessionId, setPollingSessionId] = useState(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  const isHost = user?.role === "host";
+
+  const loadPlans = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/subscriptions/plans", { token });
+      setPlans(payload.plans || []);
+    } catch {
+      toast.error("Unable to load subscription plans.");
+    }
+  }, [token]);
+
+  const loadCurrentSub = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/subscriptions/current", { token });
+      setCurrentSub(payload.subscription);
+      setCurrentTier(payload.tier);
+      setUsage(payload.usage || {});
+    } catch {
+      // no subscription
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadPlans();
+    loadCurrentSub();
+  }, [loadPlans, loadCurrentSub]);
+
+  // Handle redirect back from Stripe with session_id
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (sessionId) {
+      setPollingSessionId(sessionId);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // Poll checkout status
+  useEffect(() => {
+    if (!pollingSessionId) return;
+    let attempts = 0;
+    const maxAttempts = 8;
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await apiRequest(`/subscriptions/checkout/status/${pollingSessionId}`, { token });
+        if (res.payment_status === "paid") {
+          clearInterval(interval);
+          setPollingSessionId(null);
+          toast.success("Subscription activated! Welcome to your new plan.");
+          loadCurrentSub();
+        } else if (res.status === "expired" || attempts >= maxAttempts) {
+          clearInterval(interval);
+          setPollingSessionId(null);
+          if (res.status === "expired") {
+            toast.error("Checkout session expired. Please try again.");
+          } else {
+            toast.info("Payment is still processing. Check back shortly.");
+          }
+        }
+      } catch {
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          setPollingSessionId(null);
+          toast.error("Unable to verify payment status.");
+        }
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [pollingSessionId, token, loadCurrentSub]);
+
+  const handleSelectPlan = async (planId) => {
+    if (!isHost) {
+      toast.error("Only the community host can manage subscriptions.");
+      return;
+    }
+    setCheckoutLoading(planId);
+    try {
+      const res = await apiRequest("/subscriptions/checkout", {
+        method: "POST",
+        token,
+        data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
+      });
+      if (res.url) {
+        window.location.href = res.url;
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Unable to start checkout.");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!window.confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.")) return;
+    setCancelLoading(true);
+    try {
+      const res = await apiRequest("/subscriptions/cancel", { method: "POST", token });
+      toast.success(res.message || "Subscription cancelled.");
+      loadCurrentSub();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Unable to cancel subscription.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const currentTierId = currentTier?.id || "seedling";
+
+  return (
+    <div className="space-y-8" data-testid="subscription-page">
+      {/* Header */}
+      <div className="archival-card text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Sparkles className="h-7 w-7" />
+        </div>
+        <h1 className="mt-4 font-display text-3xl text-foreground sm:text-4xl" data-testid="subscription-page-title">
+          Choose Your Plan
+        </h1>
+        <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground sm:text-base">
+          Scale your community with the tools you need. Every plan includes core gathering features.
+        </p>
+
+        {/* Billing Toggle */}
+        <div className="mt-6 flex items-center justify-center gap-3" data-testid="billing-toggle">
+          <button
+            className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${billingCycle === "monthly" ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
+            onClick={() => setBillingCycle("monthly")}
+            data-testid="billing-toggle-monthly"
+          >
+            Monthly
+          </button>
+          <button
+            className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${billingCycle === "annual" ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
+            onClick={() => setBillingCycle("annual")}
+            data-testid="billing-toggle-annual"
+          >
+            Annual
+            <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              Save ~15%
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Polling overlay */}
+      {pollingSessionId && (
+        <div className="archival-card flex items-center gap-3 border-primary/30 bg-primary/5" data-testid="payment-processing-banner">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <p className="text-sm font-medium text-foreground">Verifying your payment... This may take a moment.</p>
+        </div>
+      )}
+
+      {/* Current Plan Summary */}
+      {currentSub && (
+        <div className="archival-card" data-testid="current-subscription-card">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="eyebrow-text">Active Subscription</p>
+              <h2 className="font-display text-2xl text-foreground">
+                {currentTier?.name || "Seedling"} Plan
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {currentSub.billing_cycle === "annual" ? "Annual" : "Monthly"} billing
+                {currentSub.expires_at && ` · Renews ${new Date(currentSub.expires_at).toLocaleDateString()}`}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {usage.member_count || 0} of {currentTier?.max_members || 10} members · {usage.subyard_count || 0} subyard(s)
+              </p>
+            </div>
+            {isHost && currentSub.status === "active" && (
+              <Button
+                className="rounded-full"
+                disabled={cancelLoading}
+                onClick={handleCancel}
+                variant="destructive"
+                data-testid="cancel-subscription-button"
+              >
+                {cancelLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-1 h-4 w-4" />}
+                Cancel Plan
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Plan Cards */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" data-testid="plans-grid">
+        {plans.map((plan) => (
+          <PlanCard
+            billingCycle={billingCycle}
+            currentTierId={currentTierId}
+            isCurrentTier={currentTierId === plan.id}
+            isLoading={checkoutLoading === plan.id}
+            key={plan.id}
+            onSelect={handleSelectPlan}
+            plan={plan}
+          />
+        ))}
+      </div>
+
+      {/* Add-Ons Teaser */}
+      <div className="archival-card" data-testid="addons-section">
+        <h2 className="font-display text-xl text-foreground">Optional Add-Ons</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Enhance your plan with extras (coming soon).</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {[
+            { label: "Extra Media Storage", desc: "10GB additional storage for photos & files", price: "$10–$25/mo" },
+            { label: "Premium Templates", desc: "Curated event templates for special occasions", price: "$5–$10/event" },
+            { label: "SMS Reminders", desc: "Text message reminders for events & RSVPs", price: "$10/mo" },
+          ].map((addon) => (
+            <div className="soft-panel space-y-1" key={addon.label}>
+              <p className="text-sm font-semibold text-foreground">{addon.label}</p>
+              <p className="text-xs text-muted-foreground">{addon.desc}</p>
+              <p className="font-mono text-xs text-primary">{addon.price}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* FAQ / Notes */}
+      <div className="archival-card" data-testid="subscription-faq">
+        <h2 className="font-display text-xl text-foreground">Pricing Notes</h2>
+        <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+          <p>All plans include a 14-day free trial. Cancel anytime before the trial ends and you won't be charged.</p>
+          <p>Annual billing offers approximately 15% savings compared to monthly billing.</p>
+          <p>Downgrading takes effect at the end of your current billing period. Your community data is always preserved.</p>
+          <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
+        </div>
+      </div>
+    </div>
+  );
+};

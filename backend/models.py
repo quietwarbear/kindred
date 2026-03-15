@@ -394,3 +394,9 @@ class PollCreateRequest(BaseModel):
 
 class PollVoteRequest(BaseModel):
     option_ids: list[str] = Field(min_length=1)
+
+
+class SubscriptionCheckoutRequest(BaseModel):
+    plan_id: str
+    billing_cycle: Literal["monthly", "annual"] = "monthly"
+    origin_url: str

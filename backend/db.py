@@ -32,3 +32,4 @@ chat_rooms_collection = db.chat_rooms
 notification_events_collection = db.notification_events
 notification_preferences_collection = db.notification_preferences
 polls_collection = db.polls
+subscriptions_collection = db.subscriptions
