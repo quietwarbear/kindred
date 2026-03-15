@@ -10,6 +10,7 @@ from courtyard_helpers import (
     ROLE_TOOLING,
     build_default_subyards,
     build_planning_checklist,
+    build_recurring_dates,
     build_role_suggestions,
     countdown_days,
     years_since,
@@ -43,6 +44,8 @@ payments_collection = db.payment_transactions
 travel_plans_collection = db.travel_plans
 budget_plans_collection = db.budget_plans
 legacy_table_collection = db.legacy_table_configs
+announcements_collection = db.announcements
+chat_rooms_collection = db.chat_rooms
 
 app = FastAPI(title="Gathering Cypher API")
 api_router = APIRouter(prefix="/api")
@@ -158,6 +161,7 @@ def build_notifications(
     pending_invites: list[dict[str, Any]],
     upcoming_events: list[dict[str, Any]],
     budgets: list[dict[str, Any]],
+    announcements: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     notifications: list[dict[str, Any]] = []
 
@@ -205,7 +209,67 @@ def build_notifications(
             }
         )
 
+    if announcements:
+        latest = announcements[0]
+        notifications.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "announcement",
+                "title": latest["title"],
+                "description": latest["body"],
+            }
+        )
+
     return notifications[:6]
+
+
+async def ensure_chat_rooms_for_community(
+    community_id: str,
+    community_name: str,
+    subyards: list[dict[str, Any]],
+):
+    existing_rooms = await chat_rooms_collection.find({"community_id": community_id}, {"_id": 0}).to_list(200)
+    existing_keys = {(room.get("room_scope"), room.get("subyard_id") or "") for room in existing_rooms}
+    rooms_to_create: list[dict[str, Any]] = []
+
+    if ("courtyard", "") not in existing_keys:
+        rooms_to_create.append(
+            {
+                "id": str(uuid.uuid4()),
+                "community_id": community_id,
+                "room_scope": "courtyard",
+                "subyard_id": "",
+                "name": f"{community_name} General Chat",
+                "messages": [],
+                "created_at": now_iso(),
+            }
+        )
+
+    for subyard in subyards:
+        key = ("subyard", subyard["id"])
+        if key in existing_keys:
+            continue
+        rooms_to_create.append(
+            {
+                "id": str(uuid.uuid4()),
+                "community_id": community_id,
+                "room_scope": "subyard",
+                "subyard_id": subyard["id"],
+                "name": f"{subyard['name']} Chat",
+                "messages": [],
+                "created_at": now_iso(),
+            }
+        )
+
+    if rooms_to_create:
+        await chat_rooms_collection.insert_many([item.copy() for item in rooms_to_create])
+
+
+async def get_chat_room_for_user(room_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    room_doc = await chat_rooms_collection.find_one({"id": room_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not room_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room not found.")
+    return room_doc
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict[str, Any]:
@@ -370,6 +434,7 @@ class EventCreateRequest(BaseModel):
     assigned_roles: list[str] = Field(default_factory=list)
     suggested_contribution: float = Field(default=0.0, ge=0.0)
     travel_coordination_notes: str | None = ""
+    recurrence_frequency: Literal["none", "daily", "weekly", "monthly", "yearly"] = "none"
 
 
 class ChecklistItemRequest(BaseModel):
@@ -402,6 +467,10 @@ class EventPublic(BaseModel):
     planning_checklist: list[dict[str, Any]] = Field(default_factory=list)
     travel_coordination_notes: str | None = ""
     suggested_contribution: float = 0.0
+    recurrence_frequency: str = "none"
+    series_id: str | None = ""
+    is_recurring_instance: bool = False
+    parent_event_id: str | None = ""
     agenda: list[dict[str, Any]] = Field(default_factory=list)
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
@@ -525,6 +594,25 @@ class LegacyTableConfigRequest(BaseModel):
     sync_relationships: bool = True
 
 
+class FileAttachmentPayload(BaseModel):
+    name: str
+    data_url: str
+    mime_type: str | None = ""
+
+
+class AnnouncementCreateRequest(BaseModel):
+    title: str
+    body: str
+    scope: Literal["courtyard", "subyard"]
+    subyard_id: str | None = ""
+    attachments: list[FileAttachmentPayload] = Field(default_factory=list)
+
+
+class ChatMessageCreateRequest(BaseModel):
+    text: str
+    attachments: list[FileAttachmentPayload] = Field(default_factory=list)
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Gathering Cypher API is ready."}
@@ -587,6 +675,9 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         )
     if default_subyards:
         await subyards_collection.insert_many([item.copy() for item in default_subyards])
+        await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
+    else:
+        await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
 
     return build_auth_response(user_doc, community_doc)
 
@@ -687,8 +778,9 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
     ).to_list(1000)
     budgets = await budget_plans_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
     kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    announcements = await announcements_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(10)
 
-    notifications = build_notifications(kinships, pending_invites, upcoming_events, budgets)
+    notifications = build_notifications(kinships, pending_invites, upcoming_events, budgets, announcements)
     active_courtyards = [
         {
             "id": community_doc["id"],
@@ -763,12 +855,15 @@ async def courtyard_structure(current_user: dict[str, Any] = Depends(get_current
     kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
     members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
     invites = await invites_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await ensure_chat_rooms_for_community(community_id, community_doc["name"], subyards)
+    chat_rooms = await chat_rooms_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
     return {
         "courtyard": community_doc,
         "subyards": subyards,
         "kinships": kinships,
         "members": members,
         "invites": invites,
+        "chat_rooms": chat_rooms,
         "role_catalog": [{"role": role, "tools": tools} for role, tools in ROLE_TOOLING.items()],
     }
 
@@ -805,6 +900,7 @@ async def create_subyard(payload: SubyardCreateRequest, current_user: dict[str, 
         "created_at": now_iso(),
     }
     await subyards_collection.insert_one(subyard_doc.copy())
+    await ensure_chat_rooms_for_community(current_user["community_id"], (await get_community_for_user(current_user))["name"], [subyard_doc])
     return subyard_doc
 
 
@@ -860,6 +956,115 @@ async def list_invites(current_user: dict[str, Any] = Depends(get_current_user))
     return {"invites": invites}
 
 
+@api_router.get("/announcements")
+async def list_announcements(current_user: dict[str, Any] = Depends(get_current_user)):
+    announcements = await announcements_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"announcements": announcements}
+
+
+@api_router.post("/announcements")
+async def create_announcement(payload: AnnouncementCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    subyard_name = ""
+    if payload.scope == "subyard":
+        if not payload.subyard_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Subyard announcements require a subyard.")
+        subyard_doc = await get_subyard_for_user(payload.subyard_id, current_user)
+        subyard_name = subyard_doc["name"]
+
+    announcement_doc = {
+        "id": str(uuid.uuid4()),
+        "community_id": current_user["community_id"],
+        "scope": payload.scope,
+        "subyard_id": payload.subyard_id,
+        "subyard_name": subyard_name,
+        "title": payload.title.strip(),
+        "body": payload.body.strip(),
+        "attachments": [item.model_dump() for item in payload.attachments],
+        "comments": [],
+        "created_by": current_user["id"],
+        "created_by_name": current_user["full_name"],
+        "created_at": now_iso(),
+    }
+    await announcements_collection.insert_one(announcement_doc.copy())
+    return announcement_doc
+
+
+@api_router.post("/announcements/{announcement_id}/comments")
+async def add_announcement_comment(announcement_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    announcement_doc = await announcements_collection.find_one({"id": announcement_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    if not announcement_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Announcement not found.")
+    comments = announcement_doc.get("comments", [])
+    comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
+    await announcements_collection.update_one({"id": announcement_id}, {"$set": {"comments": comments}})
+    announcement_doc["comments"] = comments
+    return announcement_doc
+
+
+@api_router.get("/chat/rooms")
+async def list_chat_rooms(current_user: dict[str, Any] = Depends(get_current_user)):
+    community_doc = await get_community_for_user(current_user)
+    subyards = await subyards_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).to_list(200)
+    await ensure_chat_rooms_for_community(current_user["community_id"], community_doc["name"], subyards)
+    rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return {"rooms": rooms}
+
+
+@api_router.post("/chat/rooms/{room_id}/messages")
+async def create_chat_message(room_id: str, payload: ChatMessageCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    room_doc = await get_chat_room_for_user(room_id, current_user)
+    messages = room_doc.get("messages", [])
+    messages.append(
+        {
+            "id": str(uuid.uuid4()),
+            "author_id": current_user["id"],
+            "author_name": current_user["full_name"],
+            "text": payload.text.strip(),
+            "attachments": [item.model_dump() for item in payload.attachments],
+            "comments": [],
+            "is_pinned": False,
+            "created_at": now_iso(),
+        }
+    )
+    await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": messages}})
+    room_doc["messages"] = messages
+    return room_doc
+
+
+@api_router.post("/chat/rooms/{room_id}/messages/{message_id}/pin")
+async def pin_chat_message(room_id: str, message_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    room_doc = await get_chat_room_for_user(room_id, current_user)
+    updated = False
+    for message in room_doc.get("messages", []):
+        if message.get("id") == message_id:
+            message["is_pinned"] = not message.get("is_pinned", False)
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
+    await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": room_doc.get("messages", [])}})
+    return room_doc
+
+
+@api_router.post("/chat/rooms/{room_id}/messages/{message_id}/comments")
+async def comment_on_chat_message(room_id: str, message_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    room_doc = await get_chat_room_for_user(room_id, current_user)
+    updated = False
+    for message in room_doc.get("messages", []):
+        if message.get("id") == message_id:
+            comments = message.get("comments", [])
+            comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
+            message["comments"] = comments
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
+    await chat_rooms_collection.update_one({"id": room_id}, {"$set": {"messages": room_doc.get("messages", [])}})
+    return room_doc
+
+
 @api_router.get("/events", response_model=list[EventPublic])
 async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
     events = await events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("start_at", 1).to_list(200)
@@ -875,6 +1080,7 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         subyard_name = subyard_doc["name"]
 
     assigned_roles = payload.assigned_roles or build_role_suggestions(payload.event_template)
+    series_id = str(uuid.uuid4()) if payload.recurrence_frequency != "none" else ""
     event_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -894,6 +1100,10 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "planning_checklist": build_planning_checklist(payload.event_template, payload.gathering_format),
         "travel_coordination_notes": (payload.travel_coordination_notes or "").strip(),
         "suggested_contribution": float(payload.suggested_contribution or 0.0),
+        "recurrence_frequency": payload.recurrence_frequency,
+        "series_id": series_id,
+        "is_recurring_instance": False,
+        "parent_event_id": "",
         "agenda": [],
         "volunteer_slots": [],
         "potluck_items": [],
@@ -901,6 +1111,28 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "created_at": now_iso(),
     }
     await events_collection.insert_one(event_doc.copy())
+
+    recurring_dates = build_recurring_dates(payload.start_at, payload.recurrence_frequency)
+    if recurring_dates:
+        recurring_docs = []
+        for index, next_start in enumerate(recurring_dates, start=1):
+            recurring_docs.append(
+                {
+                    **event_doc,
+                    "id": str(uuid.uuid4()),
+                    "title": f"{event_doc['title']} · {payload.recurrence_frequency.title()} #{index + 1}",
+                    "start_at": next_start,
+                    "is_recurring_instance": True,
+                    "parent_event_id": event_doc["id"],
+                    "agenda": [],
+                    "volunteer_slots": [],
+                    "potluck_items": [],
+                    "rsvp_records": [],
+                    "planning_checklist": build_planning_checklist(payload.event_template, payload.gathering_format),
+                    "created_at": now_iso(),
+                }
+            )
+        await events_collection.insert_many([item.copy() for item in recurring_docs])
     return event_doc
 
 

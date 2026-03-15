@@ -1,5 +1,6 @@
+import calendar
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 ROLE_TOOLING = {
@@ -168,3 +169,40 @@ def countdown_days(iso_value: str | None) -> int | None:
         return (then - datetime.now(timezone.utc)).days
     except Exception:
         return None
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _add_years(value: datetime, years: int) -> datetime:
+    try:
+        return value.replace(year=value.year + years)
+    except ValueError:
+        return value.replace(month=2, day=28, year=value.year + years)
+
+
+def build_recurring_dates(start_at: str, frequency: str, occurrence_count: int = 5) -> list[str]:
+    try:
+        base = datetime.fromisoformat(start_at.replace("Z", "+00:00"))
+    except Exception:
+        return []
+
+    results: list[str] = []
+    for step in range(occurrence_count):
+        if frequency == "daily":
+            computed = base + timedelta(days=step + 1)
+        elif frequency == "weekly":
+            computed = base + timedelta(weeks=step + 1)
+        elif frequency == "monthly":
+            computed = _add_months(base, step + 1)
+        elif frequency == "yearly":
+            computed = _add_years(base, step + 1)
+        else:
+            break
+        results.append(computed.isoformat())
+    return results

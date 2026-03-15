@@ -21,6 +21,7 @@ const initialEventForm = {
   assigned_roles: "organizer, historian, treasurer",
   suggested_contribution: 0,
   travel_coordination_notes: "",
+  recurrence_frequency: "none",
 };
 
 const initialChecklistForm = { category: "experience", title: "" };
@@ -315,6 +316,16 @@ export const GatheringsPage = ({ token, user }) => {
               </select>
             </label>
             <label>
+              <span className="field-label">Recurring</span>
+              <select className="field-input w-full" data-testid="gatherings-recurrence-select" onChange={(e) => setEventForm((current) => ({ ...current, recurrence_frequency: e.target.value }))} value={eventForm.recurrence_frequency}>
+                <option value="none">One-time</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </label>
+            <label>
               <span className="field-label">Event roles</span>
               <Input className="field-input" data-testid="gatherings-roles-input" onChange={(e) => setEventForm((current) => ({ ...current, assigned_roles: e.target.value }))} value={eventForm.assigned_roles} />
             </label>
@@ -359,6 +370,9 @@ export const GatheringsPage = ({ token, user }) => {
                   <p className="text-lg font-semibold text-foreground">{eventItem.title}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(eventItem.start_at)} · {eventItem.location}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{eventItem.gathering_format} · {eventItem.subyard_name || "whole courtyard"}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`gathering-card-recurrence-${eventItem.id}`}>
+                    {eventItem.recurrence_frequency === "none" ? "one-time" : `${eventItem.recurrence_frequency} recurring`}
+                  </p>
                 </button>
               ))
             ) : (
@@ -388,6 +402,7 @@ export const GatheringsPage = ({ token, user }) => {
                   <span data-testid="gatherings-active-format">Format: {activeEvent.gathering_format}</span>
                   <span data-testid="gatherings-active-max-attendees">Capacity: {activeEvent.max_attendees || "Flexible"}</span>
                   <span data-testid="gatherings-active-suggested-contribution">Suggested contribution: {shortCurrency(activeEvent.suggested_contribution || 0)}</span>
+                  <span data-testid="gatherings-active-recurrence">Recurs: {activeEvent.recurrence_frequency === "none" ? "One-time" : activeEvent.recurrence_frequency}</span>
                 </div>
               </div>
 

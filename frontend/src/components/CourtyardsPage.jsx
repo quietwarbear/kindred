@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GitBranch, Network, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { BellRing, GitBranch, MessageSquare, Network, Pin, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest, formatDateTime } from "@/lib/api";
+import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
 const initialSubyardForm = {
@@ -27,19 +27,58 @@ const initialInviteForm = {
   role: "member",
 };
 
+const initialAnnouncementForm = {
+  title: "",
+  body: "",
+  scope: "courtyard",
+  subyard_id: "",
+};
+
 export const CourtyardsPage = ({ token, user }) => {
   const [structure, setStructure] = useState(null);
+  const [announcements, setAnnouncements] = useState([]);
+  const [chatRooms, setChatRooms] = useState([]);
+  const [activeRoomId, setActiveRoomId] = useState("");
   const [subyardForm, setSubyardForm] = useState(initialSubyardForm);
   const [kinshipForm, setKinshipForm] = useState(initialKinshipForm);
   const [inviteForm, setInviteForm] = useState(initialInviteForm);
+  const [announcementForm, setAnnouncementForm] = useState(initialAnnouncementForm);
+  const [announcementFiles, setAnnouncementFiles] = useState([]);
+  const [chatFiles, setChatFiles] = useState([]);
+  const [chatText, setChatText] = useState("");
+  const [announcementCommentDrafts, setAnnouncementCommentDrafts] = useState({});
+  const [chatCommentDrafts, setChatCommentDrafts] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canManage = useMemo(() => ["host", "organizer"].includes(user?.role), [user?.role]);
+  const activeRoom = useMemo(() => chatRooms.find((room) => room.id === activeRoomId) || null, [activeRoomId, chatRooms]);
+  const orderedMessages = useMemo(() => {
+    if (!activeRoom?.messages?.length) return [];
+    return [...activeRoom.messages].sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned));
+  }, [activeRoom]);
+
+  const filesToAttachments = async (fileList) => {
+    const files = Array.from(fileList || []);
+    return Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        data_url: await convertFileToDataUrl(file),
+        mime_type: file.type || "",
+      }))
+    );
+  };
 
   const loadStructure = useCallback(async () => {
     try {
-      const payload = await apiRequest("/courtyard/structure", { token });
-      setStructure(payload);
+      const [structurePayload, announcementPayload, chatPayload] = await Promise.all([
+        apiRequest("/courtyard/structure", { token }),
+        apiRequest("/announcements", { token }),
+        apiRequest("/chat/rooms", { token }),
+      ]);
+      setStructure(structurePayload);
+      setAnnouncements(announcementPayload.announcements || []);
+      setChatRooms(chatPayload.rooms || []);
+      setActiveRoomId((current) => current || chatPayload.rooms?.[0]?.id || "");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to load courtyard structure.");
     }
@@ -108,6 +147,94 @@ export const CourtyardsPage = ({ token, user }) => {
       toast.error(error.response?.data?.detail || "Unable to create invite.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateAnnouncement = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const attachments = await filesToAttachments(announcementFiles);
+      await apiRequest("/announcements", {
+        method: "POST",
+        token,
+        data: {
+          ...announcementForm,
+          subyard_id: announcementForm.scope === "subyard" ? announcementForm.subyard_id : "",
+          attachments,
+        },
+      });
+      setAnnouncementForm(initialAnnouncementForm);
+      setAnnouncementFiles([]);
+      toast.success("Announcement posted.");
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to post announcement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAnnouncementComment = async (announcementId) => {
+    try {
+      await apiRequest(`/announcements/${announcementId}/comments`, {
+        method: "POST",
+        token,
+        data: { text: announcementCommentDrafts[announcementId] },
+      });
+      setAnnouncementCommentDrafts((current) => ({ ...current, [announcementId]: "" }));
+      toast.success("Announcement comment added.");
+      loadStructure();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to add comment.");
+    }
+  };
+
+  const handleSendMessage = async (event) => {
+    event.preventDefault();
+    if (!activeRoomId) return;
+    setIsSubmitting(true);
+    try {
+      const attachments = await filesToAttachments(chatFiles);
+      const payload = await apiRequest(`/chat/rooms/${activeRoomId}/messages`, {
+        method: "POST",
+        token,
+        data: { text: chatText, attachments },
+      });
+      setChatRooms((current) => current.map((room) => (room.id === payload.id ? payload : room)));
+      setChatText("");
+      setChatFiles([]);
+      toast.success("Message sent.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to send message.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePinMessage = async (messageId) => {
+    if (!activeRoomId) return;
+    try {
+      const payload = await apiRequest(`/chat/rooms/${activeRoomId}/messages/${messageId}/pin`, { method: "POST", token });
+      setChatRooms((current) => current.map((room) => (room.id === payload.id ? payload : room)));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to pin message.");
+    }
+  };
+
+  const handleChatComment = async (messageId) => {
+    if (!activeRoomId) return;
+    try {
+      const payload = await apiRequest(`/chat/rooms/${activeRoomId}/messages/${messageId}/comments`, {
+        method: "POST",
+        token,
+        data: { text: chatCommentDrafts[messageId] },
+      });
+      setChatRooms((current) => current.map((room) => (room.id === payload.id ? payload : room)));
+      setChatCommentDrafts((current) => ({ ...current, [messageId]: "" }));
+      toast.success("Reply added.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to add reply.");
     }
   };
 
@@ -345,6 +472,185 @@ export const CourtyardsPage = ({ token, user }) => {
               </div>
             ))}
           </div>
+        </article>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="archival-card" data-testid="courtyards-announcements-card">
+          <div className="flex items-center gap-3">
+            <BellRing className="h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Announcements</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Courtyard + subyard broadcasts</h3>
+            </div>
+          </div>
+          {canManage ? (
+            <form className="mt-6 grid gap-4" onSubmit={handleCreateAnnouncement}>
+              <label>
+                <span className="field-label">Title</span>
+                <Input className="field-input" data-testid="courtyard-announcement-title-input" onChange={(e) => setAnnouncementForm((current) => ({ ...current, title: e.target.value }))} required value={announcementForm.title} />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="field-label">Scope</span>
+                  <select className="field-input w-full" data-testid="courtyard-announcement-scope-select" onChange={(e) => setAnnouncementForm((current) => ({ ...current, scope: e.target.value }))} value={announcementForm.scope}>
+                    <option value="courtyard">Courtyard-wide</option>
+                    <option value="subyard">Subyard-specific</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="field-label">Subyard</span>
+                  <select className="field-input w-full" data-testid="courtyard-announcement-subyard-select" disabled={announcementForm.scope !== "subyard"} onChange={(e) => setAnnouncementForm((current) => ({ ...current, subyard_id: e.target.value }))} value={announcementForm.subyard_id}>
+                    <option value="">Select subyard</option>
+                    {structure?.subyards?.map((subyard) => (
+                      <option key={subyard.id} value={subyard.id}>{subyard.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                <span className="field-label">Body</span>
+                <Textarea className="field-textarea" data-testid="courtyard-announcement-body-input" onChange={(e) => setAnnouncementForm((current) => ({ ...current, body: e.target.value }))} required value={announcementForm.body} />
+              </label>
+              <label>
+                <span className="field-label">Share files/photos</span>
+                <Input className="field-input pt-3" data-testid="courtyard-announcement-files-input" multiple onChange={(e) => setAnnouncementFiles(e.target.files || [])} type="file" />
+              </label>
+              <Button className="rounded-full" data-testid="courtyard-announcement-submit-button" disabled={isSubmitting} type="submit">
+                {isSubmitting ? "Posting..." : "Post announcement"}
+              </Button>
+            </form>
+          ) : null}
+          <div className="mt-6 space-y-4">
+            {announcements.map((announcement) => (
+              <div className="soft-panel" data-testid={`courtyard-announcement-${announcement.id}`} key={announcement.id}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-foreground">{announcement.title}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{announcement.scope} {announcement.subyard_name ? `· ${announcement.subyard_name}` : ""}</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{announcement.created_by_name}</p>
+                </div>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">{announcement.body}</p>
+                {announcement.attachments?.length ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {announcement.attachments.map((attachment, index) => (
+                      <a className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-foreground" data-testid={`courtyard-announcement-attachment-${announcement.id}-${index}`} download={attachment.name} href={attachment.data_url} key={`${announcement.id}-${attachment.name}-${index}`}>
+                        {attachment.name}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-4 space-y-2">
+                  {announcement.comments?.map((comment) => (
+                    <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`courtyard-announcement-comment-${comment.id}`} key={comment.id}>
+                      <p className="text-sm font-semibold text-foreground">{comment.author_name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{comment.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-3">
+                  <Textarea className="field-textarea" data-testid={`courtyard-announcement-comment-input-${announcement.id}`} onChange={(e) => setAnnouncementCommentDrafts((current) => ({ ...current, [announcement.id]: e.target.value }))} placeholder="Add a comment" value={announcementCommentDrafts[announcement.id] || ""} />
+                  <Button className="w-full rounded-full" data-testid={`courtyard-announcement-comment-submit-${announcement.id}`} onClick={() => handleAnnouncementComment(announcement.id)} type="button" variant="secondary">
+                    Add comment
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="archival-card" data-testid="courtyards-chat-card">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Internal chat</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Courtyard + subyard rooms</h3>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {chatRooms.map((room) => (
+              <button
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${room.id === activeRoomId ? "bg-primary text-primary-foreground" : "border border-border bg-background/80 text-foreground"}`}
+                data-testid={`courtyard-chat-room-${room.id}`}
+                key={room.id}
+                onClick={() => setActiveRoomId(room.id)}
+                type="button"
+              >
+                {room.name}
+              </button>
+            ))}
+          </div>
+          {activeRoom ? (
+            <div className="mt-6 space-y-4">
+              <div className="soft-panel" data-testid="courtyard-chat-active-room-panel">
+                <p className="text-base font-semibold text-foreground">{activeRoom.name}</p>
+                <p className="mt-2 text-sm text-muted-foreground">Share text, files, photos, and comments inside the room.</p>
+              </div>
+              <form className="grid gap-4" onSubmit={handleSendMessage}>
+                <label>
+                  <span className="field-label">Message</span>
+                  <Textarea className="field-textarea" data-testid="courtyard-chat-message-input" onChange={(e) => setChatText(e.target.value)} required value={chatText} />
+                </label>
+                <label>
+                  <span className="field-label">Share files/photos</span>
+                  <Input className="field-input pt-3" data-testid="courtyard-chat-files-input" multiple onChange={(e) => setChatFiles(e.target.files || [])} type="file" />
+                </label>
+                <Button className="rounded-full" data-testid="courtyard-chat-submit-button" disabled={isSubmitting} type="submit">
+                  {isSubmitting ? "Sending..." : "Send message"}
+                </Button>
+              </form>
+              <div className="space-y-4">
+                {orderedMessages.map((message) => (
+                  <div className="soft-panel" data-testid={`courtyard-chat-message-${message.id}`} key={message.id}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{message.author_name}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{formatDateTime(message.created_at)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {message.is_pinned ? <span className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Pinned</span> : null}
+                        {canManage ? (
+                          <Button className="rounded-full" data-testid={`courtyard-chat-pin-${message.id}`} onClick={() => handlePinMessage(message.id)} size="sm" type="button" variant="secondary">
+                            <Pin className="mr-2 h-3 w-3" />
+                            {message.is_pinned ? "Unpin" : "Pin"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{message.text}</p>
+                    {message.attachments?.length ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {message.attachments.map((attachment, index) => (
+                          <a className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-foreground" data-testid={`courtyard-chat-attachment-${message.id}-${index}`} download={attachment.name} href={attachment.data_url} key={`${message.id}-${attachment.name}-${index}`}>
+                            {attachment.name}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-4 space-y-2">
+                      {message.comments?.map((comment) => (
+                        <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`courtyard-chat-comment-${comment.id}`} key={comment.id}>
+                          <p className="text-sm font-semibold text-foreground">{comment.author_name}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{comment.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <Textarea className="field-textarea" data-testid={`courtyard-chat-comment-input-${message.id}`} onChange={(e) => setChatCommentDrafts((current) => ({ ...current, [message.id]: e.target.value }))} placeholder="Add a reply" value={chatCommentDrafts[message.id] || ""} />
+                      <Button className="w-full rounded-full" data-testid={`courtyard-chat-comment-submit-${message.id}`} onClick={() => handleChatComment(message.id)} type="button" variant="secondary">
+                        Add reply
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="soft-panel mt-6" data-testid="courtyard-chat-empty-state">
+              <p className="text-sm text-muted-foreground">No chat rooms available yet.</p>
+            </div>
+          )}
         </article>
       </section>
     </div>
