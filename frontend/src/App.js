@@ -78,6 +78,9 @@ function App() {
         const payload = await apiRequest("/auth/me", session?.token ? { token: session.token } : {});
         handleAuthSuccess({ ...payload, token: payload.token || session?.token });
       } catch {
+        if (window.location.hash?.includes("session_id=")) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
         localStorage.removeItem(APP_STATE_KEY);
         setSession(null);
       } finally {
