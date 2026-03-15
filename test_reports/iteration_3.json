@@ -43,6 +43,6 @@
   "seed_data_creation": "Created multiple TEST/UI communities and data via real APIs/UI: recurring events, subyard-scoped announcement with attachment+comment, chat message with attachment + pin/unpin + comment.",
   "retest_needed": true,
   "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Public URL tested: https://courtyard-dev.preview.emergentagent.com. Pytest: 14/14 passed including new recurrence/announcements/chat backend coverage. Playwright confirmed auth, courtyards, announcements, chat, gatherings, and home navigation. Repro for UI issue: create weekly event -> count matching cards before reload=1, after reload=6.",
+  "context_for_next_testing_agent": "Public URL tested: https://circles-gather.preview.emergentagent.com. Pytest: 14/14 passed including new recurrence/announcements/chat backend coverage. Playwright confirmed auth, courtyards, announcements, chat, gatherings, and home navigation. Repro for UI issue: create weekly event -> count matching cards before reload=1, after reload=6.",
   "rca of the issue": "RCA: Backend correctly creates 1 parent + 5 recurring child events (validated by pytest and UI count after reload). Frontend handleCreateEvent updates local events state with only the parent API response and does not refetch /api/events after creation. Reproduction: login -> Gatherings -> create weekly recurring event -> immediate list shows only parent -> reload page -> all 6 events appear. Mitigation: after successful create, call loadData() or append server-returned instances if API contract changes."
 }
