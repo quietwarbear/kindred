@@ -7,8 +7,8 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - **Frontend**: React SPA, Tailwind CSS, Shadcn UI, react-force-graph-2d
 - **Backend**: FastAPI + MongoDB (modular router-based structure)
 - **Auth**: JWT + Google OAuth
-- **Payments**: Stripe (web) + RevenueCat (mobile, infrastructure ready)
-- **AI**: Gemini via Emergent LLM Key (auto-tagging, sentiment, mood)
+- **Payments**: Stripe (web checkout + subscriptions + add-ons) + RevenueCat (mobile, configured)
+- **AI**: Gemini via Emergent LLM Key (auto-tagging, sentiment, mood, batch retag)
 
 ## Backend Structure
 ```
@@ -20,7 +20,7 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 ├── security.py         # JWT + password hashing
 ├── ai_tagging.py       # Gemini AI tagging with sentiment/mood + batch retag
 └── routes/
-    ├── activity.py     # Activity feed (paginated, filtered)
+    ├── activity.py     # Activity feed
     ├── auth.py         # Auth: bootstrap, login, me, google, profile, etc.
     ├── community.py    # Community: overview, courtyard, subyards, kinship, invites, multi-courtyard
     ├── communications.py # Announcements, chat, notifications
@@ -29,65 +29,60 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
     ├── legacy.py       # Legacy table config/sync
     ├── polls.py        # Polls CRUD, voting, close
     ├── revenuecat.py   # RevenueCat webhook, receipt validation, status
-    ├── subscriptions.py # Plans, current, checkout, cancel, feature-check
-    └── timeline.py     # Timeline archive + search/export, memories CRUD, threads, batch retag
+    ├── subscriptions.py # Plans, current, checkout, cancel, feature-check, add-ons
+    └── timeline.py     # Timeline + search/export, memories CRUD, threads, batch retag
 ```
 
 ## All Implemented Features
 
-### Core Infrastructure
+### Core
 - Full auth (JWT, Google OAuth, password recovery, account deletion)
-- Backend refactored: modular router-based architecture
-- 5-step onboarding for new hosts
-- Courtyards & Subyards with full CRUD + inline editing
+- Modular backend architecture (server.py orchestrates 11 route files)
+- 5-step onboarding, Courtyards & Subyards CRUD + inline editing
 - Members, invites, role assignments
 
 ### Activity & Communication
-- **Activity Feed**: Dedicated page with type filters, pagination
-- Scoped announcements with inline editing + delete
+- Activity Feed: dedicated page with type filters and pagination
+- Announcements with inline editing + delete
 - Chat rooms with attachments, pinning, delete
-- Notifications: bell icon, unread badge, dropdown, mark-read, history, preferences
+- Notifications: bell, unread badge, dropdown, mark-read, history, preferences
 - Browser push notifications (Web Notifications API)
 
 ### Gatherings & Events
-- Template-based events with recurrence rules
+- Template-based events with recurrence
 - Inline editing & deletion for events
-- RSVP, agenda, volunteer sign-ups, potluck
-- Event invites, Zoom-link support, one-click reminders
+- RSVP, agenda, volunteers, potluck, event invites, Zoom links, reminders
 
 ### Timeline & Memory Vault
 - Unified timeline with search, type filters, CSV export
-- Memory Vault with photo upload, voice notes, and AI auto-tagging
-- **In-app voice recording** (MediaRecorder API) for memories, stories, threads
-- **Enhanced AI tagging**: sentiment analysis (positive/neutral/reflective/celebratory/somber), mood detection
-- **Batch re-tagging**: "Re-tag all with AI" button for bulk improvement
-- Sentiment and mood badges on memory cards
+- Memory Vault with photos, voice notes, AI auto-tagging
+- In-app voice recording (MediaRecorder API)
+- Enhanced AI tagging: sentiment + mood analysis, batch re-tagging
+- Sentiment/mood badges on memory cards
 
 ### Legacy Threads & Kinship
-- **Legacy Threads**: 7 categories, filters, voice notes, threaded comments, elder attribution
-- **Kinship Map**: Interactive force-directed network graph (react-force-graph-2d)
-- Add/delete relationships with type-specific colors and legends
-- Kinship group shortcuts for bulk invitations
+- Legacy Threads: 7 categories, filters, voice notes, comments, elder attribution
+- Kinship Map: interactive force-directed network graph
+- Relationship-based invitation shortcuts (quick-invite by kinship group)
 
 ### Decisions, Finance & Billing
-- Polls & Voting: create/vote/close/delete, multi-select
-- Stripe checkout + webhooks (one-time and subscriptions)
+- Polls & Voting: create/vote/close/delete
+- Stripe checkout + webhooks (one-time + subscriptions)
 - 5-tier subscription system (Seedling → Elder Grove)
-- Budgets + travel plans with CRUD
-- **RevenueCat infrastructure**: webhook handler, receipt validation, tier mapping (ready for mobile deployment)
+- Add-on marketplace: Extra Storage (10GB/25GB), Premium Templates, SMS Packs (100/500)
+- Add-on Stripe checkout with purchase history
+- RevenueCat: webhook handler, receipt validation, tier mapping (configured with API keys)
+- Budgets + travel plans CRUD
 
 ### Multi-Courtyard
-- Users can belong to multiple communities
+- Users belong to multiple communities
 - Community switcher in sidebar
-- Join additional communities via invite code
-- Switch between communities (session refresh)
+- Join communities via invite code, switch between communities
 
 ## Prioritized Backlog
 
-### P1
-- Relationship-based invitation shortcuts UI (backend exists)
-- Add-on purchases (storage, templates, SMS credits)
-
-### P2
-- Full RevenueCat mobile deployment (requires API key configuration)
-- Progressive Web App (PWA) features for mobile use
+### P2 (Future)
+- Full RevenueCat mobile deployment (SDK integration for iOS/Android)
+- PWA features for mobile use
+- Community Mood Board (sentiment trend visualization)
+- Weekly community digest emails
