@@ -425,6 +425,23 @@ class PollVoteRequest(BaseModel):
     option_ids: list[str] = Field(min_length=1)
 
 
+class EventUpdateRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+    start_at: str = ""
+    location: str = ""
+    gathering_format: str = ""
+    max_attendees: int | None = None
+    zoom_link: str = ""
+    special_focus: str = ""
+    map_url: str = ""
+
+
+class MemoryUpdateRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
 class SubscriptionCheckoutRequest(BaseModel):
     plan_id: str
     billing_cycle: Literal["monthly", "annual"] = "monthly"

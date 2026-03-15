@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from db import communities_collection, events_collection, memories_collection, threads_collection
 from dependencies import get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
-from models import CommentRequest, MemoryCreateRequest, MemoryPublic, ThreadCreateRequest, ThreadPublic
+from models import CommentRequest, MemoryCreateRequest, MemoryPublic, MemoryUpdateRequest, ThreadCreateRequest, ThreadPublic
 from ai_tagging import generate_memory_tags
 
 router = APIRouter(prefix="/api")
@@ -73,6 +73,48 @@ async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_us
     return {"timeline_items": timeline_items[:300], "on_this_day": anniversaries[:5]}
 
 
+@router.get("/timeline/export")
+async def timeline_export(
+    format: str = "json",
+    item_type: str | None = None,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Export timeline data as JSON or CSV."""
+    from fastapi.responses import Response as FastResponse
+    community_id = current_user["community_id"]
+    events = await events_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+    threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+
+    rows = []
+    if not item_type or item_type == "gathering":
+        for e in events:
+            rows.append({"type": "gathering", "title": e["title"], "description": e.get("description", ""), "date": e.get("start_at", ""), "location": e.get("location", ""), "tags": ", ".join(e.get("assigned_roles", []))})
+    if not item_type or item_type == "memory":
+        for m in memories:
+            rows.append({"type": "memory", "title": m["title"], "description": m.get("description", ""), "date": m.get("created_at", ""), "location": "", "tags": ", ".join(m.get("tags", []))})
+    if not item_type or item_type == "story":
+        for t in threads:
+            rows.append({"type": "story", "title": t["title"], "description": t.get("body", ""), "date": t.get("created_at", ""), "location": "", "tags": t.get("category", "")})
+
+    rows.sort(key=lambda r: r.get("date", ""), reverse=True)
+
+    if format == "csv":
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=["type", "title", "description", "date", "location", "tags"])
+        writer.writeheader()
+        writer.writerows(rows)
+        return FastResponse(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=kindred_timeline.csv"},
+        )
+
+    return {"items": rows, "total": len(rows)}
+
+
 @router.get("/memories", response_model=list[MemoryPublic])
 async def list_memories(current_user: dict[str, Any] = Depends(get_current_user)):
     memories = await memories_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
@@ -128,6 +170,27 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
     }
     await memories_collection.insert_one(memory_doc.copy())
     return memory_doc
+
+
+@router.put("/memories/{memory_id}", response_model=MemoryPublic)
+async def update_memory(memory_id: str, payload: MemoryUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    memory_doc = await get_memory_for_user(memory_id, current_user)
+    updates = {}
+    if payload.title.strip():
+        updates["title"] = payload.title.strip()
+    if payload.description is not None and payload.description != "":
+        updates["description"] = payload.description.strip()
+    if updates:
+        await memories_collection.update_one({"id": memory_id}, {"$set": updates})
+        memory_doc.update(updates)
+    return memory_doc
+
+
+@router.delete("/memories/{memory_id}")
+async def delete_memory(memory_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    await get_memory_for_user(memory_id, current_user)
+    await memories_collection.delete_one({"id": memory_id})
+    return {"ok": True}
 
 
 @router.post("/memories/{memory_id}/comments", response_model=MemoryPublic)

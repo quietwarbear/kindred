@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Clock3, Image as ImageIcon, Mic, MessageSquareQuote } from "lucide-react";
+import { Clock3, Download, Filter, Image as ImageIcon, Mic, MessageSquareQuote, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
+import { apiRequest, BACKEND_URL, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
 const initialMemoryForm = {
@@ -30,6 +30,8 @@ export const TimelinePage = ({ token }) => {
   const [memoryAudio, setMemoryAudio] = useState(null);
   const [storyAudio, setStoryAudio] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("");
 
   const loadTimeline = useCallback(async () => {
     try {
@@ -49,6 +51,40 @@ export const TimelinePage = ({ token }) => {
   useEffect(() => {
     loadTimeline();
   }, [loadTimeline]);
+
+  const filteredTimeline = timeline.filter((item) => {
+    if (filterType && item.type !== filterType) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (
+        item.title?.toLowerCase().includes(q) ||
+        item.description?.toLowerCase().includes(q) ||
+        item.subtitle?.toLowerCase().includes(q) ||
+        item.tags?.some((tag) => tag.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
+
+  const handleExportCSV = () => {
+    const exportUrl = `${BACKEND_URL}/api/timeline/export?format=csv${filterType ? `&item_type=${filterType}` : ""}`;
+    const link = document.createElement("a");
+    link.href = exportUrl;
+    link.download = "kindred_timeline.csv";
+    // For authenticated export, we'll use fetch
+    fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "kindred_timeline.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success("Timeline exported as CSV.");
+      })
+      .catch(() => toast.error("Unable to export timeline."));
+  };
 
   const handleCreateMemory = async (event) => {
     event.preventDefault();
@@ -223,11 +259,59 @@ export const TimelinePage = ({ token }) => {
         </article>
 
         <article className="archival-card" data-testid="timeline-feed-card">
-          <p className="eyebrow-text">Automatic Timeline Generation</p>
-          <h3 className="mt-2 font-display text-3xl text-foreground">Unified archive feed</h3>
-          <div className="mt-6 space-y-4">
-            {timeline.length ? (
-              timeline.map((item) => (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="eyebrow-text">Automatic Timeline Generation</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Unified archive feed</h3>
+            </div>
+            <Button className="rounded-full shrink-0" data-testid="timeline-export-csv" onClick={handleExportCSV} size="sm" variant="outline">
+              <Download className="mr-1 h-3.5 w-3.5" /> Export CSV
+            </Button>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="field-input pl-9"
+                data-testid="timeline-search-input"
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search timeline..."
+                value={searchQuery}
+              />
+            </div>
+            <div className="flex gap-2">
+              {["gathering", "memory", "story"].map((type) => (
+                <button
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                    filterType === type
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                  data-testid={`timeline-filter-${type}`}
+                  key={type}
+                  onClick={() => setFilterType(filterType === type ? "" : type)}
+                >
+                  {type}
+                </button>
+              ))}
+              {(filterType || searchQuery) && (
+                <button
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted hover:bg-muted/80"
+                  data-testid="timeline-filter-clear"
+                  onClick={() => { setFilterType(""); setSearchQuery(""); }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">{filteredTimeline.length} of {timeline.length} items</p>
+
+          <div className="mt-4 space-y-4">
+            {filteredTimeline.length ? (
+              filteredTimeline.map((item) => (
                 <div className="soft-panel" data-testid={`timeline-item-${item.type}-${item.id}`} key={`${item.type}-${item.id}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -260,7 +344,11 @@ export const TimelinePage = ({ token }) => {
               ))
             ) : (
               <div className="soft-panel" data-testid="timeline-feed-empty-state">
-                <p className="text-sm text-muted-foreground">The timeline will fill up as your community gathers, uploads memories, and records reflections.</p>
+                <p className="text-sm text-muted-foreground">
+                  {searchQuery || filterType
+                    ? "No items match your filters. Try broadening your search."
+                    : "The timeline will fill up as your community gathers, uploads memories, and records reflections."}
+                </p>
               </div>
             )}
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Camera, Mic, Tags } from "lucide-react";
+import { Camera, Check, Mic, Pencil, Tags, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ export const MemoryVaultPage = ({ token }) => {
   const [imageFile, setImageFile] = useState(null);
   const [voiceFile, setVoiceFile] = useState(null);
   const [commentDrafts, setCommentDrafts] = useState({});
+  const [editingMemory, setEditingMemory] = useState(null);
+  const [deletingMemoryId, setDeletingMemoryId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -77,6 +79,33 @@ export const MemoryVaultPage = ({ token }) => {
       toast.success("Comment added.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to add your comment.");
+    }
+  };
+
+  const handleSaveEditMemory = async () => {
+    if (!editingMemory) return;
+    try {
+      const payload = await apiRequest(`/memories/${editingMemory.id}`, {
+        method: "PUT",
+        token,
+        data: { title: editingMemory.title, description: editingMemory.description },
+      });
+      setMemories((current) => current.map((m) => (m.id === payload.id ? { ...m, ...payload } : m)));
+      setEditingMemory(null);
+      toast.success("Memory updated.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to update memory.");
+    }
+  };
+
+  const handleDeleteMemory = async (memoryId) => {
+    try {
+      await apiRequest(`/memories/${memoryId}`, { method: "DELETE", token });
+      setMemories((current) => current.filter((m) => m.id !== memoryId));
+      setDeletingMemoryId("");
+      toast.success("Memory deleted.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete memory.");
     }
   };
 
@@ -142,9 +171,43 @@ export const MemoryVaultPage = ({ token }) => {
               ) : null}
               <div className="mt-5 space-y-4">
                 <div>
-                  <p className="text-lg font-semibold text-foreground">{memory.title}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{memory.event_title} · {formatDateTime(memory.created_at)}</p>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{memory.description}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    {editingMemory?.id === memory.id ? (
+                      <div className="w-full space-y-2">
+                        <Input className="field-input" data-testid={`memory-edit-title-${memory.id}`} onChange={(e) => setEditingMemory((c) => ({ ...c, title: e.target.value }))} value={editingMemory.title} />
+                        <Textarea className="field-textarea" data-testid={`memory-edit-desc-${memory.id}`} onChange={(e) => setEditingMemory((c) => ({ ...c, description: e.target.value }))} rows={3} value={editingMemory.description} />
+                        <div className="flex gap-2">
+                          <Button className="rounded-full h-8" data-testid={`memory-edit-save-${memory.id}`} onClick={handleSaveEditMemory} size="sm"><Check className="mr-1 h-3 w-3" /> Save</Button>
+                          <Button className="rounded-full h-8" data-testid={`memory-edit-cancel-${memory.id}`} onClick={() => setEditingMemory(null)} size="sm" variant="outline"><X className="mr-1 h-3 w-3" /> Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold text-foreground">{memory.title}</p>
+                          <p className="mt-2 text-sm text-muted-foreground">{memory.event_title} · {formatDateTime(memory.created_at)}</p>
+                          <p className="mt-3 text-sm leading-7 text-muted-foreground">{memory.description}</p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button className="rounded-full p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" data-testid={`memory-edit-btn-${memory.id}`} onClick={() => setEditingMemory({ id: memory.id, title: memory.title, description: memory.description || "" })}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button className="rounded-full p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" data-testid={`memory-delete-btn-${memory.id}`} onClick={() => setDeletingMemoryId(memory.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {deletingMemoryId === memory.id && (
+                    <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+                      <p className="text-sm font-semibold text-destructive">Delete this memory?</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button className="rounded-full" data-testid={`memory-delete-confirm-${memory.id}`} onClick={() => handleDeleteMemory(memory.id)} size="sm" variant="destructive">Confirm</Button>
+                        <Button className="rounded-full" data-testid={`memory-delete-cancel-${memory.id}`} onClick={() => setDeletingMemoryId("")} size="sm" variant="outline">Cancel</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="soft-panel" data-testid={`memory-tags-panel-${memory.id}`}>
                   <div className="flex items-center gap-2 text-primary">

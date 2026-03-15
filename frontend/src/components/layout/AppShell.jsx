@@ -5,6 +5,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom"
 
 import { Button } from "@/components/ui/button";
 import { NotificationPanel } from "@/components/layout/NotificationPanel";
+import { ActivityFeedPage } from "@/components/ActivityFeedPage";
 import { ContributionsPage } from "@/components/ContributionsPage";
 import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
@@ -23,6 +24,7 @@ import { apiRequest } from "@/lib/api";
 
 const navItems = [
   { label: "Home", path: "/home" },
+  { label: "Activity", path: "/activity" },
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline" },
   { label: "Gatherings", path: "/gatherings" },
@@ -149,6 +151,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             <Routes>
               <Route element={<HomePage token={token} />} path="dashboard" />
               <Route element={<HomePage token={token} />} path="home" />
+              <Route element={<ActivityFeedPage token={token} />} path="activity" />
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />

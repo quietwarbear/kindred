@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ClipboardList, HandHelping, Link2, MailPlus, Plane, Soup, UsersRound } from "lucide-react";
+import { CalendarDays, Check, ClipboardList, HandHelping, Link2, MailPlus, Pencil, Plane, Soup, Trash2, UsersRound, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +68,8 @@ export const GatheringsPage = ({ token, user }) => {
   const [guestCount, setGuestCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sendingReminderEventId, setSendingReminderEventId] = useState("");
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [deletingEventId, setDeletingEventId] = useState("");
 
   const canCreate = useMemo(() => ["host", "organizer"].includes(user?.role), [user?.role]);
   const activeEvent = useMemo(() => events.find((item) => item.id === activeEventId) || null, [activeEventId, events]);
@@ -129,6 +131,50 @@ export const GatheringsPage = ({ token, user }) => {
       toast.error(error.response?.data?.detail || "Unable to create gathering.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const startEditEvent = () => {
+    if (!activeEvent) return;
+    setEditingEvent({
+      title: activeEvent.title,
+      description: activeEvent.description || "",
+      start_at: activeEvent.start_at ? new Date(activeEvent.start_at).toISOString().slice(0, 16) : "",
+      location: activeEvent.location || "",
+      gathering_format: activeEvent.gathering_format || "in-person",
+      max_attendees: activeEvent.max_attendees || 50,
+    });
+  };
+
+  const handleSaveEditEvent = async () => {
+    if (!activeEvent || !editingEvent) return;
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}`, {
+        method: "PUT",
+        token,
+        data: {
+          ...editingEvent,
+          start_at: editingEvent.start_at ? new Date(editingEvent.start_at).toISOString() : "",
+          max_attendees: Number(editingEvent.max_attendees) || null,
+        },
+      });
+      mergeEvent(payload);
+      setEditingEvent(null);
+      toast.success("Gathering updated.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to update gathering.");
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    try {
+      await apiRequest(`/events/${eventId}`, { method: "DELETE", token });
+      setDeletingEventId("");
+      if (activeEventId === eventId) setActiveEventId("");
+      await loadData();
+      toast.success("Gathering deleted.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to delete gathering.");
     }
   };
 
@@ -515,10 +561,75 @@ export const GatheringsPage = ({ token, user }) => {
           {activeEvent ? (
             <div className="space-y-6">
               <div>
-                <p className="eyebrow-text">Active gathering</p>
-                <h3 className="mt-2 font-display text-3xl text-foreground" data-testid="gatherings-active-title">{activeEvent.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(activeEvent.start_at)} · {activeEvent.location}</p>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">{activeEvent.description}</p>
+                <div className="flex items-center justify-between">
+                  <p className="eyebrow-text">Active gathering</p>
+                  {canCreate && !editingEvent && (
+                    <div className="flex gap-2">
+                      <Button className="rounded-full h-8" data-testid="event-edit-btn" onClick={startEditEvent} size="sm" variant="outline">
+                        <Pencil className="mr-1 h-3 w-3" /> Edit
+                      </Button>
+                      <Button className="rounded-full h-8" data-testid="event-delete-btn" onClick={() => setDeletingEventId(activeEvent.id)} size="sm" variant="outline">
+                        <Trash2 className="mr-1 h-3 w-3" /> Delete
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {deletingEventId === activeEvent.id && (
+                  <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                    <p className="text-sm font-semibold text-destructive">Delete this gathering?</p>
+                    <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+                    <div className="mt-3 flex gap-2">
+                      <Button className="rounded-full" data-testid="event-delete-confirm" onClick={() => handleDeleteEvent(activeEvent.id)} size="sm" variant="destructive">Confirm delete</Button>
+                      <Button className="rounded-full" data-testid="event-delete-cancel" onClick={() => setDeletingEventId("")} size="sm" variant="outline">Cancel</Button>
+                    </div>
+                  </div>
+                )}
+                {editingEvent ? (
+                  <div className="mt-3 space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4" data-testid="event-inline-edit-form">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-muted-foreground">Title</span>
+                      <Input className="field-input mt-1" data-testid="event-edit-title" onChange={(e) => setEditingEvent((c) => ({ ...c, title: e.target.value }))} value={editingEvent.title} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-muted-foreground">Description</span>
+                      <Textarea className="field-textarea mt-1" data-testid="event-edit-description" onChange={(e) => setEditingEvent((c) => ({ ...c, description: e.target.value }))} rows={3} value={editingEvent.description} />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">Date & Time</span>
+                        <Input className="field-input mt-1" data-testid="event-edit-start" onChange={(e) => setEditingEvent((c) => ({ ...c, start_at: e.target.value }))} type="datetime-local" value={editingEvent.start_at} />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">Location</span>
+                        <Input className="field-input mt-1" data-testid="event-edit-location" onChange={(e) => setEditingEvent((c) => ({ ...c, location: e.target.value }))} value={editingEvent.location} />
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">Format</span>
+                        <select className="field-input mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm" data-testid="event-edit-format" onChange={(e) => setEditingEvent((c) => ({ ...c, gathering_format: e.target.value }))} value={editingEvent.gathering_format}>
+                          <option value="in-person">In-person</option>
+                          <option value="online">Online</option>
+                          <option value="hybrid">Hybrid</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">Capacity</span>
+                        <Input className="field-input mt-1" data-testid="event-edit-capacity" min={1} onChange={(e) => setEditingEvent((c) => ({ ...c, max_attendees: e.target.value }))} type="number" value={editingEvent.max_attendees} />
+                      </label>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button className="rounded-full" data-testid="event-edit-save" onClick={handleSaveEditEvent} size="sm"><Check className="mr-1 h-3 w-3" /> Save</Button>
+                      <Button className="rounded-full" data-testid="event-edit-cancel" onClick={() => setEditingEvent(null)} size="sm" variant="outline"><X className="mr-1 h-3 w-3" /> Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="mt-2 font-display text-3xl text-foreground" data-testid="gatherings-active-title">{activeEvent.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(activeEvent.start_at)} · {activeEvent.location}</p>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{activeEvent.description}</p>
+                  </>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {activeEvent.assigned_roles.map((role) => (
                     <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-foreground" data-testid={`gatherings-active-role-${role.replace(/\s+/g, "-")}`} key={role}>

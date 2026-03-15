@@ -28,6 +28,7 @@ from models import (
     EventMeetingLinkRequest,
     EventPublic,
     EventRoleAssignmentRequest,
+    EventUpdateRequest,
     PotluckClaimRequest,
     PotluckItemRequest,
     RSVPRequest,
@@ -77,6 +78,43 @@ async def gatherings_reminders(current_user: dict[str, Any] = Depends(get_curren
 async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
     events = await events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("start_at", 1).to_list(200)
     return events
+
+
+@router.put("/events/{event_id}", response_model=EventPublic)
+async def update_event(event_id: str, payload: EventUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    updates = {}
+    if payload.title.strip():
+        updates["title"] = payload.title.strip()
+    if payload.description is not None and payload.description != "":
+        updates["description"] = payload.description.strip()
+    if payload.start_at:
+        updates["start_at"] = payload.start_at
+    if payload.location:
+        updates["location"] = payload.location.strip()
+    if payload.gathering_format:
+        updates["gathering_format"] = payload.gathering_format
+    if payload.max_attendees is not None:
+        updates["max_attendees"] = payload.max_attendees
+    if payload.zoom_link is not None and payload.zoom_link != "":
+        updates["zoom_link"] = payload.zoom_link.strip()
+    if payload.special_focus is not None and payload.special_focus != "":
+        updates["special_focus"] = payload.special_focus.strip()
+    if payload.map_url is not None and payload.map_url != "":
+        updates["map_url"] = payload.map_url.strip()
+    if updates:
+        await events_collection.update_one({"id": event_id}, {"$set": updates})
+        event_doc.update(updates)
+    return event_doc
+
+
+@router.delete("/events/{event_id}")
+async def delete_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
+    await get_event_for_user(event_id, current_user)
+    await events_collection.delete_one({"id": event_id})
+    return {"ok": True}
 
 
 @router.post("/events", response_model=EventPublic)

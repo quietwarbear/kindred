@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from db import client
+from routes.activity import router as activity_router
 from routes.auth import router as auth_router
 from routes.communications import router as communications_router
 from routes.community import router as community_router
@@ -31,6 +32,7 @@ async def root():
 
 # Include all domain routers
 app.include_router(api_root)
+app.include_router(activity_router)
 app.include_router(auth_router)
 app.include_router(community_router)
 app.include_router(communications_router)

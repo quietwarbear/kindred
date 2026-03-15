@@ -316,3 +316,31 @@ async def create_invite(payload: InviteCreateRequest, current_user: dict[str, An
 async def list_invites(current_user: dict[str, Any] = Depends(get_current_user)):
     invites = await invites_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return {"invites": invites}
+
+
+
+@router.get("/kinship/groups")
+async def kinship_groups(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Return kinship relationships grouped by type for quick-invite shortcuts."""
+    relationships = await kinships_collection.find(
+        {"community_id": current_user["community_id"]}, {"_id": 0}
+    ).sort("relationship_type", 1).to_list(500)
+
+    groups = {}
+    for rel in relationships:
+        rtype = rel.get("relationship_type", "other")
+        if rtype not in groups:
+            groups[rtype] = []
+        groups[rtype].append({
+            "id": rel["id"],
+            "person_name": rel.get("person_name", ""),
+            "related_to_name": rel.get("related_to_name", ""),
+            "notes": rel.get("notes", ""),
+        })
+
+    members = await users_collection.find(
+        {"community_id": current_user["community_id"]},
+        {"_id": 0, "id": 1, "full_name": 1, "email": 1, "role": 1},
+    ).to_list(500)
+
+    return {"groups": groups, "members": members}
