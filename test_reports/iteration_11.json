@@ -1,0 +1,92 @@
+{
+  "summary": "Iteration 11 testing completed. Backend: 17/20 tests passed (85%). 2 CRITICAL bugs found - model/server mismatch for KinshipCreateRequest and SubyardCreateRequest causing 500 errors on create_kinship and update_subyard endpoints. Ownership transfer, community members listing, announcements, budget plans CRUD all work correctly. Frontend loads correctly, transfer ownership UI visible for host users.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/kinship",
+        "issue": "500 Internal Server Error - KinshipCreateRequest model missing 'related_to_name' and 'relationship_scope' fields that server.py expects at line 907",
+        "priority": "CRITICAL",
+        "root_cause": "Model/server mismatch - models.py KinshipCreateRequest has: person_name, relationship_type, linked_user_id, birth_date, anniversary_date, last_seen_at, notes. Server expects additional: related_to_name, relationship_scope"
+      },
+      {
+        "endpoint": "PUT /api/subyards/{id}",
+        "issue": "500 Internal Server Error - SubyardCreateRequest model missing 'description', 'role_focus', 'inherited_roles', 'visibility' fields that server.py expects at line 877",
+        "priority": "CRITICAL",
+        "root_cause": "Model/server mismatch - models.py SubyardCreateRequest has: name, purpose, icon, privacy, custom_roles, members. Server expects: name, description, inherited_roles, role_focus, visibility"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ownership_transfer_and_crud.py",
+    "/app/test_reports/pytest/ownership_transfer_crud_results.xml",
+    "/app/test_reports/playwright_iter11/"
+  ],
+  "action_items": [
+    "FIX CRITICAL: Update models.py KinshipCreateRequest to add 'related_to_name: str = \"\"' and 'relationship_scope: str = \"\"' fields",
+    "FIX CRITICAL: Update models.py SubyardCreateRequest to change 'purpose' to 'description', add 'inherited_roles: bool = True', 'role_focus: list[str] = Field(default_factory=list)', 'visibility: str = \"shared\"'"
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL BUG: Model/Server mismatch in KinshipCreateRequest - server.py line 907 accesses payload.related_to_name and payload.relationship_scope which don't exist in the model",
+    "CRITICAL BUG: Model/Server mismatch in SubyardCreateRequest - server.py line 852-861 and 874-879 access payload.description, payload.inherited_roles, payload.role_focus, payload.visibility which don't exist in model",
+    "Backend refactoring (db.py, models.py, dependencies.py extraction) was successful - existing endpoints still work",
+    "Ownership transfer flow works correctly - transfers owner, demotes old owner to organizer, blocks self-transfer, blocks non-host users",
+    "DELETE endpoints for announcements, budget-plans work correctly",
+    "PUT endpoints for announcements, budget-plans work correctly"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ownership_transfer_and_crud.py"
+  ],
+  "success_rate": {
+    "backend": "85% (17/20 passed - 2 failed due to model bugs, 1 skipped)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "email": "notiftest2@kindred.app",
+    "password": "Test1234!",
+    "role": "host"
+  },
+  "seed_data_creation": "Backend tests create disposable communities via /api/auth/bootstrap with TEST_ITER11_ prefix",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 11 tested ownership transfer flow, edit/delete endpoints. CRITICAL: KinshipCreateRequest and SubyardCreateRequest models in models.py don't match what server.py expects - this causes 500 errors on POST /api/kinship and PUT /api/subyards/{id}. Main agent needs to align models with server expectations. Ownership transfer (POST /api/community/transfer-ownership) works correctly. Frontend transfer ownership UI is visible for host users at /settings page (data-testid='settings-transfer-ownership-card'). Login flow: /login -> click 'Sign in' tab -> fill email/password -> click 'Sign in' button.",
+  "features_tested": {
+    "passed": [
+      "GET /api/community/members returns all community members",
+      "POST /api/community/transfer-ownership transfers owner to another member",
+      "POST /api/community/transfer-ownership blocks self-transfer (400 Bad Request)",
+      "POST /api/community/transfer-ownership blocks non-host users (403 Forbidden)",
+      "POST /api/community/transfer-ownership with invalid user returns 404",
+      "GET /api/ root endpoint works after refactoring",
+      "GET /api/polls works after refactoring",
+      "GET /api/notifications/unread-count works after refactoring",
+      "GET /api/courtyard/home works after refactoring",
+      "DELETE /api/kinship/{id} deletes kinship relationship",
+      "PUT /api/announcements/{id} updates announcement title/body",
+      "DELETE /api/announcements/{id} deletes announcement",
+      "PUT /api/budget-plans/{id} updates budget title/amounts",
+      "DELETE /api/budget-plans/{id} deletes budget plan",
+      "GET /api/subyards returns subyards",
+      "GET /api/travel-plans returns travel plans",
+      "Login with test credentials works",
+      "Frontend loads correctly",
+      "Transfer ownership section visible in Settings for host users"
+    ],
+    "failed": [
+      "POST /api/kinship - 500 error due to model mismatch (missing related_to_name, relationship_scope)",
+      "PUT /api/subyards/{id} - 500 error due to model mismatch (missing description, role_focus, inherited_roles, visibility)"
+    ],
+    "skipped": [
+      "DELETE /api/chat/rooms/{room_id}/messages/{msg_id} - skipped due to chat message creation issues"
+    ],
+    "not_tested": [
+      "PUT /api/travel-plans/{id} - needs event_id which requires event creation first",
+      "DELETE /api/travel-plans/{id} - same as above"
+    ]
+  }
+}

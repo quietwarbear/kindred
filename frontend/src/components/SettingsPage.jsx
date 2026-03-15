@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CircleUserRound, DatabaseZap, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,10 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [communityMembers, setCommunityMembers] = useState([]);
+  const [selectedTransferUserId, setSelectedTransferUserId] = useState("");
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -169,6 +173,37 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
       toast.error(error.response?.data?.detail || "Unable to delete account.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const loadCommunityMembers = useCallback(async () => {
+    try {
+      const payload = await apiRequest("/community/members", { token });
+      setCommunityMembers((payload.members || []).filter((m) => m.id !== user?.id));
+    } catch { /* silent */ }
+  }, [token, user?.id]);
+
+  useEffect(() => {
+    if (user?.role === "host") loadCommunityMembers();
+  }, [user?.role, loadCommunityMembers]);
+
+  const handleTransferOwnership = async () => {
+    if (!selectedTransferUserId) return;
+    setIsTransferring(true);
+    try {
+      const result = await apiRequest("/community/transfer-ownership", {
+        method: "POST",
+        token,
+        data: { new_owner_user_id: selectedTransferUserId },
+      });
+      toast.success(`Ownership transferred to ${result.new_owner_name}.`);
+      setShowTransferConfirm(false);
+      setSelectedTransferUserId("");
+      if (onSessionRefresh) onSessionRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to transfer ownership.");
+    } finally {
+      setIsTransferring(false);
     }
   };
 
@@ -465,6 +500,85 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           </div>
         </article>
       </section>
+
+      {user?.role === "host" && (
+        <section className="archival-card" data-testid="settings-transfer-ownership-card">
+          <div className="flex items-center gap-3">
+            <Crown className="h-5 w-5 text-amber-500" />
+            <div>
+              <p className="eyebrow-text">Community ownership</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Transfer ownership</h3>
+            </div>
+          </div>
+          <p className="mt-4 text-sm leading-7 text-muted-foreground">
+            Hand off your community to a trusted member. They will become the new host and you will be demoted to organizer. This is required before you can delete your account.
+          </p>
+
+          {communityMembers.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground/70" data-testid="transfer-no-members">
+              No other members to transfer to. Invite members first.
+            </p>
+          ) : !showTransferConfirm ? (
+            <div className="mt-4 space-y-3">
+              <label>
+                <span className="field-label">Select new owner</span>
+                <select
+                  className="field-input mt-1 w-full rounded-xl border border-border/60 bg-background px-4 py-2.5 text-sm text-foreground"
+                  data-testid="transfer-member-select"
+                  onChange={(e) => setSelectedTransferUserId(e.target.value)}
+                  value={selectedTransferUserId}
+                >
+                  <option value="">Choose a member...</option>
+                  {communityMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name} ({m.email}) — {m.role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                className="rounded-full"
+                data-testid="transfer-initiate-button"
+                disabled={!selectedTransferUserId}
+                onClick={() => setShowTransferConfirm(true)}
+                variant="default"
+              >
+                <Crown className="mr-2 h-4 w-4" /> Transfer ownership
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-500/[0.03] p-5 space-y-4" data-testid="transfer-confirm-panel">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Confirm ownership transfer</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    You are about to transfer ownership to <strong>{communityMembers.find((m) => m.id === selectedTransferUserId)?.full_name}</strong>. You will become an organizer and lose host privileges.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  className="rounded-full"
+                  data-testid="transfer-confirm-button"
+                  disabled={isTransferring}
+                  onClick={handleTransferOwnership}
+                >
+                  {isTransferring ? "Transferring..." : "Yes, transfer ownership"}
+                </Button>
+                <Button
+                  className="rounded-full"
+                  data-testid="transfer-cancel-button"
+                  onClick={() => setShowTransferConfirm(false)}
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="archival-card border-destructive/30" data-testid="settings-delete-account-card">
         <div className="flex items-center gap-3">
