@@ -1,4 +1,4 @@
-import { ChevronDown, Menu, MoonStar, Sparkles, SunMedium } from "lucide-react";
+import { ChevronDown, Download, Menu, MoonStar, Sparkles, SunMedium } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -25,6 +25,7 @@ import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-register";
 
 const navItems = [
   { label: "Home", path: "/home" },
@@ -47,6 +48,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   const [myCommunities, setMyCommunities] = useState([]);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [joinCode, setJoinCode] = useState("");
+  const [canInstall, setCanInstall] = useState(false);
 
   const refreshUnreadSummary = useCallback(async () => {
     try {
@@ -68,6 +70,18 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
 
   useEffect(() => { refreshUnreadSummary(); }, [location.pathname, refreshUnreadSummary]);
   useEffect(() => { loadMyCommunities(); }, [loadMyCommunities]);
+
+  useEffect(() => {
+    if (!isStandalone()) setupInstallPrompt(() => setCanInstall(true));
+  }, []);
+
+  const handleInstall = async () => {
+    const accepted = await triggerInstall();
+    if (accepted) {
+      setCanInstall(false);
+      toast.success("Kindred installed to your device!");
+    }
+  };
 
   const handleSwitchCommunity = async (communityId) => {
     try {
@@ -194,6 +208,17 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 {resolvedTheme === "dark" ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
                 {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
               </Button>
+              {canInstall && (
+                <Button
+                  className="rounded-full w-full"
+                  data-testid="pwa-install-btn"
+                  onClick={handleInstall}
+                  variant="outline"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Install Kindred
+                </Button>
+              )}
               <Button
                 className="rounded-full"
                 data-testid="logout-button"

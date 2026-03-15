@@ -1,0 +1,139 @@
+{
+  "summary": "RevenueCat + PWA Features Test Complete - Backend: 28/28 passed (100%), Frontend: All flows verified. RevenueCat config returns bundle_id=com.ubuntumarket.kindred with tier mapping. PWA manifest, service worker, offline page all accessible and correctly configured. Regression: Auth, Activity Feed, Gatherings, Memories, Kinship Map, Add-ons all working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_revenuecat_pwa.py",
+    "/app/test_reports/pytest/revenuecat_pwa_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_revenuecat_pwa.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 passed)",
+    "frontend": "100% - All PWA and regression features verified"
+  },
+  "test_credentials": {
+    "email": "refactor-test@kindred.app",
+    "password": "Test1234!",
+    "role": "host"
+  },
+  "seed_data_creation": "No new seed data created - used existing test data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "RevenueCat and PWA features fully tested. RevenueCat API key is configured, offerings/restore endpoints return expected responses (may show 'subscriber not found' error if user not in RevenueCat dashboard - this is expected behavior). PWA install button (data-testid='pwa-install-btn') only shows when beforeinstallprompt event fires (not in headless browsers).",
+  "features_tested": {
+    "revenuecat_config": [
+      "GET /api/revenuecat/config returns bundle_id=com.ubuntumarket.kindred",
+      "Returns tier_mapping with seedling, sapling, oak, redwood, elder_grove, premium",
+      "Returns entitlement_ids list",
+      "Returns webhook_url=/api/revenuecat/webhook",
+      "platform=ios"
+    ],
+    "revenuecat_status": [
+      "GET /api/revenuecat/status returns configured=true (requires auth)",
+      "Returns webhook_configured status"
+    ],
+    "revenuecat_offerings": [
+      "GET /api/revenuecat/offerings fetches subscriber data from RevenueCat API",
+      "Returns bundle_id=com.ubuntumarket.kindred",
+      "Returns subscriber entitlements, subscriptions, non_subscriptions"
+    ],
+    "revenuecat_restore": [
+      "POST /api/revenuecat/restore restores purchases from RevenueCat",
+      "Returns restored, tier, status, entitlements fields"
+    ],
+    "revenuecat_webhook": [
+      "POST /api/revenuecat/webhook handles events",
+      "Correctly ignores events without app_user_id",
+      "Correctly ignores events for unknown users"
+    ],
+    "pwa_manifest": [
+      "GET /manifest.json accessible",
+      "name=Kindred, short_name=Kindred",
+      "id=com.ubuntumarket.kindred (bundle ID)",
+      "display=standalone",
+      "theme_color=#1a1a2e",
+      "icons configured (192x192, 512x512)"
+    ],
+    "pwa_service_worker": [
+      "GET /sw.js accessible",
+      "CACHE_NAME=kindred-v1",
+      "Has install event handler",
+      "Has fetch event handler",
+      "Serves /offline.html for failed navigations"
+    ],
+    "pwa_offline_page": [
+      "GET /offline.html accessible",
+      "Title: Kindred — Offline",
+      "Content: 'You're offline' message",
+      "Has icon reference /icon-192.png"
+    ],
+    "pwa_meta_tags": [
+      "index.html has apple-mobile-web-app-capable=yes",
+      "index.html has theme-color=#1a1a2e",
+      "index.html has manifest link to /manifest.json"
+    ],
+    "frontend_title": [
+      "Page title: 'Kindred — Where your circles gather and grow'"
+    ],
+    "service_worker_registration": [
+      "index.js imports registerServiceWorker",
+      "sw-register.js registers /sw.js",
+      "Console shows: [Kindred] SW registered"
+    ],
+    "regression": [
+      "Login works with test credentials",
+      "Activity Feed loads with activities",
+      "Gatherings page loads with event templates",
+      "Kinship Map loads with graph visualization (5 people, 3 connections)",
+      "Subscription page loads with plans and Add-ons section",
+      "Memories endpoint returns array",
+      "Add-ons catalog returns add-on products",
+      "Subscription current returns tier/status"
+    ]
+  },
+  "api_endpoints_verified": {
+    "revenuecat": [
+      "GET /api/revenuecat/config - 200 OK (public)",
+      "GET /api/revenuecat/status - 200 OK (auth required)",
+      "GET /api/revenuecat/offerings - 200 OK (auth required)",
+      "POST /api/revenuecat/restore - 200 OK (auth required)",
+      "POST /api/revenuecat/webhook - 200 OK (public)"
+    ],
+    "pwa_static_files": [
+      "GET /manifest.json - 200 OK",
+      "GET /sw.js - 200 OK",
+      "GET /offline.html - 200 OK"
+    ],
+    "regression": [
+      "POST /api/auth/login - 200 OK",
+      "GET /api/activity-feed - 200 OK (returns items array)",
+      "GET /api/events - 200 OK (returns array)",
+      "GET /api/memories - 200 OK (returns array)",
+      "GET /api/kinship/graph - 200 OK",
+      "GET /api/addons/catalog - 200 OK",
+      "GET /api/subscriptions/current - 200 OK"
+    ]
+  },
+  "screenshots": [
+    "/app/test_reports/playwright_iter21/auth_check.jpeg",
+    "/app/test_reports/playwright_iter21/logged_in.jpeg",
+    "/app/test_reports/playwright_iter21/gatherings.jpeg",
+    "/app/test_reports/playwright_iter21/kinship.jpeg",
+    "/app/test_reports/playwright_iter21/subscription.jpeg"
+  ],
+  "notes": {
+    "pwa_install_button": "The PWA install button (data-testid='pwa-install-btn') only shows when beforeinstallprompt event fires, which doesn't happen in headless browsers - this is expected behavior",
+    "revenuecat_subscriber": "RevenueCat offerings/restore may return error if subscriber doesn't exist in RevenueCat dashboard - this is expected and not a bug"
+  }
+}

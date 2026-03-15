@@ -147,3 +147,112 @@ async def revenuecat_status(current_user: dict[str, Any] = Depends(get_current_u
         "configured": bool(REVENUECAT_API_KEY),
         "webhook_configured": bool(REVENUECAT_WEBHOOK_SECRET),
     }
+
+
+BUNDLE_ID = "com.ubuntumarket.kindred"
+
+
+@router.get("/revenuecat/offerings")
+async def revenuecat_offerings(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Fetch current product offerings from RevenueCat for display in mobile app."""
+    import httpx
+
+    if not REVENUECAT_API_KEY:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="RevenueCat not configured.")
+
+    app_user_id = current_user["id"]
+    url = f"https://api.revenuecat.com/v1/subscribers/{app_user_id}"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers={
+            "Authorization": f"Bearer {REVENUECAT_API_KEY}",
+            "X-Platform": "ios",
+        })
+
+    if resp.status_code == 404:
+        # Create subscriber on first fetch
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers={
+                "Authorization": f"Bearer {REVENUECAT_API_KEY}",
+                "X-Platform": "ios",
+            })
+
+    if resp.status_code != 200:
+        return {"offerings": [], "subscriber": {}, "error": "Unable to fetch from RevenueCat."}
+
+    data = resp.json()
+    subscriber = data.get("subscriber", {})
+    return {
+        "subscriber": {
+            "entitlements": subscriber.get("entitlements", {}),
+            "subscriptions": subscriber.get("subscriptions", {}),
+            "non_subscriptions": subscriber.get("non_subscriptions", {}),
+            "first_seen": subscriber.get("first_seen", ""),
+        },
+        "bundle_id": BUNDLE_ID,
+    }
+
+
+@router.post("/revenuecat/restore")
+async def restore_purchases(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Restore purchases for a user (called after app reinstall)."""
+    import httpx
+
+    if not REVENUECAT_API_KEY:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="RevenueCat not configured.")
+
+    app_user_id = current_user["id"]
+    url = f"https://api.revenuecat.com/v1/subscribers/{app_user_id}"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers={"Authorization": f"Bearer {REVENUECAT_API_KEY}"})
+
+    if resp.status_code != 200:
+        return {"restored": False, "error": "Unable to fetch subscriber data."}
+
+    subscriber = resp.json().get("subscriber", {})
+    entitlements = subscriber.get("entitlements", {})
+
+    active_tier = "seedling"
+    expires_at = ""
+    for ent_id, ent_data in entitlements.items():
+        if ent_data.get("expires_date"):
+            mapped = ENTITLEMENT_TO_TIER.get(ent_id, "seedling")
+            active_tier = mapped
+            expires_at = ent_data["expires_date"]
+            break
+
+    if entitlements:
+        await subscriptions_collection.update_one(
+            {"user_id": app_user_id},
+            {
+                "$set": {
+                    "user_id": app_user_id,
+                    "tier": active_tier,
+                    "status": "active",
+                    "provider": "revenuecat",
+                    "current_period_end": expires_at,
+                    "updated_at": now_iso(),
+                }
+            },
+            upsert=True,
+        )
+
+    return {
+        "restored": bool(entitlements),
+        "tier": active_tier,
+        "status": "active" if entitlements else "free",
+        "entitlements": list(entitlements.keys()),
+    }
+
+
+@router.get("/revenuecat/config")
+async def revenuecat_config():
+    """Return mobile SDK configuration for the Kindred app."""
+    return {
+        "bundle_id": BUNDLE_ID,
+        "platform": "ios",
+        "entitlement_ids": list(ENTITLEMENT_TO_TIER.keys()),
+        "tier_mapping": ENTITLEMENT_TO_TIER,
+        "webhook_url": "/api/revenuecat/webhook",
+    }
