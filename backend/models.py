@@ -130,12 +130,12 @@ class AgendaItemRequest(BaseModel):
 
 
 class VolunteerSlotRequest(BaseModel):
-    label: str = Field(min_length=1)
-    max_signups: int = 5
+    title: str = Field(min_length=1)
+    needed_count: int = 5
 
 
 class VolunteerSignupRequest(BaseModel):
-    slot_index: int
+    slot_id: str
 
 
 class PotluckItemRequest(BaseModel):
@@ -143,13 +143,14 @@ class PotluckItemRequest(BaseModel):
 
 
 class PotluckClaimRequest(BaseModel):
-    item_index: int
+    item_id: str
 
 
 class RSVPRequest(BaseModel):
     status: Literal["going", "maybe", "not-going"]
     user_email: str = ""
     user_name: str = ""
+    guests: int = 0
 
 
 class EventCreateRequest(BaseModel):
@@ -163,25 +164,33 @@ class EventCreateRequest(BaseModel):
     max_attendees: int = 50
     recurrence_frequency: Literal["none", "daily", "weekly", "monthly", "yearly"] = "none"
     recurrence_count: int = 4
+    subyard_id: str = ""
+    assigned_roles: list[str] = Field(default_factory=list)
+    map_url: str = ""
+    special_focus: str = ""
+    travel_coordination_notes: str = ""
+    suggested_contribution: float = 0.0
+    zoom_link: str = ""
 
 
 class ChecklistItemRequest(BaseModel):
-    label: str = Field(min_length=1)
-    assignee_name: str = ""
+    category: str = ""
+    title: str = Field(min_length=1)
 
 
 class ChecklistToggleRequest(BaseModel):
-    item_index: int
-    completed: bool
+    item_id: str
 
 
 class EventInviteCreateRequest(BaseModel):
-    invitees: list[dict[str, Any]] = Field(default_factory=list)
-    manual_emails: list[str] = Field(default_factory=list)
+    member_ids: list[str] = Field(default_factory=list)
+    guest_emails: list[str] = Field(default_factory=list)
+    note: str = ""
 
 
 class EventRoleAssignmentRequest(BaseModel):
-    assignments: list[dict[str, Any]] = Field(default_factory=list)
+    role_name: str = ""
+    assignees: list[str] = Field(default_factory=list)
 
 
 class EventMeetingLinkRequest(BaseModel):
@@ -199,9 +208,10 @@ class EventPublic(BaseModel):
     location: str = ""
     event_template: str = "custom"
     gathering_format: str = "in-person"
-    max_attendees: int = 50
+    max_attendees: int | None = 50
     created_by_name: str = ""
     created_by_id: str = ""
+    created_by: str = ""
     countdown_label: str = ""
     attendees: list[dict[str, Any]] = Field(default_factory=list)
     role_assignments: list[dict[str, Any]] = Field(default_factory=list)
@@ -210,11 +220,25 @@ class EventPublic(BaseModel):
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
     meeting_link: str = ""
+    zoom_link: str = ""
     event_invites: list[dict[str, Any]] = Field(default_factory=list)
+    event_role_assignments: list[dict[str, Any]] = Field(default_factory=list)
+    rsvp_records: list[dict[str, Any]] = Field(default_factory=list)
+    planning_checklist: list[dict[str, Any]] = Field(default_factory=list)
     recurrence_frequency: str = "none"
     recurrence_count: int = 0
     recurrence_parent_id: str = ""
     recurrence_index: int = 0
+    series_id: str = ""
+    is_recurring_instance: bool = False
+    parent_event_id: str = ""
+    subyard_id: str = ""
+    subyard_name: str = ""
+    map_url: str = ""
+    special_focus: str = ""
+    assigned_roles: list[str] = Field(default_factory=list)
+    travel_coordination_notes: str = ""
+    suggested_contribution: float = 0.0
     created_at: str = ""
 
 
@@ -225,6 +249,10 @@ class MemoryCreateRequest(BaseModel):
     file_data: str = ""
     file_name: str = ""
     tags: list[str] = Field(default_factory=list)
+    event_id: str = ""
+    category: str = "photo"
+    image_data_url: str = ""
+    voice_note_data_url: str = ""
 
 
 class CommentRequest(BaseModel):
@@ -339,10 +367,11 @@ class BudgetCreateRequest(BaseModel):
 
 class LegacyTableConfigRequest(BaseModel):
     base_url: str = ""
-    api_token: str = ""
-    table_name: str = ""
-    sync_direction: str = "import"
-    field_mapping: dict[str, str] = Field(default_factory=dict)
+    auth_type: str = "api-key"
+    sync_members: bool = True
+    sync_stories: bool = True
+    sync_events: bool = True
+    sync_relationships: bool = True
 
 
 class FileAttachmentPayload(BaseModel):

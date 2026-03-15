@@ -41,6 +41,6 @@
   "seed_data_creation": "Created new UI/pytest seed entities via real APIs: host courtyard account, subyard, kinship, invite, gathering, travel plan, budget, timeline memory, and story thread.",
   "retest_needed": false,
   "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Public URL tested: https://circles-gather.preview.emergentagent.com. Backend pytest: 11/11 passed with expanded Digital Courtyard coverage. Frontend Playwright validated requested flows plus hidden legacy routes (/memories, /threads, /members, /contributions, /events).",
+  "context_for_next_testing_agent": "Public URL tested: https://circle-gather.preview.emergentagent.com. Backend pytest: 11/11 passed with expanded Digital Courtyard coverage. Frontend Playwright validated requested flows plus hidden legacy routes (/memories, /threads, /members, /contributions, /events).",
   "rca of the issue": "No blocking functional bug reproduced. Non-blocking console request aborts were observed during route changes/third-party redirect transitions (Cloudflare RUM and Stripe preload noise), not impacting user-visible flows."
 }

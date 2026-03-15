@@ -1,0 +1,103 @@
+{
+  "summary": "Backend refactor regression test completed. Backend: 38/38 tests passed (100%). Fixed 11 model definition mismatches found during refactor. Frontend login form has a UI interaction issue (not related to backend refactor).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "LoginPage - Sign in tab",
+        "issue": "Login form on Sign in tab does not trigger login action when clicking Sign in button. Form reverts to Launch tab after clicking. This appears to be a pre-existing frontend issue, not caused by backend refactor.",
+        "selector": "button:has-text('Sign in')",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_backend_refactor_regression.py",
+    "/app/test_reports/pytest/refactor_regression_results.xml"
+  ],
+  "action_items": [
+    "Frontend: Investigate Sign in tab form submission - the button click doesn't trigger login API call",
+    "Note: Backend API /api/auth/login works correctly when called directly via curl"
+  ],
+  "critical_code_review_comments": [
+    "FIXED: EventCreateRequest model was missing 7 fields: subyard_id, assigned_roles, map_url, special_focus, travel_coordination_notes, suggested_contribution, zoom_link",
+    "FIXED: MemoryCreateRequest model was missing 4 fields: event_id, category, image_data_url, voice_note_data_url",
+    "FIXED: RSVPRequest model was missing 'guests' field",
+    "FIXED: EventInviteCreateRequest model had wrong field names (invitees->member_ids, manual_emails->guest_emails, missing note)",
+    "FIXED: EventRoleAssignmentRequest model had wrong field names (assignments->role_name+assignees)",
+    "FIXED: ChecklistItemRequest model had wrong field names (label->category+title)",
+    "FIXED: ChecklistToggleRequest model had wrong field names (item_index+completed->item_id)",
+    "FIXED: VolunteerSlotRequest model had wrong field names (label->title, max_signups->needed_count)",
+    "FIXED: VolunteerSignupRequest model had wrong field name (slot_index->slot_id)",
+    "FIXED: PotluckClaimRequest model had wrong field name (item_index->item_id)",
+    "FIXED: LegacyTableConfigRequest model had wrong fields for new API structure",
+    "FIXED: EventPublic model was missing 15+ fields used by routes",
+    "FIXED: generate_memory_tags function call in timeline.py needed updated signature with community context"
+  ],
+  "updated_files": [
+    "/app/backend/models.py",
+    "/app/backend/routes/timeline.py",
+    "/app/backend/tests/test_backend_refactor_regression.py"
+  ],
+  "success_rate": {
+    "backend": "100% (38/38 passed)",
+    "frontend": "Not fully tested due to login form UI issue - backend APIs verified working via direct API calls"
+  },
+  "test_credentials": {
+    "email": "refactor-test@kindred.app",
+    "password": "Test1234!",
+    "role": "host"
+  },
+  "seed_data_creation": "Tests create and cleanup TEST_ prefixed events, announcements, polls, memories, travel plans, and budget plans",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend refactor from monolithic server.py to modular routes/ is complete and all 38 API tests pass. All Pydantic model definitions were corrected to match route implementations. Frontend login form has a UI issue where Sign in tab button click doesn't trigger login API - needs frontend investigation. Direct API calls to /api/auth/login work correctly.",
+  "features_tested": {
+    "passed": [
+      "API root endpoint /api/ returns ready message",
+      "POST /api/auth/login authenticates user successfully",
+      "POST /api/auth/login rejects invalid credentials (401)",
+      "GET /api/auth/me requires authentication (401)",
+      "GET /api/auth/me returns authenticated user data",
+      "GET /api/community/overview returns dashboard data",
+      "GET /api/courtyard/home returns courtyard dashboard",
+      "GET /api/courtyard/structure returns structure data",
+      "GET /api/community/members returns member list",
+      "GET /api/events returns event list",
+      "POST /api/events creates new event",
+      "POST /api/events/{id}/rsvp updates RSVP status",
+      "GET /api/gatherings/templates returns templates",
+      "GET /api/announcements returns announcement list",
+      "POST /api/announcements creates announcement",
+      "GET /api/chat/rooms returns chat rooms",
+      "GET /api/notifications/history returns notifications",
+      "GET /api/notifications/unread-count returns count",
+      "GET /api/polls returns poll list",
+      "POST /api/polls creates new poll",
+      "POST /api/polls/{id}/vote casts vote",
+      "GET /api/subscriptions/plans returns all 5 plans",
+      "GET /api/subscriptions/current returns tier info",
+      "GET /api/subscriptions/feature-check/{key} checks access",
+      "GET /api/timeline/archive returns timeline items",
+      "GET /api/memories returns memory list",
+      "POST /api/memories creates new memory",
+      "GET /api/travel-plans returns travel plans",
+      "POST /api/travel-plans creates travel plan",
+      "GET /api/budget-plans returns budget plans",
+      "POST /api/budget-plans creates budget plan",
+      "GET /api/funds-travel/overview returns combined data",
+      "GET /api/legacy-table/status returns connection status",
+      "GET /api/invites returns invite list",
+      "POST /api/invites creates invite",
+      "GET /api/subyards returns subyard list",
+      "GET /api/kinship returns kinship relationships"
+    ],
+    "failed": []
+  },
+  "rca_of_the_issue": "Multiple Pydantic model definitions in models.py were out of sync with the route implementations in routes/. This was likely caused during the refactor when routes were moved but models weren't updated to match. The most impactful issues were EventCreateRequest missing subyard_id (causing 500 errors on event creation), MemoryCreateRequest missing event_id and category fields, and generate_memory_tags signature change in ai_tagging.py requiring updated route code."
+}

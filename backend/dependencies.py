@@ -461,3 +461,39 @@ async def get_chat_room_for_user(room_id: str, user: dict[str, Any]) -> dict[str
     if not room_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room not found.")
     return room_doc
+
+
+async def get_event_for_user(event_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    from db import events_collection
+
+    event_doc = await events_collection.find_one({"id": event_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not event_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    return event_doc
+
+
+async def get_memory_for_user(memory_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    from db import memories_collection
+
+    memory_doc = await memories_collection.find_one({"id": memory_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not memory_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found.")
+    return memory_doc
+
+
+async def get_thread_for_user(thread_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    from db import threads_collection
+
+    thread_doc = await threads_collection.find_one({"id": thread_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not thread_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legacy thread not found.")
+    return thread_doc
+
+
+async def get_subyard_for_user(subyard_id: str, user: dict[str, Any]) -> dict[str, Any]:
+    from db import subyards_collection
+
+    subyard_doc = await subyards_collection.find_one({"id": subyard_id, "community_id": user["community_id"]}, {"_id": 0})
+    if not subyard_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subyard not found.")
+    return subyard_doc
