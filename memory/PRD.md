@@ -34,9 +34,10 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Funds & Travel page with contribution packages, transaction ledger, event/family budgets, and travel overview
 - Settings page with Legacy Table connection profile and sync preview workflow
 - Polls & Voting: Full community decision-making feature with create/vote/close/delete polls, percentage bars, multi-select support, role-based access control, privacy-safe vote counts
-- Backend APIs for subyards, kinship, timeline archive, travel plans, budget plans, gathering templates/checklists, recurring instances, announcements, chat rooms/messages, funds-travel overview, Legacy Table settings, notifications, and polls
+- Account Deletion (Play Store compliant): Password-confirmed permanent account deletion from Settings. Community owners blocked from deletion until ownership transfer (unless sole member). Sole-owner deletion cascades to remove entire community and all data.
+- Backend APIs for subyards, kinship, timeline archive, travel plans, budget plans, gathering templates/checklists, recurring instances, announcements, chat rooms/messages, funds-travel overview, Legacy Table settings, notifications, polls, and account deletion
 - MongoDB aggregation pipelines for efficient payment calculations
-- Automated regression coverage for notifications, polls, recurrence, announcements, chat, and the broader Digital Courtyard flows
+- Automated regression coverage for notifications, polls, account deletion, recurrence, announcements, chat, and the broader Digital Courtyard flows
 
 ## Prioritized Backlog
 ### P0
