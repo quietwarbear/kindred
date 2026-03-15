@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { DatabaseZap, LockKeyhole, RefreshCcw, Settings2 } from "lucide-react";
+import { CircleUserRound, DatabaseZap, LockKeyhole, RefreshCcw, Settings2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, convertFileToDataUrl } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
 const initialConfig = {
@@ -15,23 +15,41 @@ const initialConfig = {
   sync_relationships: true,
 };
 
-export const SettingsPage = ({ token, user }) => {
+export const SettingsPage = ({ token, user, onSessionRefresh }) => {
   const [statusData, setStatusData] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    full_name: user?.full_name || "",
+    nickname: user?.nickname || "",
+    phone_number: user?.phone_number || "",
+    profile_image_url: user?.profile_image_url || "",
+  });
+  const [profileUpload, setProfileUpload] = useState(null);
   const [configForm, setConfigForm] = useState(initialConfig);
   const [isSaving, setIsSaving] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
-      const payload = await apiRequest("/legacy-table/status", { token });
-      setStatusData(payload);
+      const [legacyPayload, mePayload] = await Promise.all([
+        apiRequest("/legacy-table/status", { token }),
+        apiRequest("/auth/me", { token }),
+      ]);
+      const profileUser = mePayload.user;
+      setStatusData(legacyPayload);
       setConfigForm({
-        base_url: payload.base_url || "",
-        auth_type: payload.auth_type || "api-key",
-        sync_members: payload.sync_preferences?.members ?? true,
-        sync_stories: payload.sync_preferences?.stories ?? true,
-        sync_events: payload.sync_preferences?.events ?? true,
-        sync_relationships: payload.sync_preferences?.relationships ?? true,
+        base_url: legacyPayload.base_url || "",
+        auth_type: legacyPayload.auth_type || "api-key",
+        sync_members: legacyPayload.sync_preferences?.members ?? true,
+        sync_stories: legacyPayload.sync_preferences?.stories ?? true,
+        sync_events: legacyPayload.sync_preferences?.events ?? true,
+        sync_relationships: legacyPayload.sync_preferences?.relationships ?? true,
+      });
+      setProfileForm({
+        full_name: profileUser.full_name || "",
+        nickname: profileUser.nickname || "",
+        phone_number: profileUser.phone_number || "",
+        profile_image_url: profileUser.profile_image_url || profileUser.google_picture || "",
       });
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to load settings.");
@@ -53,6 +71,27 @@ export const SettingsPage = ({ token, user }) => {
       toast.error(error.response?.data?.detail || "Unable to save Legacy Table settings.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const uploadedImage = profileUpload ? await convertFileToDataUrl(profileUpload) : profileForm.profile_image_url;
+      await apiRequest("/auth/profile", {
+        method: "PUT",
+        token,
+        data: { ...profileForm, profile_image_url: uploadedImage || "" },
+      });
+      await onSessionRefresh?.();
+      toast.success("Profile updated.");
+      setProfileUpload(null);
+      loadStatus();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to update profile.");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -82,6 +121,64 @@ export const SettingsPage = ({ token, user }) => {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+        <article className="archival-card" data-testid="settings-profile-card">
+          <div className="flex items-center gap-3">
+            <CircleUserRound className="h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Profile</p>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Member profile</h3>
+            </div>
+          </div>
+          <form className="mt-6 grid gap-4" onSubmit={handleProfileSave}>
+            <div className="flex items-center gap-4">
+              {profileForm.profile_image_url ? (
+                <img alt="Profile" className="h-20 w-20 rounded-full object-cover object-center" data-testid="settings-profile-image" src={profileForm.profile_image_url} />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary" data-testid="settings-profile-avatar-fallback">
+                  {(profileForm.full_name || user?.full_name || "K").slice(0, 1)}
+                </div>
+              )}
+              <label className="flex-1">
+                <span className="field-label">Profile photo / avatar</span>
+                <Input className="field-input pt-3" data-testid="settings-profile-image-input" onChange={(e) => setProfileUpload(e.target.files?.[0] || null)} type="file" accept="image/*" />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="field-label">Full name</span>
+                <Input className="field-input" data-testid="settings-profile-full-name-input" onChange={(e) => setProfileForm((current) => ({ ...current, full_name: e.target.value }))} value={profileForm.full_name} />
+              </label>
+              <label>
+                <span className="field-label">Nickname</span>
+                <Input className="field-input" data-testid="settings-profile-nickname-input" onChange={(e) => setProfileForm((current) => ({ ...current, nickname: e.target.value }))} value={profileForm.nickname} />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="field-label">Email address</span>
+                <Input className="field-input" data-testid="settings-profile-email-input" disabled value={user?.email || ""} />
+              </label>
+              <label>
+                <span className="field-label">Phone number</span>
+                <Input className="field-input" data-testid="settings-profile-phone-input" onChange={(e) => setProfileForm((current) => ({ ...current, phone_number: e.target.value }))} value={profileForm.phone_number} />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className="field-label">Member type</span>
+                <Input className="field-input" data-testid="settings-profile-role-input" disabled value={user?.role || ""} />
+              </label>
+              <label>
+                <span className="field-label">Google profile photo</span>
+                <Input className="field-input" data-testid="settings-profile-google-photo-input" disabled value={user?.google_picture || "Not connected"} />
+              </label>
+            </div>
+            <Button className="rounded-full" data-testid="settings-profile-save-button" disabled={isSavingProfile} type="submit">
+              {isSavingProfile ? "Saving..." : "Save profile"}
+            </Button>
+          </form>
+        </article>
+
         <article className="archival-card" data-testid="settings-legacy-status-card">
           <div className="flex items-center gap-3">
             <DatabaseZap className="h-5 w-5 text-primary" />

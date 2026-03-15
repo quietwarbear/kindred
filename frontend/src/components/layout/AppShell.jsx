@@ -123,7 +123,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
-              <Route element={<SettingsPage token={token} user={user} />} path="settings" />
+              <Route element={<SettingsPage onSessionRefresh={onSessionRefresh} token={token} user={user} />} path="settings" />
               <Route
                 element={<MembersPage onSessionRefresh={onSessionRefresh} token={token} user={user} />}
                 path="members"

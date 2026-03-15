@@ -39,6 +39,7 @@ const ProtectedApp = ({ session, onLogout, onSessionRefresh }) => {
 };
 
 function App() {
+  const hasGoogleSessionId = window.location.hash?.includes("session_id=");
   const [session, setSession] = useState(() => {
     try {
       const saved = localStorage.getItem(APP_STATE_KEY);
@@ -50,23 +51,32 @@ function App() {
   const [isLoading, setIsLoading] = useState(Boolean(session?.token));
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
 
-  useEffect(() => {
-    if (!session?.token) {
-      setIsLoading(false);
-      setHasCheckedSession(true);
-      return;
-    }
+  const handleAuthSuccess = (payload) => {
+    const nextSession = {
+      token: payload.token,
+      user: payload.user,
+      community: payload.community,
+    };
+    setSession(nextSession);
+    localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
+  };
 
+  useEffect(() => {
     const validateSession = async () => {
       try {
-        const payload = await apiRequest("/auth/me", { token: session.token });
-        const nextSession = {
-          token: session.token,
-          user: payload.user,
-          community: payload.community,
-        };
-        setSession(nextSession);
-        localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
+        const sessionId = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session_id");
+        if (sessionId) {
+          const payload = await apiRequest("/auth/google/session", {
+            method: "POST",
+            data: { session_id: sessionId },
+          });
+          handleAuthSuccess(payload);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+
+        const payload = await apiRequest("/auth/me", session?.token ? { token: session.token } : {});
+        handleAuthSuccess({ ...payload, token: payload.token || session?.token });
       } catch {
         localStorage.removeItem(APP_STATE_KEY);
         setSession(null);
@@ -78,16 +88,6 @@ function App() {
 
     validateSession();
   }, [session?.token]);
-
-  const handleAuthSuccess = (payload) => {
-    const nextSession = {
-      token: payload.token,
-      user: payload.user,
-      community: payload.community,
-    };
-    setSession(nextSession);
-    localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
-  };
 
   const handleLogout = () => {
     localStorage.removeItem(APP_STATE_KEY);
@@ -104,6 +104,10 @@ function App() {
     () => <AuthPage onAuthSuccess={handleAuthSuccess} session={session} />,
     [session]
   );
+
+  if (hasGoogleSessionId && !session?.token) {
+    return <FullScreenMessage copy="Completing your Google sign-in." title="Opening Kindred" />;
+  }
 
   if (isLoading && !hasCheckedSession) {
     return <FullScreenMessage copy="Restoring your private community space." title="Opening the digital hearth" />;

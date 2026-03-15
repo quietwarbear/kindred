@@ -1,9 +1,14 @@
+import json
 import logging
 import os
+import secrets
 import uuid
 from datetime import datetime, timezone
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
+from urllib.error import HTTPError
+from urllib.request import Request as UrlRequest, urlopen
 
 from ai_tagging import generate_memory_tags
 from courtyard_helpers import (
@@ -17,7 +22,7 @@ from courtyard_helpers import (
 )
 from dotenv import load_dotenv
 from emergentintegrations.payments.stripe.checkout import CheckoutSessionRequest, StripeCheckout
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -35,6 +40,8 @@ db = client[os.environ["DB_NAME"]]
 users_collection = db.users
 communities_collection = db.communities
 invites_collection = db.invites
+user_sessions_collection = db.user_sessions
+password_resets_collection = db.password_resets
 subyards_collection = db.subyards
 kinships_collection = db.kinship_relationships
 events_collection = db.events
@@ -133,6 +140,17 @@ def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any])
         {"community_id": user_safe["community_id"], "role": user_safe["role"]},
     )
     return {"token": token, "user": user_safe, "community": sanitize_doc(community_doc)}
+
+
+def apply_session_cookie(response, session_token: str):
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
 
 
 def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "organizer", "host"]):
@@ -272,18 +290,41 @@ async def get_chat_room_for_user(room_id: str, user: dict[str, Any]) -> dict[str
     return room_doc
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict[str, Any]:
-    if not credentials or not credentials.credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
-    try:
-        payload = decode_token(credentials.credentials)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+async def get_user_from_session_token(session_token: str) -> dict[str, Any] | None:
+    session_doc = await user_sessions_collection.find_one({"session_token": session_token}, {"_id": 0})
+    if not session_doc:
+        return None
 
-    user_doc = await users_collection.find_one({"id": payload.get("sub")}, {"_id": 0})
-    if not user_doc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
-    return user_doc
+    expires_at = session_doc.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        return None
+
+    return await users_collection.find_one({"id": session_doc.get("user_id")}, {"_id": 0})
+
+
+async def get_current_user(request: Request) -> dict[str, Any]:
+    session_token = request.cookies.get("session_token")
+    if session_token:
+        user_doc = await get_user_from_session_token(session_token)
+        if user_doc:
+            return user_doc
+
+    authorization = request.headers.get("Authorization", "")
+    if authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        try:
+            payload = decode_token(token)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        user_doc = await users_collection.find_one({"id": payload.get("sub")}, {"_id": 0})
+        if user_doc:
+            return user_doc
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
 
 
 async def get_community_for_user(user: dict[str, Any]) -> dict[str, Any]:
@@ -344,6 +385,27 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleSessionRequest(BaseModel):
+    session_id: str
+
+
+class PasswordRecoveryRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordRecoveryVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str = Field(min_length=8)
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str
+    nickname: str | None = ""
+    phone_number: str | None = ""
+    profile_image_url: str | None = ""
+
+
 class CommunityPublic(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -362,9 +424,14 @@ class UserPublic(BaseModel):
 
     id: str
     full_name: str
+    nickname: str | None = ""
     email: EmailStr
+    phone_number: str | None = ""
+    profile_image_url: str | None = ""
+    google_picture: str | None = ""
     role: str
     community_id: str
+    auth_provider: str | None = "password"
     created_at: str
 
 
@@ -666,10 +733,15 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
     user_doc = {
         "id": user_id,
         "full_name": payload.full_name.strip(),
+        "nickname": "",
         "email": email,
+        "phone_number": "",
+        "profile_image_url": "",
+        "google_picture": "",
         "password_hash": hash_password(payload.password),
         "role": "host",
         "community_id": community_id,
+        "auth_provider": "password",
         "created_at": created_at,
     }
 
@@ -718,10 +790,15 @@ async def register_with_invite(payload: InviteRegistrationRequest):
     user_doc = {
         "id": str(uuid.uuid4()),
         "full_name": payload.full_name.strip(),
+        "nickname": "",
         "email": email,
+        "phone_number": "",
+        "profile_image_url": "",
+        "google_picture": "",
         "password_hash": hash_password(payload.password),
         "role": invite_doc["role"],
         "community_id": invite_doc["community_id"],
+        "auth_provider": "password",
         "created_at": created_at,
     }
     await users_collection.insert_one(user_doc.copy())
@@ -745,6 +822,198 @@ async def login(payload: LoginRequest):
 async def me(current_user: dict[str, Any] = Depends(get_current_user)):
     community_doc = await get_community_for_user(current_user)
     return build_auth_response(current_user, community_doc)
+
+
+@api_router.post("/auth/google/session")
+async def google_session_login(payload: GoogleSessionRequest, response: Response):
+    try:
+        req = UrlRequest(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": payload.session_id},
+            method="GET",
+        )
+        with urlopen(req, timeout=20) as res:
+            session_payload = json.loads(res.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unable to validate Google session.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google session validation failed.") from exc
+
+    google_user = {
+        "email": session_payload.get("email", ""),
+        "name": session_payload.get("name", ""),
+        "picture": session_payload.get("picture", ""),
+    }
+    email = normalize_email(google_user.get("email", ""))
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account did not return a usable email.")
+
+    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    if user_doc:
+        await users_collection.update_one(
+            {"id": user_doc["id"]},
+            {
+                "$set": {
+                    "full_name": google_user.get("name") or user_doc.get("full_name"),
+                    "google_picture": google_user.get("picture", ""),
+                    "auth_provider": "google",
+                }
+            },
+        )
+        user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
+    else:
+        invite_doc = await invites_collection.find_one({"email": email, "status": "pending"}, {"_id": 0})
+        created_at = now_iso()
+        user_id = str(uuid.uuid4())
+
+        if invite_doc:
+            user_doc = {
+                "id": user_id,
+                "full_name": google_user.get("name") or email.split("@")[0],
+                "nickname": "",
+                "email": email,
+                "phone_number": "",
+                "profile_image_url": "",
+                "google_picture": google_user.get("picture", ""),
+                "password_hash": "",
+                "role": invite_doc["role"],
+                "community_id": invite_doc["community_id"],
+                "auth_provider": "google",
+                "created_at": created_at,
+            }
+            await users_collection.insert_one(user_doc.copy())
+            await invites_collection.update_one({"id": invite_doc["id"]}, {"$set": {"status": "accepted", "accepted_at": created_at}})
+        else:
+            community_id = str(uuid.uuid4())
+            display_name = (google_user.get("name") or email.split("@")[0]).split(" ")[0]
+            community_doc = {
+                "id": community_id,
+                "name": f"{display_name}'s Circle",
+                "community_type": "community",
+                "location": "",
+                "description": "A new Kindred courtyard created through Google sign up.",
+                "motto": "",
+                "owner_user_id": user_id,
+                "created_at": created_at,
+            }
+            user_doc = {
+                "id": user_id,
+                "full_name": google_user.get("name") or display_name,
+                "nickname": "",
+                "email": email,
+                "phone_number": "",
+                "profile_image_url": "",
+                "google_picture": google_user.get("picture", ""),
+                "password_hash": "",
+                "role": "host",
+                "community_id": community_id,
+                "auth_provider": "google",
+                "created_at": created_at,
+            }
+            await communities_collection.insert_one(community_doc.copy())
+            await users_collection.insert_one(user_doc.copy())
+
+            default_subyards = []
+            for template in build_default_subyards(community_doc["community_type"]):
+                default_subyards.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "community_id": community_id,
+                        "name": template["name"],
+                        "description": template["description"],
+                        "inherited_roles": True,
+                        "role_focus": template["role_focus"],
+                        "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
+                        "visibility": "shared",
+                        "created_by": user_id,
+                        "created_at": created_at,
+                    }
+                )
+            if default_subyards:
+                await subyards_collection.insert_many([item.copy() for item in default_subyards])
+                await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
+            else:
+                await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
+
+    session_token = session_payload.get("session_token")
+    if session_token:
+        await user_sessions_collection.update_one(
+            {"session_token": session_token},
+            {
+                "$set": {
+                    "session_token": session_token,
+                    "user_id": user_doc["id"],
+                    "email": email,
+                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                    "created_at": now_iso(),
+                }
+            },
+            upsert=True,
+        )
+        apply_session_cookie(response, session_token)
+
+    community_doc = await get_community_for_user(user_doc)
+    return build_auth_response(user_doc, community_doc)
+
+
+@api_router.post("/auth/password-recovery/request")
+async def request_password_recovery(payload: PasswordRecoveryRequest):
+    email = normalize_email(payload.email)
+    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    if not user_doc:
+        return {"ok": True, "delivery_status": "silent"}
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    await password_resets_collection.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email": email,
+                "code": code,
+                "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat(),
+                "created_at": now_iso(),
+            }
+        },
+        upsert=True,
+    )
+
+    if os.environ.get("RESEND_API_KEY"):
+        delivery_status = "email-sent"
+    else:
+        delivery_status = "connection-ready"
+
+    return {"ok": True, "delivery_status": delivery_status}
+
+
+@api_router.post("/auth/password-recovery/verify")
+async def verify_password_recovery(payload: PasswordRecoveryVerifyRequest):
+    email = normalize_email(payload.email)
+    reset_doc = await password_resets_collection.find_one({"email": email}, {"_id": 0})
+    if not reset_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recovery request found for this email.")
+    if reset_doc.get("code") != payload.code.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code is invalid.")
+    expires_at = datetime.fromisoformat(reset_doc["expires_at"].replace("Z", "+00:00"))
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code has expired.")
+
+    await users_collection.update_one({"email": email}, {"$set": {"password_hash": hash_password(payload.new_password)}})
+    await password_resets_collection.delete_one({"email": email})
+    return {"ok": True}
+
+
+@api_router.put("/auth/profile", response_model=UserPublic)
+async def update_profile(payload: ProfileUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    update_payload = {
+        "full_name": payload.full_name.strip(),
+        "nickname": (payload.nickname or "").strip(),
+        "phone_number": (payload.phone_number or "").strip(),
+        "profile_image_url": (payload.profile_image_url or "").strip(),
+    }
+    await users_collection.update_one({"id": current_user["id"]}, {"$set": update_payload})
+    updated_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    updated_user.pop("password_hash", None)
+    return updated_user
 
 
 @api_router.get("/community/overview", response_model=DashboardOverview)

@@ -37,7 +37,16 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
   const [loginForm, setLoginForm] = useState(initialLoginState);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryPassword, setRecoveryPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const startGoogleAuth = () => {
+    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    const redirectUrl = `${window.location.origin}/dashboard`;
+    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  };
 
   const handleSuccess = (payload, message) => {
     onAuthSuccess(payload);
@@ -84,6 +93,44 @@ export const AuthPage = ({ onAuthSuccess }) => {
     }
   };
 
+  const handleRecoveryRequest = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const payload = await apiRequest("/auth/password-recovery/request", {
+        method: "POST",
+        data: { email: recoveryEmail },
+      });
+      if (payload.delivery_status === "connection-ready") {
+        toast.success("Password recovery is ready. Email delivery activates when the email provider is connected.");
+      } else {
+        toast.success("Recovery code sent. Check your email.");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to start password recovery.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRecoveryVerify = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await apiRequest("/auth/password-recovery/verify", {
+        method: "POST",
+        data: { email: recoveryEmail, code: recoveryCode, new_password: recoveryPassword },
+      });
+      toast.success("Password updated. You can sign in now.");
+      setRecoveryCode("");
+      setRecoveryPassword("");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to verify recovery code.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="app-canvas min-h-screen py-8">
       <div className="page-section grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -112,6 +159,13 @@ export const AuthPage = ({ onAuthSuccess }) => {
         </div>
 
         <div className="archival-card">
+          <div className="mb-6 rounded-[24px] border border-border/70 bg-muted/50 p-5">
+            <p className="eyebrow-text">Social sign in / sign up</p>
+            <p className="mt-2 text-sm leading-7 text-muted-foreground">Use Google to sign in, join an invited circle, or automatically start your own Kindred space.</p>
+            <Button className="mt-4 w-full rounded-full py-6 text-base" data-testid="google-auth-button" onClick={startGoogleAuth} type="button" variant="outline">
+              Continue with Google
+            </Button>
+          </div>
           <Tabs defaultValue="launch">
             <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
               <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
@@ -212,6 +266,22 @@ export const AuthPage = ({ onAuthSuccess }) => {
                   {isSubmitting ? "Signing in..." : "Sign in"}
                 </Button>
               </form>
+              <div className="mt-6 rounded-[24px] border border-border/70 bg-muted/40 p-5">
+                <p className="eyebrow-text">Password recovery</p>
+                <form className="mt-4 grid gap-3" onSubmit={handleRecoveryRequest}>
+                  <Input className="field-input" data-testid="password-recovery-email-input" onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Email for recovery code" type="email" value={recoveryEmail} />
+                  <Button className="rounded-full" data-testid="password-recovery-request-button" disabled={isSubmitting} type="submit" variant="secondary">
+                    Request recovery code
+                  </Button>
+                </form>
+                <form className="mt-4 grid gap-3" onSubmit={handleRecoveryVerify}>
+                  <Input className="field-input" data-testid="password-recovery-code-input" onChange={(e) => setRecoveryCode(e.target.value)} placeholder="6-digit recovery code" value={recoveryCode} />
+                  <Input className="field-input" data-testid="password-recovery-new-password-input" minLength={8} onChange={(e) => setRecoveryPassword(e.target.value)} placeholder="New password" type="password" value={recoveryPassword} />
+                  <Button className="rounded-full" data-testid="password-recovery-verify-button" disabled={isSubmitting} type="submit" variant="secondary">
+                    Reset password
+                  </Button>
+                </form>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

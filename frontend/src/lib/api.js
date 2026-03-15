@@ -9,6 +9,7 @@ export const apiRequest = async (path, { method = "GET", data, token, params } =
     url: `${API_URL}${path}`,
     data,
     params,
+    withCredentials: true,
     headers: token
       ? {
           Authorization: `Bearer ${token}`,
