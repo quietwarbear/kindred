@@ -11,6 +11,8 @@ import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
 import { GatheringsPage } from "@/components/GatheringsPage";
 import { HomePage } from "@/components/HomePage";
+import { KinshipMapPage } from "@/components/KinshipMapPage";
+import { LegacyThreadsPage } from "@/components/LegacyThreadsPage";
 import { MemoryVaultPage } from "@/components/MemoryVaultPage";
 import { MembersPage } from "@/components/MembersPage";
 import { PollsPage } from "@/components/PollsPage";
@@ -28,6 +30,8 @@ const navItems = [
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline" },
   { label: "Gatherings", path: "/gatherings" },
+  { label: "Legacy Threads", path: "/legacy-threads" },
+  { label: "Kinship Map", path: "/kinship-map" },
   { label: "Polls", path: "/polls" },
   { label: "Funds & Travel", path: "/funds-travel" },
   { label: "Subscription", path: "/subscription" },
@@ -164,6 +168,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 path="members"
               />
               <Route element={<MemoryVaultPage token={token} user={user} />} path="memories" />
+              <Route element={<LegacyThreadsPage token={token} />} path="legacy-threads" />
+              <Route element={<KinshipMapPage token={token} />} path="kinship-map" />
               <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
               <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />
               <Route element={<EventsPage token={token} user={user} />} path="events" />

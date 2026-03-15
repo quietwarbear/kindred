@@ -255,6 +255,50 @@ async def list_kinship(current_user: dict[str, Any] = Depends(get_current_user))
     return {"relationships": relationships}
 
 
+@router.get("/kinship/graph")
+async def kinship_graph(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Return kinship data formatted for network graph visualization."""
+    community_id = current_user["community_id"]
+    relationships = await kinships_collection.find(
+        {"community_id": community_id}, {"_id": 0}
+    ).to_list(500)
+
+    members = await users_collection.find(
+        {"community_id": community_id},
+        {"_id": 0, "id": 1, "full_name": 1, "role": 1},
+    ).to_list(500)
+
+    # Build nodes from unique names in relationships + registered members
+    node_map = {}
+    for m in members:
+        node_map[m["full_name"]] = {"id": m["full_name"], "group": "member", "role": m.get("role", "member")}
+    for rel in relationships:
+        for name in [rel["person_name"], rel["related_to_name"]]:
+            if name not in node_map:
+                node_map[name] = {"id": name, "group": "kinship", "role": "kinship"}
+
+    # Build links
+    links = []
+    for rel in relationships:
+        links.append({
+            "source": rel["person_name"],
+            "target": rel["related_to_name"],
+            "label": rel["relationship_type"],
+            "kinship_id": rel["id"],
+        })
+
+    # Get relationship types for legend
+    rel_types = sorted({rel["relationship_type"] for rel in relationships})
+
+    return {
+        "nodes": list(node_map.values()),
+        "links": links,
+        "relationship_types": rel_types,
+        "total_nodes": len(node_map),
+        "total_links": len(links),
+    }
+
+
 @router.post("/kinship")
 async def create_kinship(payload: KinshipCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     relationship_doc = {

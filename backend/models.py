@@ -278,7 +278,9 @@ class MemoryPublic(BaseModel):
 class ThreadCreateRequest(BaseModel):
     title: str = Field(min_length=1)
     body: str = ""
-    thread_type: str = "story"
+    category: str = "oral-history"
+    elder_name: str = ""
+    voice_note_data_url: str = ""
     tags: list[str] = Field(default_factory=list)
 
 
@@ -288,7 +290,10 @@ class ThreadPublic(BaseModel):
     community_id: str
     title: str
     body: str = ""
-    thread_type: str = "story"
+    category: str = "oral-history"
+    elder_name: str = ""
+    voice_note_data_url: str = ""
+    author_name: str = ""
     tags: list[str] = Field(default_factory=list)
     created_by_name: str = ""
     created_by_id: str = ""
