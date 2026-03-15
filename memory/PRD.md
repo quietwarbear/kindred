@@ -4,56 +4,49 @@
 Build "Kindred," a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build.
 
 ## Architecture
-- **Frontend**: React SPA (PWA), Tailwind CSS, Shadcn UI, react-force-graph-2d
+- **Frontend**: React SPA (PWA + Capacitor native)
 - **Backend**: FastAPI + MongoDB (11 modular route files)
-- **Auth**: JWT + Google OAuth
-- **Payments**: Stripe (web) + RevenueCat (mobile iOS/Android, configured)
+- **Auth**: JWT + Google OAuth + native push tokens
+- **Payments**: Stripe (web) + RevenueCat (mobile, configured)
 - **AI**: Gemini via Emergent LLM Key
-- **Bundle ID**: `com.ubuntumarket.kindred` (Apple)
+- **Bundle ID**: `com.ubuntumarket.kindred`
+- **Native**: Capacitor 6 (iOS + Android)
 
 ## All Implemented Features
 
 ### Core Infrastructure
-- Full auth (JWT, Google OAuth, password recovery, account deletion)
 - Modular backend (server.py → 11 route files)
-- PWA: service worker, web manifest, offline fallback, install prompt
+- Full auth (JWT, Google OAuth, password recovery, account deletion)
 - Multi-courtyard membership + community switcher
+- PWA: service worker, manifest, offline fallback, install prompt
+- Capacitor native wrapper (iOS + Android)
+
+### Native Mobile (Capacitor)
+- Native bridge with web fallbacks (camera, push, haptics, status bar, keyboard)
+- Push notification registration + token storage
+- Camera access for Memory Vault photos
+- Haptic feedback on key interactions
+- App lifecycle management (back button, URL open)
+- Status bar + splash screen configuration
+- Build scripts + deployment guide (NATIVE_DEPLOY.md)
 
 ### Communication & Activity
-- Activity Feed (paginated, filtered by type)
-- Announcements (inline edit/delete)
-- Chat rooms (attachments, pin, delete)
-- Notifications (bell, badge, history, browser push)
+- Activity Feed (paginated, type-filtered)
+- Announcements (inline edit/delete), Chat rooms, Notifications
+- Browser + native push notifications
 
-### Events & Gatherings
+### Events, Timeline, Memory & Legacy
 - Template-based events with inline editing & deletion
-- RSVP, agenda, volunteers, potluck, invites, Zoom, reminders
-
-### Timeline, Memory & Legacy
-- Timeline: search, type filters, CSV export
-- Memory Vault: photos, voice recording (MediaRecorder), AI auto-tagging
-- AI tagging: sentiment + mood analysis, batch re-tagging
-- Legacy Threads: 7 categories, voice notes, threaded comments
-
-### Kinship & Community
-- Kinship Map: force-directed network graph
-- Relationship-based invitation shortcuts
-- Courtyards & Subyards with full CRUD
+- Timeline with search, filters, CSV export
+- Memory Vault with AI tagging, voice recording, native camera
+- Legacy Threads with 7 categories and voice notes
+- Kinship Map with network graph + invite shortcuts
 
 ### Finance & Billing
-- Stripe: one-time payments + 5-tier subscriptions
-- Add-on marketplace (Storage, Templates, SMS)
-- RevenueCat: full integration (webhook, offerings, restore, receipt validation, config)
-- Bundle ID: com.ubuntumarket.kindred
-
-### PWA
-- Service worker with offline caching
-- Web App Manifest (standalone, shortcuts)
-- Offline fallback page
-- Install prompt banner
-- Apple meta tags (web-app-capable, touch icons)
+- Stripe: one-time + subscriptions + add-on marketplace
+- RevenueCat: webhook, offerings, restore, receipt validation
+- 5-tier subscription system
 
 ## Remaining Backlog
 - Community Mood Board (sentiment trend visualization)
 - Weekly community digest emails
-- Native mobile wrapper (React Native / Capacitor)
