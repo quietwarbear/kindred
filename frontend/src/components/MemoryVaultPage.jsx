@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { hapticSuccess, takePhoto, isNative } from "@/lib/native-bridge";
 
 const initialForm = { description: "", event_id: "", title: "" };
 
@@ -17,6 +18,7 @@ export const MemoryVaultPage = ({ token }) => {
   const [imageFile, setImageFile] = useState(null);
   const [voiceFile, setVoiceFile] = useState(null);
   const [voiceDataUrl, setVoiceDataUrl] = useState(null);
+  const [nativePhotoUrl, setNativePhotoUrl] = useState(null);
   const [commentDrafts, setCommentDrafts] = useState({});
   const [editingMemory, setEditingMemory] = useState(null);
   const [deletingMemoryId, setDeletingMemoryId] = useState("");
@@ -49,12 +51,13 @@ export const MemoryVaultPage = ({ token }) => {
         convertFileToDataUrl(imageFile),
         convertFileToDataUrl(voiceFile),
       ]);
+      const finalImage = nativePhotoUrl || imageDataUrl;
       const finalVoice = voiceDataUrl || voiceFileDataUrl;
       const payload = await apiRequest("/memories", {
         method: "POST",
         data: {
           ...form,
-          image_data_url: imageDataUrl || undefined,
+          image_data_url: finalImage || undefined,
           voice_note_data_url: finalVoice || undefined,
         },
         token,
@@ -64,6 +67,8 @@ export const MemoryVaultPage = ({ token }) => {
       setImageFile(null);
       setVoiceFile(null);
       setVoiceDataUrl(null);
+      setNativePhotoUrl(null);
+      await hapticSuccess();
       toast.success("Memory saved with tags.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to save this memory.");
@@ -164,6 +169,22 @@ export const MemoryVaultPage = ({ token }) => {
           </label>
           <label>
             <span className="field-label">Photo upload</span>
+            {isNative() && (
+              <Button
+                className="rounded-full mb-2 w-full"
+                data-testid="memories-native-camera"
+                onClick={async () => {
+                  const url = await takePhoto();
+                  if (url) setNativePhotoUrl(url);
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <Camera className="mr-1 h-3.5 w-3.5" /> Take Photo
+              </Button>
+            )}
+            {nativePhotoUrl && <img alt="Preview" className="mb-2 rounded-xl max-h-32 object-cover" src={nativePhotoUrl} />}
             <Input className="field-input pt-3" data-testid="memories-image-input" onChange={(e) => setImageFile(e.target.files?.[0] || null)} type="file" accept="image/*" />
           </label>
           <div className="space-y-2">

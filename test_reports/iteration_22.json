@@ -1,0 +1,150 @@
+{
+  "summary": "Capacitor Native Wrapper Setup Test Complete - Backend: 23/23 passed (100%), Frontend: All flows verified. Push token storage, RevenueCat config/offerings/restore endpoints, Capacitor config, native bridge, service worker registration, App.js native initialization all working. Native camera button correctly hidden on web (isNative()=false). All regression tests passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_capacitor_native.py",
+    "/app/test_reports/pytest/capacitor_native_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_capacitor_native.py"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 passed)",
+    "frontend": "100% - All Capacitor native wrapper features verified"
+  },
+  "test_credentials": {
+    "email": "refactor-test@kindred.app",
+    "password": "Test1234!",
+    "role": "host"
+  },
+  "seed_data_creation": "No new seed data created - used existing test data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Capacitor native wrapper setup fully tested. Native bridge uses dynamic imports so Capacitor plugins don't break in web mode (isNative() returns false on web). The 'Take Photo' button on Memory Vault only shows when isNative() is true. Push token storage saves to user's push_tokens array. RevenueCat endpoints are configured with bundle_id=com.ubuntumarket.kindred.",
+  "features_tested": {
+    "push_token_storage": [
+      "POST /api/auth/push-token saves device token to user's push_tokens array",
+      "Returns ok=true on success",
+      "Returns ok=false if push_token is empty",
+      "Requires authentication (401 without token)"
+    ],
+    "revenuecat_config": [
+      "GET /api/revenuecat/config returns bundle_id=com.ubuntumarket.kindred",
+      "Returns tier_mapping with seedling, sapling, oak, redwood, elder_grove, premium",
+      "Returns entitlement_ids list",
+      "Returns webhook_url=/api/revenuecat/webhook",
+      "Returns platform=ios",
+      "Public endpoint - no auth required"
+    ],
+    "revenuecat_offerings": [
+      "GET /api/revenuecat/offerings endpoint exists",
+      "Returns bundle_id and subscriber data",
+      "Requires authentication"
+    ],
+    "revenuecat_restore": [
+      "POST /api/revenuecat/restore endpoint exists",
+      "Returns restored, tier, status, entitlements fields",
+      "Requires authentication"
+    ],
+    "capacitor_config": [
+      "capacitor.config.json has appId=com.ubuntumarket.kindred",
+      "appName=Kindred",
+      "webDir=build",
+      "Plugin settings for SplashScreen, StatusBar, PushNotifications, Keyboard"
+    ],
+    "native_bridge": [
+      "native-bridge.js exports isNative (returns false on web)",
+      "exports takePhoto (no-ops on web)",
+      "exports registerPush (no-ops on web)",
+      "exports hapticLight, hapticMedium, hapticSuccess (no-ops on web)",
+      "exports configureStatusBar (no-ops on web)",
+      "exports setupAppListeners (no-ops on web)",
+      "exports setupKeyboardListeners (no-ops on web)",
+      "Dynamic imports prevent Capacitor errors on web"
+    ],
+    "service_worker": [
+      "index.js imports and calls registerServiceWorker",
+      "sw-register.js registers /sw.js",
+      "Service worker accessible at /sw.js"
+    ],
+    "app_js_native_init": [
+      "App.js imports configureStatusBar, registerPush, setupAppListeners, isNative",
+      "useEffect calls native initialization when isNative() is true",
+      "registerPush sends push_token to /api/auth/push-token"
+    ],
+    "pwa_manifest": [
+      "/manifest.json accessible with 200 OK",
+      "id=com.ubuntumarket.kindred (bundle ID)",
+      "name=Kindred, short_name=Kindred",
+      "display=standalone, theme_color=#1a1a2e"
+    ],
+    "frontend_no_capacitor_errors": [
+      "Page loads without Capacitor import errors",
+      "Console shows 0 Capacitor-related errors",
+      "All pages navigate correctly"
+    ],
+    "native_camera_hidden_on_web": [
+      "Take Photo button (data-testid='memories-native-camera') NOT visible on web",
+      "isNative() correctly returns false on web"
+    ],
+    "regression": [
+      "Login works with test credentials",
+      "Activity Feed loads with 18 activities",
+      "Gatherings page loads with event templates",
+      "Timeline/Memory Vault loads with form",
+      "Kinship Map loads with 5 people, 3 connections",
+      "Subscription page loads with pricing tiers and Add-ons section",
+      "GET /api/memories returns array",
+      "GET /api/events returns array",
+      "GET /api/kinship/graph returns nodes and links"
+    ]
+  },
+  "api_endpoints_verified": {
+    "push_token": [
+      "POST /api/auth/push-token - 200 OK (auth required)"
+    ],
+    "revenuecat": [
+      "GET /api/revenuecat/config - 200 OK (public)",
+      "GET /api/revenuecat/offerings - 200 OK (auth required)",
+      "POST /api/revenuecat/restore - 200 OK (auth required)"
+    ],
+    "pwa_static_files": [
+      "GET /manifest.json - 200 OK"
+    ],
+    "regression": [
+      "POST /api/auth/login - 200 OK",
+      "GET /api/auth/me - 200 OK",
+      "GET /api/activity-feed - 200 OK",
+      "GET /api/events - 200 OK",
+      "GET /api/memories - 200 OK",
+      "GET /api/kinship/graph - 200 OK",
+      "GET /api/subscriptions/plans - 200 OK",
+      "GET /api/addons/catalog - 200 OK"
+    ]
+  },
+  "screenshots": [
+    "/app/test_reports/playwright_iter22/landing_page.jpeg",
+    "/app/test_reports/playwright_iter22/auth_page.jpeg",
+    "/app/test_reports/playwright_iter22/after_login.jpeg",
+    "/app/test_reports/playwright_iter22/activity_feed.jpeg",
+    "/app/test_reports/playwright_iter22/gatherings.jpeg",
+    "/app/test_reports/playwright_iter22/timeline.jpeg",
+    "/app/test_reports/playwright_iter22/kinship.jpeg",
+    "/app/test_reports/playwright_iter22/subscription.jpeg"
+  ],
+  "notes": {
+    "native_features_on_web": "Native Capacitor APIs are no-ops on web by design - isNative() returns false, all native functions gracefully return without action",
+    "native_camera_button": "The Take Photo button (data-testid='memories-native-camera') only renders when isNative() returns true, so it won't appear in browser testing - verified correctly hidden",
+    "revenuecat_subscriber": "RevenueCat offerings/restore may return error if subscriber doesn't exist in RevenueCat dashboard - this is expected behavior"
+  }
+}
