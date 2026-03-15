@@ -4,22 +4,22 @@
 Build "Kindred," a private ecosystem for families, churches, and intentional communities to gather, plan, remember, and build. A Digital Courtyard layout with courtyards/subyards, kinship mapping, smart gathering planning, timeline archive, shared funds/travel, and Legacy Table connection settings.
 
 ## Architecture
-- **Frontend**: React SPA, Tailwind CSS, Shadcn UI
+- **Frontend**: React SPA, Tailwind CSS, Shadcn UI, react-force-graph-2d
 - **Backend**: FastAPI + MongoDB (modular router-based structure)
 - **Auth**: JWT + Google OAuth
-- **Payments**: Stripe (test key in env) — one-time checkout + subscription tiers
+- **Payments**: Stripe (web) + RevenueCat (mobile, infrastructure ready)
+- **AI**: Gemini via Emergent LLM Key (auto-tagging, sentiment, mood)
 
-## Backend Structure (Refactored - Mar 2026)
+## Backend Structure
 ```
 /app/backend/
-├── server.py           # ~65 lines - Clean orchestrator
+├── server.py           # Clean orchestrator (~70 lines)
 ├── db.py               # Database connection + collections
 ├── models.py           # Pydantic models
 ├── dependencies.py     # Shared helpers, auth, constants
 ├── security.py         # JWT + password hashing
-├── courtyard_helpers.py
-├── ai_tagging.py       # Gemini AI tagging for memories
-└── routes/             # Domain-specific routers (all prefixed /api)
+├── ai_tagging.py       # Gemini AI tagging with sentiment/mood + batch retag
+└── routes/
     ├── activity.py     # Activity feed (paginated, filtered)
     ├── auth.py         # Auth: bootstrap, login, me, google, profile, etc.
     ├── community.py    # Community: overview, courtyard, subyards, kinship, invites, multi-courtyard
@@ -28,86 +28,66 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
     ├── finance.py      # Travel plans, budget plans, payments, stripe webhook
     ├── legacy.py       # Legacy table config/sync
     ├── polls.py        # Polls CRUD, voting, close
+    ├── revenuecat.py   # RevenueCat webhook, receipt validation, status
     ├── subscriptions.py # Plans, current, checkout, cancel, feature-check
-    └── timeline.py     # Timeline archive + search/export, memories CRUD, threads
+    └── timeline.py     # Timeline archive + search/export, memories CRUD, threads, batch retag
 ```
 
-## Implemented Features
+## All Implemented Features
 
-### Core
-- Full auth (JWT, Google OAuth, password recovery)
-- User profiles, settings, notification preferences
+### Core Infrastructure
+- Full auth (JWT, Google OAuth, password recovery, account deletion)
+- Backend refactored: modular router-based architecture
 - 5-step onboarding for new hosts
 - Courtyards & Subyards with full CRUD + inline editing
 - Members, invites, role assignments
 
-### Gatherings
-- Template-based events with recurrence rules
-- RSVP, agenda, volunteer sign-ups, potluck
-- Event invites, Zoom-link support, travel coordination
-- Inline editing & deletion for events
-- One-click reminder sending
-
-### Communication
+### Activity & Communication
+- **Activity Feed**: Dedicated page with type filters, pagination
 - Scoped announcements with inline editing + delete
 - Chat rooms with attachments, pinning, delete
 - Notifications: bell icon, unread badge, dropdown, mark-read, history, preferences
 - Browser push notifications (Web Notifications API)
 
-### Decisions & Finance
+### Gatherings & Events
+- Template-based events with recurrence rules
+- Inline editing & deletion for events
+- RSVP, agenda, volunteer sign-ups, potluck
+- Event invites, Zoom-link support, one-click reminders
+
+### Timeline & Memory Vault
+- Unified timeline with search, type filters, CSV export
+- Memory Vault with photo upload, voice notes, and AI auto-tagging
+- **In-app voice recording** (MediaRecorder API) for memories, stories, threads
+- **Enhanced AI tagging**: sentiment analysis (positive/neutral/reflective/celebratory/somber), mood detection
+- **Batch re-tagging**: "Re-tag all with AI" button for bulk improvement
+- Sentiment and mood badges on memory cards
+
+### Legacy Threads & Kinship
+- **Legacy Threads**: 7 categories, filters, voice notes, threaded comments, elder attribution
+- **Kinship Map**: Interactive force-directed network graph (react-force-graph-2d)
+- Add/delete relationships with type-specific colors and legends
+- Kinship group shortcuts for bulk invitations
+
+### Decisions, Finance & Billing
 - Polls & Voting: create/vote/close/delete, multi-select
-- Stripe checkout + webhooks
+- Stripe checkout + webhooks (one-time and subscriptions)
+- 5-tier subscription system (Seedling → Elder Grove)
 - Budgets + travel plans with CRUD
+- **RevenueCat infrastructure**: webhook handler, receipt validation, tier mapping (ready for mobile deployment)
 
-### Account Management
-- Account deletion (Play Store compliant)
-- Ownership transfer flow
-- Edit/delete for: subyards, kinship, announcements, chat messages, budgets, travel plans
-
-### Subscription Monetization (Feb 2026)
-- 5-tier subscription system
-- Monthly & annual billing with Stripe
-- Feature gating by tier
-
-### Phase 1: Activity & UX Enhancements (Mar 2026)
-- **Activity Feed**: Dedicated page showing all community activity with type filters and pagination
-- **Inline Editing**: Click-to-edit for events (title, description, date, location, format) and memories (title, description)
-- **Event & Memory Deletion**: With confirmation dialogs
-- **Timeline Search**: Full-text search across all timeline items
-- **Timeline Type Filters**: Filter by gathering/memory/story types
-- **Timeline CSV Export**: Download timeline data as CSV with auth
-- **Kinship Group Shortcuts**: API for invite shortcuts based on relationship types
-
-### Phase 2: Legacy & Kinship (Mar 2026)
-- **Kinship Map**: Interactive network graph visualization using react-force-graph-2d
-  - Add/delete relationships with type-specific colors
-  - Force-directed graph on dark canvas with node labels
-  - Color legend for relationship types
-  - Relationship list view with delete
-- **Legacy Threads**: Dedicated page for preserving stories and oral history
-  - 7 categories (Oral History, Sermon Archive, Youth Reflection, Community Dialogue, Family Lore, Migration Story, Recipe/Tradition)
-  - Category filters with colored badges
-  - Voice note support
-  - Threaded comments/responses
-  - Elder/speaker attribution
-
-### Phase 3: Platform Scaling (Mar 2026)
-- **Multi-courtyard Membership**: Users can belong to and switch between multiple communities
-  - `community_ids` array on user docs
-  - Community switcher in sidebar
-  - Join additional communities via invite code while logged in
-  - Switch between communities (refreshes session)
-- **Browser Push Notifications**: Web Notifications API
-  - Permission request on app load
-  - Browser notification when new unread count increases
+### Multi-Courtyard
+- Users can belong to multiple communities
+- Community switcher in sidebar
+- Join additional communities via invite code
+- Switch between communities (session refresh)
 
 ## Prioritized Backlog
 
 ### P1
-- Relationship-based invitation shortcuts (backend endpoint exists, frontend UI needed)
-- Add-on purchases (storage, templates, SMS)
+- Relationship-based invitation shortcuts UI (backend exists)
+- Add-on purchases (storage, templates, SMS credits)
 
 ### P2
-- App Store Connect / Google Play Billing SDK (RevenueCat)
-- Memory Vault voice-note recording (currently upload-only)
-- Advanced AI auto-tagging improvements
+- Full RevenueCat mobile deployment (requires API key configuration)
+- Progressive Web App (PWA) features for mobile use
