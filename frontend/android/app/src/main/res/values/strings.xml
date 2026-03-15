@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kindred</string>
+    <string name="title_activity_main">Kindred</string>
+    <string name="package_name">com.ubuntumarket.kindred</string>
+    <string name="custom_url_scheme">com.ubuntumarket.kindred</string>
+</resources>
