@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, BACKEND_URL, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 const initialMemoryForm = {
   event_id: "",
@@ -28,7 +29,9 @@ export const TimelinePage = ({ token }) => {
   const [storyForm, setStoryForm] = useState(initialStoryForm);
   const [memoryImage, setMemoryImage] = useState(null);
   const [memoryAudio, setMemoryAudio] = useState(null);
+  const [memoryRecording, setMemoryRecording] = useState(null);
   const [storyAudio, setStoryAudio] = useState(null);
+  const [storyRecording, setStoryRecording] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -94,18 +97,20 @@ export const TimelinePage = ({ token }) => {
         convertFileToDataUrl(memoryImage),
         convertFileToDataUrl(memoryAudio),
       ]);
+      const finalVoice = memoryRecording || voice_note_data_url;
       await apiRequest("/memories", {
         method: "POST",
         token,
         data: {
           ...memoryForm,
           image_data_url: image_data_url || undefined,
-          voice_note_data_url: voice_note_data_url || undefined,
+          voice_note_data_url: finalVoice || undefined,
         },
       });
       setMemoryForm({ ...initialMemoryForm, event_id: memoryForm.event_id });
       setMemoryImage(null);
       setMemoryAudio(null);
+      setMemoryRecording(null);
       toast.success("Memory added to the timeline.");
       loadTimeline();
     } catch (error) {
@@ -120,16 +125,18 @@ export const TimelinePage = ({ token }) => {
     setIsSubmitting(true);
     try {
       const voice_note_data_url = await convertFileToDataUrl(storyAudio);
+      const finalVoice = storyRecording || voice_note_data_url;
       await apiRequest("/threads", {
         method: "POST",
         token,
         data: {
           ...storyForm,
-          voice_note_data_url: voice_note_data_url || undefined,
+          voice_note_data_url: finalVoice || undefined,
         },
       });
       setStoryForm(initialStoryForm);
       setStoryAudio(null);
+      setStoryRecording(null);
       toast.success("Story thread added to the archive.");
       loadTimeline();
     } catch (error) {
@@ -182,10 +189,12 @@ export const TimelinePage = ({ token }) => {
               <span className="field-label">Photo</span>
               <Input className="field-input pt-3" data-testid="timeline-memory-image-input" onChange={(e) => setMemoryImage(e.target.files?.[0] || null)} type="file" accept="image/*" />
             </label>
-            <label>
+            <div>
               <span className="field-label">Voice note</span>
+              <div className="mt-1"><VoiceRecorder disabled={isSubmitting} onRecordingComplete={setMemoryRecording} /></div>
+              <p className="mt-2 text-xs text-muted-foreground">Or upload a file:</p>
               <Input className="field-input pt-3" data-testid="timeline-memory-audio-input" onChange={(e) => setMemoryAudio(e.target.files?.[0] || null)} type="file" accept="audio/*" />
-            </label>
+            </div>
             <Button className="rounded-full" data-testid="timeline-memory-submit-button" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : "Save memory to timeline"}
             </Button>
@@ -222,10 +231,12 @@ export const TimelinePage = ({ token }) => {
               <span className="field-label">Thread body</span>
               <Textarea className="field-textarea" data-testid="timeline-story-body-input" onChange={(e) => setStoryForm((current) => ({ ...current, body: e.target.value }))} required value={storyForm.body} />
             </label>
-            <label>
+            <div>
               <span className="field-label">Voice reflection</span>
+              <div className="mt-1"><VoiceRecorder disabled={isSubmitting} onRecordingComplete={setStoryRecording} /></div>
+              <p className="mt-2 text-xs text-muted-foreground">Or upload a file:</p>
               <Input className="field-input pt-3" data-testid="timeline-story-audio-input" onChange={(e) => setStoryAudio(e.target.files?.[0] || null)} type="file" accept="audio/*" />
-            </label>
+            </div>
             <Button className="rounded-full" data-testid="timeline-story-submit-button" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : "Add story thread"}
             </Button>

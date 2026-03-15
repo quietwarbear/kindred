@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 const CATEGORIES = [
   { value: "oral-history", label: "Oral History" },
@@ -33,6 +34,7 @@ export const LegacyThreadsPage = ({ token }) => {
   const [threads, setThreads] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [audioFile, setAudioFile] = useState(null);
+  const [audioRecording, setAudioRecording] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState({});
@@ -55,14 +57,16 @@ export const LegacyThreadsPage = ({ token }) => {
     setIsSubmitting(true);
     try {
       const voice_note_data_url = await convertFileToDataUrl(audioFile);
+      const finalVoice = audioRecording || voice_note_data_url;
       const payload = await apiRequest("/threads", {
         method: "POST",
         token,
-        data: { ...form, voice_note_data_url: voice_note_data_url || undefined },
+        data: { ...form, voice_note_data_url: finalVoice || undefined },
       });
       setThreads((c) => [payload, ...c]);
       setForm(initialForm);
       setAudioFile(null);
+      setAudioRecording(null);
       setShowForm(false);
       toast.success("Legacy thread created.");
     } catch (error) {
@@ -127,10 +131,12 @@ export const LegacyThreadsPage = ({ token }) => {
               <span className="text-xs font-semibold text-muted-foreground">Thread body</span>
               <Textarea className="field-textarea mt-1" data-testid="legacy-body" onChange={(e) => setForm((c) => ({ ...c, body: e.target.value }))} required rows={4} value={form.body} />
             </label>
-            <label className="block sm:col-span-2">
+            <div className="sm:col-span-2 space-y-2">
               <span className="text-xs font-semibold text-muted-foreground">Voice reflection</span>
-              <Input className="field-input mt-1 pt-3" data-testid="legacy-audio" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} type="file" accept="audio/*" />
-            </label>
+              <VoiceRecorder disabled={isSubmitting} onRecordingComplete={setAudioRecording} />
+              <p className="text-xs text-muted-foreground">Or upload a file:</p>
+              <Input className="field-input pt-3" data-testid="legacy-audio" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} type="file" accept="audio/*" />
+            </div>
             <div className="flex gap-2 sm:col-span-2">
               <Button className="rounded-full" data-testid="legacy-submit" disabled={isSubmitting} size="sm" type="submit">
                 {isSubmitting ? "Creating..." : "Create Thread"}

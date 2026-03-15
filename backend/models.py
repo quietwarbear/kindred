@@ -269,6 +269,15 @@ class MemoryPublic(BaseModel):
     memory_type: str = "photo"
     file_url: str = ""
     tags: list[str] = Field(default_factory=list)
+    ai_summary: str = ""
+    sentiment: str = "neutral"
+    mood: str = "warm"
+    event_id: str = ""
+    event_title: str = ""
+    category: str = ""
+    image_data_url: str = ""
+    voice_note_data_url: str = ""
+    created_by: str = ""
     created_by_name: str = ""
     created_by_id: str = ""
     comments: list[dict[str, Any]] = Field(default_factory=list)

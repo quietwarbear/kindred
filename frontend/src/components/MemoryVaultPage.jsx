@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 
 const initialForm = { description: "", event_id: "", title: "" };
 
@@ -15,10 +16,12 @@ export const MemoryVaultPage = ({ token }) => {
   const [form, setForm] = useState(initialForm);
   const [imageFile, setImageFile] = useState(null);
   const [voiceFile, setVoiceFile] = useState(null);
+  const [voiceDataUrl, setVoiceDataUrl] = useState(null);
   const [commentDrafts, setCommentDrafts] = useState({});
   const [editingMemory, setEditingMemory] = useState(null);
   const [deletingMemoryId, setDeletingMemoryId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRetagging, setIsRetagging] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -42,16 +45,17 @@ export const MemoryVaultPage = ({ token }) => {
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const [imageDataUrl, voiceDataUrl] = await Promise.all([
+      const [imageDataUrl, voiceFileDataUrl] = await Promise.all([
         convertFileToDataUrl(imageFile),
         convertFileToDataUrl(voiceFile),
       ]);
+      const finalVoice = voiceDataUrl || voiceFileDataUrl;
       const payload = await apiRequest("/memories", {
         method: "POST",
         data: {
           ...form,
           image_data_url: imageDataUrl || undefined,
-          voice_note_data_url: voiceDataUrl || undefined,
+          voice_note_data_url: finalVoice || undefined,
         },
         token,
       });
@@ -59,6 +63,7 @@ export const MemoryVaultPage = ({ token }) => {
       setForm({ ...initialForm, event_id: form.event_id || events[0]?.id || "" });
       setImageFile(null);
       setVoiceFile(null);
+      setVoiceDataUrl(null);
       toast.success("Memory saved with tags.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to save this memory.");
@@ -109,6 +114,19 @@ export const MemoryVaultPage = ({ token }) => {
     }
   };
 
+  const handleBatchRetag = async () => {
+    setIsRetagging(true);
+    try {
+      const result = await apiRequest("/memories/batch-retag", { method: "POST", token });
+      toast.success(`Re-tagged ${result.updated} memories with improved AI analysis.`);
+      loadMemories();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to re-tag memories.");
+    } finally {
+      setIsRetagging(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="archival-card">
@@ -148,10 +166,12 @@ export const MemoryVaultPage = ({ token }) => {
             <span className="field-label">Photo upload</span>
             <Input className="field-input pt-3" data-testid="memories-image-input" onChange={(e) => setImageFile(e.target.files?.[0] || null)} type="file" accept="image/*" />
           </label>
-          <label>
-            <span className="field-label">Voice note upload</span>
+          <div className="space-y-2">
+            <span className="field-label">Voice note</span>
+            <VoiceRecorder disabled={isSubmitting} onRecordingComplete={setVoiceDataUrl} />
+            <p className="text-xs text-muted-foreground">Or upload a file:</p>
             <Input className="field-input pt-3" data-testid="memories-audio-input" onChange={(e) => setVoiceFile(e.target.files?.[0] || null)} type="file" accept="audio/*" />
-          </label>
+          </div>
           <div className="xl:col-span-2">
             <Button className="rounded-full py-6 text-base" data-testid="memories-submit-button" disabled={isSubmitting || !events.length} type="submit">
               {isSubmitting ? "Saving memory..." : "Save memory with AI tags"}
@@ -161,6 +181,20 @@ export const MemoryVaultPage = ({ token }) => {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+        {memories.length > 0 && (
+          <div className="lg:col-span-2 xl:col-span-3 flex justify-end">
+            <Button
+              className="rounded-full"
+              data-testid="memories-batch-retag"
+              disabled={isRetagging}
+              onClick={handleBatchRetag}
+              size="sm"
+              variant="outline"
+            >
+              <Tags className="mr-1 h-3.5 w-3.5" /> {isRetagging ? "Re-tagging..." : "Re-tag all with AI"}
+            </Button>
+          </div>
+        )}
         {memories.length ? (
           memories.map((memory) => (
             <article className="archival-card overflow-hidden" data-testid={`memory-card-${memory.id}`} key={memory.id}>
@@ -222,6 +256,16 @@ export const MemoryVaultPage = ({ token }) => {
                     ))}
                   </div>
                   <p className="mt-3 text-sm leading-7 text-muted-foreground" data-testid={`memory-summary-${memory.id}`}>{memory.ai_summary}</p>
+                  {(memory.sentiment || memory.mood) && (
+                    <div className="mt-2 flex gap-2" data-testid={`memory-ai-meta-${memory.id}`}>
+                      {memory.sentiment && memory.sentiment !== "neutral" && (
+                        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">{memory.sentiment}</span>
+                      )}
+                      {memory.mood && (
+                        <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">{memory.mood}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {memory.voice_note_data_url ? (
                   <div className="soft-panel" data-testid={`memory-audio-${memory.id}`}>

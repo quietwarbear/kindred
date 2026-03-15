@@ -8,7 +8,7 @@ from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
 SYSTEM_PROMPT = """
 You create culturally respectful memory tags for private communities.
 Return ONLY compact JSON using this exact shape:
-{"tags": ["tag one", "tag two"], "summary": "one sentence summary"}
+{"tags": ["tag one", "tag two"], "summary": "one sentence summary", "sentiment": "positive|neutral|reflective|celebratory|somber", "mood": "one or two word mood"}
 
 Rules:
 - Create 3 to 6 short tags.
@@ -16,6 +16,8 @@ Rules:
 - Prefer relational/community tags like family branch, ministry, worship, reunion, elders, youth, testimony, service, remembrance.
 - Never invent names that are not supported by the input.
 - Summary must be 8 to 18 words.
+- Sentiment must be one of: positive, neutral, reflective, celebratory, somber.
+- Mood is a brief emotional descriptor (e.g., "joyful", "nostalgic", "grateful", "reverent").
 """.strip()
 
 
@@ -56,6 +58,13 @@ def _heuristic_tags(
         "history": "oral history",
         "memory": "memory vault",
         "story": "story thread",
+        "celebration": "celebration",
+        "graduation": "milestone",
+        "wedding": "celebration",
+        "birthday": "birthday",
+        "funeral": "remembrance",
+        "memorial": "remembrance",
+        "baptism": "baptism",
     }
 
     for keyword, tag in keyword_map.items():
@@ -68,9 +77,20 @@ def _heuristic_tags(
     if not tags:
         tags = ["community archive", "shared memory", "legacy"]
 
+    # Simple heuristic sentiment
+    sentiment = "neutral"
+    positive_words = {"joy", "celebrate", "happy", "grateful", "blessed", "wonderful", "love"}
+    reflective_words = {"remember", "reflect", "legacy", "history", "passed", "honor"}
+    if any(w in corpus for w in positive_words):
+        sentiment = "positive"
+    elif any(w in corpus for w in reflective_words):
+        sentiment = "reflective"
+
     return {
         "tags": tags[:6],
         "summary": f"{title or 'Community memory'} preserved for {community_type or 'the community'} archives.",
+        "sentiment": sentiment,
+        "mood": "nostalgic" if sentiment == "reflective" else "warm",
     }
 
 
@@ -115,6 +135,8 @@ Return the JSON only.
         parsed = _clean_json(raw)
         tags = parsed.get("tags", []) if isinstance(parsed, dict) else []
         summary = parsed.get("summary") if isinstance(parsed, dict) else None
+        sentiment = parsed.get("sentiment", "neutral") if isinstance(parsed, dict) else "neutral"
+        mood = parsed.get("mood", "warm") if isinstance(parsed, dict) else "warm"
 
         normalized_tags = []
         for tag in tags:
@@ -124,9 +146,40 @@ Return the JSON only.
         if not normalized_tags:
             return fallback
 
+        valid_sentiments = {"positive", "neutral", "reflective", "celebratory", "somber"}
+        if sentiment not in valid_sentiments:
+            sentiment = "neutral"
+
         return {
             "tags": normalized_tags[:6],
             "summary": summary or fallback["summary"],
+            "sentiment": sentiment,
+            "mood": mood[:30] if mood else "warm",
         }
     except Exception:
         return fallback
+
+
+async def batch_retag_memories(
+    api_key: str,
+    model: str,
+    memories: list[dict],
+    community_name: str,
+    community_type: str,
+) -> list[dict]:
+    """Re-tag a batch of memories with improved AI analysis."""
+    results = []
+    for memory in memories:
+        result = await generate_memory_tags(
+            api_key=api_key,
+            model=model,
+            community_name=community_name,
+            community_type=community_type,
+            title=memory.get("title", ""),
+            description=memory.get("description", ""),
+            event_title=memory.get("event_title", ""),
+            special_focus="",
+            image_data_url=memory.get("image_data_url"),
+        )
+        results.append({"memory_id": memory["id"], **result})
+    return results

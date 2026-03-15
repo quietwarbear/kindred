@@ -14,6 +14,7 @@ from routes.events import router as events_router
 from routes.finance import router as finance_router
 from routes.legacy import router as legacy_router
 from routes.polls import router as polls_router
+from routes.revenuecat import router as revenuecat_router
 from routes.subscriptions import router as subscriptions_router
 from routes.timeline import router as timeline_router
 
@@ -40,6 +41,7 @@ app.include_router(events_router)
 app.include_router(finance_router)
 app.include_router(legacy_router)
 app.include_router(polls_router)
+app.include_router(revenuecat_router)
 app.include_router(subscriptions_router)
 app.include_router(timeline_router)
 

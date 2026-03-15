@@ -150,6 +150,11 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
         )
         ai_tags = tag_result.get("tags", [])
         ai_summary = tag_result.get("summary", "")
+        ai_sentiment = tag_result.get("sentiment", "neutral")
+        ai_mood = tag_result.get("mood", "warm")
+    else:
+        ai_sentiment = "neutral"
+        ai_mood = "warm"
 
     memory_doc = {
         "id": str(uuid.uuid4()),
@@ -165,6 +170,8 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
         "voice_note_data_url": payload.voice_note_data_url,
         "tags": list(set(payload.tags + ai_tags)),
         "ai_summary": ai_summary,
+        "sentiment": ai_sentiment,
+        "mood": ai_mood,
         "comments": [],
         "created_at": now_iso(),
     }
@@ -237,3 +244,40 @@ async def add_thread_comment(thread_id: str, payload: CommentRequest, current_us
     await threads_collection.update_one({"id": thread_id}, {"$set": {"comments": comments}})
     thread_doc["comments"] = comments
     return thread_doc
+
+
+
+@router.post("/memories/batch-retag")
+async def batch_retag(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Re-tag all memories in the community using improved AI analysis."""
+    from ai_tagging import batch_retag_memories
+
+    community_doc = await get_community_for_user(current_user)
+    memories = await memories_collection.find(
+        {"community_id": current_user["community_id"]}, {"_id": 0}
+    ).to_list(200)
+
+    if not memories:
+        return {"updated": 0, "results": []}
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3-flash")
+
+    results = await batch_retag_memories(
+        api_key=api_key,
+        model=model,
+        memories=memories,
+        community_name=community_doc.get("name", ""),
+        community_type=community_doc.get("community_type", "community"),
+    )
+
+    updated = 0
+    for r in results:
+        mid = r.pop("memory_id")
+        await memories_collection.update_one(
+            {"id": mid},
+            {"$set": {"tags": r["tags"], "ai_summary": r["summary"], "sentiment": r.get("sentiment", "neutral"), "mood": r.get("mood", "warm")}},
+        )
+        updated += 1
+
+    return {"updated": updated, "results": results}
