@@ -12,23 +12,24 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 ## Backend Structure (Refactored - Mar 2026)
 ```
 /app/backend/
-├── server.py           # ~60 lines - Clean orchestrator (imports routers, CORS, shutdown)
+├── server.py           # ~65 lines - Clean orchestrator
 ├── db.py               # Database connection + collections
-├── models.py           # ~400 lines - Pydantic models
-├── dependencies.py     # ~500 lines - Shared helpers, auth, constants
+├── models.py           # Pydantic models
+├── dependencies.py     # Shared helpers, auth, constants
 ├── security.py         # JWT + password hashing
 ├── courtyard_helpers.py
-├── ai_tagging.py
+├── ai_tagging.py       # Gemini AI tagging for memories
 └── routes/             # Domain-specific routers (all prefixed /api)
-    ├── auth.py         # Auth: bootstrap, login, me, google, profile, onboarding, account deletion, transfer-ownership
-    ├── community.py    # Community: overview, courtyard home/structure, subyards, kinship, invites, members
-    ├── communications.py # Announcements, chat rooms, notifications
-    ├── events.py       # Events CRUD, RSVP, invites, roles, agenda, checklist, volunteers, potluck
+    ├── activity.py     # Activity feed (paginated, filtered)
+    ├── auth.py         # Auth: bootstrap, login, me, google, profile, etc.
+    ├── community.py    # Community: overview, courtyard, subyards, kinship, invites, multi-courtyard
+    ├── communications.py # Announcements, chat, notifications
+    ├── events.py       # Events CRUD + inline edit/delete, RSVP, agenda, etc.
     ├── finance.py      # Travel plans, budget plans, payments, stripe webhook
     ├── legacy.py       # Legacy table config/sync
     ├── polls.py        # Polls CRUD, voting, close
     ├── subscriptions.py # Plans, current, checkout, cancel, feature-check
-    └── timeline.py     # Timeline archive, memories, threads
+    └── timeline.py     # Timeline archive + search/export, memories CRUD, threads
 ```
 
 ## Implemented Features
@@ -44,12 +45,14 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Template-based events with recurrence rules
 - RSVP, agenda, volunteer sign-ups, potluck
 - Event invites, Zoom-link support, travel coordination
+- Inline editing & deletion for events
 - One-click reminder sending
 
 ### Communication
 - Scoped announcements with inline editing + delete
 - Chat rooms with attachments, pinning, delete
 - Notifications: bell icon, unread badge, dropdown, mark-read, history, preferences
+- Browser push notifications (Web Notifications API)
 
 ### Decisions & Finance
 - Polls & Voting: create/vote/close/delete, multi-select
@@ -61,36 +64,50 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Ownership transfer flow
 - Edit/delete for: subyards, kinship, announcements, chat messages, budgets, travel plans
 
-### Inline Editing
-- Click-to-edit subyards (name, description)
-- Click-to-edit announcements (title, body)
-- Save/Cancel buttons + Enter/Escape keyboard shortcuts
-
 ### Subscription Monetization (Feb 2026)
-- 5-tier subscription system: Seedling, Sapling, Oak, Redwood, Elder Grove
-- Monthly & annual billing with ~15% annual discount
-- Stripe checkout integration for plan upgrades
+- 5-tier subscription system
+- Monthly & annual billing with Stripe
 - Feature gating by tier
-- Subscription management: checkout, status polling, cancel
-- Pricing page with plan comparison cards
 
-### Backend Refactor (Mar 2026) ✅
-- Migrated all routes from monolithic server.py (~2400 lines) to 9 domain-specific router files
-- server.py reduced to ~60 lines (clean orchestrator)
-- Full regression test: 38/38 backend API tests pass
-- Fixed Pydantic model mismatches discovered during testing
+### Phase 1: Activity & UX Enhancements (Mar 2026)
+- **Activity Feed**: Dedicated page showing all community activity with type filters and pagination
+- **Inline Editing**: Click-to-edit for events (title, description, date, location, format) and memories (title, description)
+- **Event & Memory Deletion**: With confirmation dialogs
+- **Timeline Search**: Full-text search across all timeline items
+- **Timeline Type Filters**: Filter by gathering/memory/story types
+- **Timeline CSV Export**: Download timeline data as CSV with auth
+- **Kinship Group Shortcuts**: API for invite shortcuts based on relationship types
+
+### Phase 2: Legacy & Kinship (Mar 2026)
+- **Kinship Map**: Interactive network graph visualization using react-force-graph-2d
+  - Add/delete relationships with type-specific colors
+  - Force-directed graph on dark canvas with node labels
+  - Color legend for relationship types
+  - Relationship list view with delete
+- **Legacy Threads**: Dedicated page for preserving stories and oral history
+  - 7 categories (Oral History, Sermon Archive, Youth Reflection, Community Dialogue, Family Lore, Migration Story, Recipe/Tradition)
+  - Category filters with colored badges
+  - Voice note support
+  - Threaded comments/responses
+  - Elder/speaker attribution
+
+### Phase 3: Platform Scaling (Mar 2026)
+- **Multi-courtyard Membership**: Users can belong to and switch between multiple communities
+  - `community_ids` array on user docs
+  - Community switcher in sidebar
+  - Join additional communities via invite code while logged in
+  - Switch between communities (refreshes session)
+- **Browser Push Notifications**: Web Notifications API
+  - Permission request on app load
+  - Browser notification when new unread count increases
 
 ## Prioritized Backlog
 
 ### P1
-- Inline editing for events/memories
-- Advanced timeline filters/search/export
-- Relationship-based invitation shortcuts
+- Relationship-based invitation shortcuts (backend endpoint exists, frontend UI needed)
+- Add-on purchases (storage, templates, SMS)
 
 ### P2
-- Multi-courtyard membership
-- Push notifications
-- Legacy Threads & Kinship Map visualization
-- Memory Vault with AI auto-tagging + voice notes
-- Add-on purchases (storage, templates, SMS)
-- App Store Connect / Google Play Billing SDK integration (RevenueCat)
+- App Store Connect / Google Play Billing SDK (RevenueCat)
+- Memory Vault voice-note recording (currently upload-only)
+- Advanced AI auto-tagging improvements
