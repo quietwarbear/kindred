@@ -5,21 +5,30 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 
 ## Architecture
 - **Frontend**: React SPA, Tailwind CSS, Shadcn UI
-- **Backend**: FastAPI + MongoDB (refactored modular structure)
+- **Backend**: FastAPI + MongoDB (modular router-based structure)
 - **Auth**: JWT + Google OAuth
 - **Payments**: Stripe (test key in env) — one-time checkout + subscription tiers
 
-## Backend Structure
+## Backend Structure (Refactored - Mar 2026)
 ```
 /app/backend/
-├── server.py         # ~2400 lines - API routes
-├── db.py             # Database connection + collections (including subscriptions)
-├── models.py         # ~400 lines - Pydantic models
-├── dependencies.py   # ~450 lines - Shared helpers, auth, constants, SUBSCRIPTION_TIERS
-├── security.py       # JWT + password hashing
+├── server.py           # ~60 lines - Clean orchestrator (imports routers, CORS, shutdown)
+├── db.py               # Database connection + collections
+├── models.py           # ~400 lines - Pydantic models
+├── dependencies.py     # ~500 lines - Shared helpers, auth, constants
+├── security.py         # JWT + password hashing
 ├── courtyard_helpers.py
 ├── ai_tagging.py
-└── routes/           # (Future decomposition)
+└── routes/             # Domain-specific routers (all prefixed /api)
+    ├── auth.py         # Auth: bootstrap, login, me, google, profile, onboarding, account deletion, transfer-ownership
+    ├── community.py    # Community: overview, courtyard home/structure, subyards, kinship, invites, members
+    ├── communications.py # Announcements, chat rooms, notifications
+    ├── events.py       # Events CRUD, RSVP, invites, roles, agenda, checklist, volunteers, potluck
+    ├── finance.py      # Travel plans, budget plans, payments, stripe webhook
+    ├── legacy.py       # Legacy table config/sync
+    ├── polls.py        # Polls CRUD, voting, close
+    ├── subscriptions.py # Plans, current, checkout, cancel, feature-check
+    └── timeline.py     # Timeline archive, memories, threads
 ```
 
 ## Implemented Features
@@ -57,29 +66,23 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 - Click-to-edit announcements (title, body)
 - Save/Cancel buttons + Enter/Escape keyboard shortcuts
 
-### Subscription Monetization (NEW - Feb 2026)
+### Subscription Monetization (Feb 2026)
 - 5-tier subscription system: Seedling, Sapling, Oak, Redwood, Elder Grove
 - Monthly & annual billing with ~15% annual discount
 - Stripe checkout integration for plan upgrades
-- Feature gating by tier (subyards, travel, funds, analytics, branding, multi-admin)
+- Feature gating by tier
 - Subscription management: checkout, status polling, cancel
-- Beautiful pricing page with plan comparison cards
-- Add-on teasers (media storage, premium templates, SMS reminders)
-- Elder Grove "Contact Sales" flow for enterprise communities
+- Pricing page with plan comparison cards
 
-#### Pricing Tiers
-| Tier | Members | Monthly | Annual |
-|------|---------|---------|--------|
-| Seedling | 1–10 | $19 | $194 |
-| Sapling | 11–25 | $49 | $500 |
-| Oak | 26–50 | $79 | $806 |
-| Redwood | 51–100 | $129 | $1,316 |
-| Elder Grove | 100+ | Custom | Custom |
+### Backend Refactor (Mar 2026) ✅
+- Migrated all routes from monolithic server.py (~2400 lines) to 9 domain-specific router files
+- server.py reduced to ~60 lines (clean orchestrator)
+- Full regression test: 38/38 backend API tests pass
+- Fixed Pydantic model mismatches discovered during testing
 
 ## Prioritized Backlog
 
 ### P1
-- Further split server.py into domain routers
 - Inline editing for events/memories
 - Advanced timeline filters/search/export
 - Relationship-based invitation shortcuts
