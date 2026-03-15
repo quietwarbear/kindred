@@ -152,6 +152,20 @@ export const LandingPage = ({ isAuthenticated }) => {
           </article>
         </div>
       </section>
+
+      <footer className="page-section border-t border-border/40 py-8" data-testid="landing-footer">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+          <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} Ubuntu Market LLC. All rights reserved.</p>
+          <nav className="flex gap-6">
+            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-privacy-link" to="/privacy">
+              Privacy Policy
+            </Link>
+            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-terms-link" to="/terms">
+              Terms of Service
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 };

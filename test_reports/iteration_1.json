@@ -39,6 +39,6 @@
   "seed_data_creation": "Created TEST/UI seed entities via real APIs: one host community, one invited member, event, memory, thread, and initiated payment transaction.",
   "retest_needed": false,
   "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Public URL used: https://circle-gather.preview.emergentagent.com. Backend pytest: 8/8 passed. UI e2e passed all requested flows; Stripe redirect reached checkout.stripe.com, but payment submit/webhook completion not performed.",
+  "context_for_next_testing_agent": "Public URL used: https://kindred-gather.preview.emergentagent.com. Backend pytest: 8/8 passed. UI e2e passed all requested flows; Stripe redirect reached checkout.stripe.com, but payment submit/webhook completion not performed.",
   "rca of the issue": "No blocking defects reproduced. Only remaining gap is external payment completion scope, which was intentionally not finalized in browser automation."
 }
