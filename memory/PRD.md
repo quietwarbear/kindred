@@ -5,83 +5,69 @@ Build "Kindred," a private ecosystem for families, churches, and intentional com
 
 ## Architecture
 - **Frontend**: React SPA, Tailwind CSS, Shadcn UI
-- **Backend**: FastAPI + MongoDB (refactored into modular structure)
+- **Backend**: FastAPI + MongoDB (refactored modular structure)
 - **Auth**: JWT + Google OAuth
 - **Payments**: Stripe (test key in env)
 
-## Backend Structure (Refactored)
+## Backend Structure
 ```
 /app/backend/
-├── server.py         # ~2100 lines - API routes and endpoint handlers
-├── db.py             # Database connection and collection references
-├── models.py         # ~395 lines - All Pydantic request/response models
-├── dependencies.py   # ~370 lines - Shared helpers, auth, constants, notification logic
-├── security.py       # JWT token handling, password hashing
-├── courtyard_helpers.py  # Courtyard-specific utility functions
-├── ai_tagging.py     # AI memory tagging
-└── routes/           # (Future: further route decomposition)
+├── server.py         # ~2200 lines - API routes
+├── db.py             # Database connection + collections
+├── models.py         # ~395 lines - Pydantic models
+├── dependencies.py   # ~370 lines - Shared helpers, auth, constants
+├── security.py       # JWT + password hashing
+├── courtyard_helpers.py
+├── ai_tagging.py
+└── routes/           # (Future decomposition)
 ```
 
-## What's Implemented
+## Implemented Features
+
 ### Core
-- Full auth system (JWT, Google OAuth, password recovery)
-- User profiles with settings, notification preferences
-- Community onboarding (5-step guided flow for new hosts)
-- Courtyards & Subyards with CRUD, role mapping, kinship graph
+- Full auth (JWT, Google OAuth, password recovery)
+- User profiles, settings, notification preferences
+- 5-step onboarding for new hosts
+- Courtyards & Subyards with full CRUD + inline editing
 - Members, invites, role assignments
 
 ### Gatherings
-- Template-based event creation with recurrence rules
-- RSVP, agenda builder, volunteer sign-ups, potluck coordination
-- Event-level invites, Zoom-link-aware hybrid/online events
-- Travel coordination records per event
-- One-click reminder sending for pending RSVPs
+- Template-based events with recurrence rules
+- RSVP, agenda, volunteer sign-ups, potluck
+- Event invites, Zoom-link support, travel coordination
+- One-click reminder sending
 
 ### Communication
-- Scoped announcements (courtyard + subyard) with comments
-- Internal chat rooms with attachments, pinning, comments
-- Notification system: Bell icon + unread badge, dropdown panel, mark-all-read, notification history, user preferences
+- Scoped announcements with inline editing + delete
+- Chat rooms with attachments, pinning, delete
+- Notifications: bell icon, unread badge, dropdown, mark-read, history, preferences
 
 ### Decisions & Finance
-- Polls & Voting: Create/vote/close/delete with percentage bars, multi-select, role-based access
-- Stripe checkout sessions with webhook lifecycle
-- Contribution packages, transaction ledger, budget plans
-- Funds & Travel overview page
+- Polls & Voting: create/vote/close/delete, multi-select
+- Stripe checkout + webhooks
+- Budgets + travel plans with CRUD
 
 ### Account Management
-- Account deletion (Play Store compliant): password confirmation, ownership-aware blocking
-- Ownership transfer: host can hand off community to another member
-- Sole-owner deletion cascades to remove entire community
+- Account deletion (Play Store compliant)
+- Ownership transfer flow
+- Edit/delete for: subyards, kinship, announcements, chat messages, budgets, travel plans
 
-### Edit/Delete Flows (New)
-- Subyards: PUT/DELETE with chat room cleanup
-- Kinship relationships: DELETE
-- Announcements: PUT/DELETE
-- Chat messages: DELETE (own or organizer+)
-- Budget plans: PUT/DELETE
-- Travel plans: PUT/DELETE (creator or organizer+)
-- Frontend delete buttons on all entity cards
-
-### Infrastructure
-- MongoDB aggregation pipelines for efficient payment calculations
-- Backend refactored: extracted db.py, models.py, dependencies.py from monolithic server.py
-- Comprehensive test coverage (iterations 8-12)
+### Inline Editing
+- Click-to-edit subyards (name, description)
+- Click-to-edit announcements (title, body)
+- Save/Cancel buttons + Enter/Escape keyboard shortcuts
 
 ## Prioritized Backlog
-### P0
-- Further split server.py into domain routers (auth.py, events.py, polls.py, etc.)
 
 ### P1
-- Edit flows for subyards/events/memories (inline editing UI)
+- Further split server.py into domain routers
+- Inline editing for events/memories
 - Advanced timeline filters/search/export
-- Relationship-based invitation shortcuts and gathering suggestions
-- Smarter unread indicators
+- Relationship-based invitation shortcuts
 
 ### P2
 - Multi-courtyard membership
-- Push notifications, SMS/email auth
+- Push notifications
 - Legacy Threads & Kinship Map visualization
-- Advanced Memory Vault with AI auto-tagging and voice notes
-- Monetization (tiered subscription model)
-- External travel provider connections
-- Live Legacy Table import/export
+- Memory Vault with AI auto-tagging + voice notes
+- Monetization (tiered subscriptions)
