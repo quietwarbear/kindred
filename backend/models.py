@@ -310,6 +310,13 @@ class KinshipCreateRequest(BaseModel):
 
 class TravelPlanCreateRequest(BaseModel):
     event_id: str = ""
+    title: str = ""
+    travel_type: str = "driving"
+    details: str = ""
+    coordinator_name: str = ""
+    amount_estimate: float = 0.0
+    payment_status: Literal["pending", "partially-funded", "funded"] = "pending"
+    seats_available: int = 4
     traveler_name: str = ""
     mode: str = "driving"
     origin: str = ""
@@ -317,7 +324,6 @@ class TravelPlanCreateRequest(BaseModel):
     arrival_at: str = ""
     notes: str = ""
     estimated_cost: float = 0.0
-    payment_status: Literal["pending", "partially-funded", "funded"] = "pending"
 
 
 class BudgetCreateRequest(BaseModel):
