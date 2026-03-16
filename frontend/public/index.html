@@ -28,7 +28,6 @@
         -->
         <title>Kindred — Where your circles gather and grow</title>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -44,9 +43,7 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
         <a
-            id="emergent-badge"
             target="_blank"
-            href="https://app.emergent.sh/?utm_source=emergent-badge"
             style="
                 display: inline-flex !important;
                 box-sizing: border-box;
@@ -85,14 +82,12 @@
                     white-space: nowrap !important;
                 "
             >
-                Made with Emergent
             </p>
         </a>
         <script>
             !(function (t, e) {
                 var o, n, p, r;
                 e.__SV ||
-                    ((window.posthog = e),
                     (e._i = []),
                     (e.init = function (i, s, a) {
                         function g(t, e) {
@@ -115,8 +110,6 @@
                             (p.async = !0),
                             (p.src =
                                 s.api_host.replace(
-                                    ".i.posthog.com",
-                                    "-assets.i.posthog.com",
                                 ) + "/static/array.js"),
                             (r =
                                 t.getElementsByTagName(
@@ -124,12 +117,9 @@
                                 )[0]).parentNode.insertBefore(p, r);
                         var u = e;
                         for (
-                            void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
                                 u.people = u.people || [],
                                 u.toString = function (t) {
-                                    var e = "posthog";
                                     return (
-                                        "posthog" !== a && (e += "." + a),
                                         t || (e += " (stub)"),
                                         e
                                     );
@@ -149,9 +139,6 @@
                         e._i.push([i, s, a]);
                     }),
                     (e.__SV = 1));
-            })(document, window.posthog || []);
-            posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
-                api_host: "https://us.i.posthog.com",
                 person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
                 session_recording: {
                     recordCrossOriginIframes: true,

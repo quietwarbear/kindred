@@ -42,11 +42,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const startGoogleAuth = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-  };
+  
 
   const handleSuccess = (payload, message) => {
     onAuthSuccess(payload);
@@ -132,7 +128,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
   };
 
   return (
-    <div className="app-canvas min-h-screen py-8">
+    <><div className="app-canvas min-h-screen py-8">
       <div className="page-section grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="archival-card flex flex-col justify-between gap-8 bg-stone-950 text-white">
           <div>
@@ -159,135 +155,128 @@ export const AuthPage = ({ onAuthSuccess }) => {
         </div>
 
         <div className="archival-card">
-          <div className="mb-6 rounded-[24px] border border-border/70 bg-muted/50 p-5">
-            <p className="eyebrow-text">Social sign in / sign up</p>
-            <p className="mt-2 text-sm leading-7 text-muted-foreground">Use Google to sign in, join an invited circle, or automatically start your own Kindred space.</p>
-            <Button className="mt-4 w-full rounded-full py-6 text-base" data-testid="google-auth-button" onClick={startGoogleAuth} type="button" variant="outline">
-              Continue with Google
-            </Button>
-          </div>
-          <Tabs defaultValue="launch">
-            <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
-              <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
-                Launch
-              </TabsTrigger>
-              <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-join" value="join">
-                Join
-              </TabsTrigger>
-              <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-login" value="login">
-                Sign in
-              </TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="launch">
-              <form className="mt-6 grid gap-4" onSubmit={handleLaunch}>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label>
-                    <span className="field-label">Your full name</span>
-                    <Input className="field-input" data-testid="launch-full-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, full_name: e.target.value }))} required value={launchForm.full_name} />
-                  </label>
-                  <label>
-                    <span className="field-label">Email</span>
-                    <Input className="field-input" data-testid="launch-email-input" onChange={(e) => setLaunchForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={launchForm.email} />
-                  </label>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label>
-                    <span className="field-label">Password</span>
-                    <Input className="field-input" data-testid="launch-password-input" minLength={8} onChange={(e) => setLaunchForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={launchForm.password} />
-                  </label>
-                  <label>
-                    <span className="field-label">Community type</span>
-                    <Input className="field-input" data-testid="launch-community-type-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_type: e.target.value }))} required value={launchForm.community_type} />
-                  </label>
-                </div>
-                <label>
-                  <span className="field-label">Community name</span>
-                  <Input className="field-input" data-testid="launch-community-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_name: e.target.value }))} required value={launchForm.community_name} />
-                </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label>
-                    <span className="field-label">Location</span>
-                    <Input className="field-input" data-testid="launch-location-input" onChange={(e) => setLaunchForm((current) => ({ ...current, location: e.target.value }))} required value={launchForm.location} />
-                  </label>
-                  <label>
-                    <span className="field-label">Motto</span>
-                    <Input className="field-input" data-testid="launch-motto-input" onChange={(e) => setLaunchForm((current) => ({ ...current, motto: e.target.value }))} value={launchForm.motto} />
-                  </label>
-                </div>
-                <label>
-                  <span className="field-label">What brings your people together?</span>
-                  <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
-                </label>
-                <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Opening community..." : "Launch Kindred"}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </form>
-            </TabsContent>
+        </div>
+        <Tabs defaultValue="launch">
+          <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
+            <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
+              Launch
+            </TabsTrigger>
+            <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-join" value="join">
+              Join
+            </TabsTrigger>
+            <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-login" value="login">
+              Sign in
+            </TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="join">
-              <form className="mt-6 grid gap-4" onSubmit={handleJoin}>
+          <TabsContent value="launch">
+            <form className="mt-6 grid gap-4" onSubmit={handleLaunch}>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label>
-                  <span className="field-label">Invite code</span>
-                  <Input className="field-input uppercase" data-testid="join-invite-code-input" onChange={(e) => setJoinForm((current) => ({ ...current, invite_code: e.target.value.toUpperCase() }))} required value={joinForm.invite_code} />
+                  <span className="field-label">Your full name</span>
+                  <Input className="field-input" data-testid="launch-full-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, full_name: e.target.value }))} required value={launchForm.full_name} />
                 </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label>
-                    <span className="field-label">Your full name</span>
-                    <Input className="field-input" data-testid="join-full-name-input" onChange={(e) => setJoinForm((current) => ({ ...current, full_name: e.target.value }))} required value={joinForm.full_name} />
-                  </label>
-                  <label>
-                    <span className="field-label">Email matching the invite</span>
-                    <Input className="field-input" data-testid="join-email-input" onChange={(e) => setJoinForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={joinForm.email} />
-                  </label>
-                </div>
-                <label>
-                  <span className="field-label">Password</span>
-                  <Input className="field-input" data-testid="join-password-input" minLength={8} onChange={(e) => setJoinForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={joinForm.password} />
-                </label>
-                <Button className="rounded-full py-6 text-base" data-testid="join-submit-button" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Joining..." : "Join with invite"}
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="login">
-              <form className="mt-6 grid gap-4" onSubmit={handleLogin}>
                 <label>
                   <span className="field-label">Email</span>
-                  <Input className="field-input" data-testid="login-email-input" onChange={(e) => setLoginForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={loginForm.email} />
+                  <Input className="field-input" data-testid="launch-email-input" onChange={(e) => setLaunchForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={launchForm.email} />
                 </label>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label>
                   <span className="field-label">Password</span>
-                  <Input className="field-input" data-testid="login-password-input" onChange={(e) => setLoginForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={loginForm.password} />
+                  <Input className="field-input" data-testid="launch-password-input" minLength={8} onChange={(e) => setLaunchForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={launchForm.password} />
                 </label>
-                <Button className="rounded-full py-6 text-base" data-testid="login-submit-button" disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Signing in..." : "Sign in"}
+                <label>
+                  <span className="field-label">Community type</span>
+                  <Input className="field-input" data-testid="launch-community-type-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_type: e.target.value }))} required value={launchForm.community_type} />
+                </label>
+              </div>
+              <label>
+                <span className="field-label">Community name</span>
+                <Input className="field-input" data-testid="launch-community-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_name: e.target.value }))} required value={launchForm.community_name} />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="field-label">Location</span>
+                  <Input className="field-input" data-testid="launch-location-input" onChange={(e) => setLaunchForm((current) => ({ ...current, location: e.target.value }))} required value={launchForm.location} />
+                </label>
+                <label>
+                  <span className="field-label">Motto</span>
+                  <Input className="field-input" data-testid="launch-motto-input" onChange={(e) => setLaunchForm((current) => ({ ...current, motto: e.target.value }))} value={launchForm.motto} />
+                </label>
+              </div>
+              <label>
+                <span className="field-label">What brings your people together?</span>
+                <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
+              </label>
+              <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
+                {isSubmitting ? "Opening community..." : "Launch Kindred"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="join">
+            <form className="mt-6 grid gap-4" onSubmit={handleJoin}>
+              <label>
+                <span className="field-label">Invite code</span>
+                <Input className="field-input uppercase" data-testid="join-invite-code-input" onChange={(e) => setJoinForm((current) => ({ ...current, invite_code: e.target.value.toUpperCase() }))} required value={joinForm.invite_code} />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="field-label">Your full name</span>
+                  <Input className="field-input" data-testid="join-full-name-input" onChange={(e) => setJoinForm((current) => ({ ...current, full_name: e.target.value }))} required value={joinForm.full_name} />
+                </label>
+                <label>
+                  <span className="field-label">Email matching the invite</span>
+                  <Input className="field-input" data-testid="join-email-input" onChange={(e) => setJoinForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={joinForm.email} />
+                </label>
+              </div>
+              <label>
+                <span className="field-label">Password</span>
+                <Input className="field-input" data-testid="join-password-input" minLength={8} onChange={(e) => setJoinForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={joinForm.password} />
+              </label>
+              <Button className="rounded-full py-6 text-base" data-testid="join-submit-button" disabled={isSubmitting} type="submit">
+                {isSubmitting ? "Joining..." : "Join with invite"}
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="login">
+            <form className="mt-6 grid gap-4" onSubmit={handleLogin}>
+              <label>
+                <span className="field-label">Email</span>
+                <Input className="field-input" data-testid="login-email-input" onChange={(e) => setLoginForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={loginForm.email} />
+              </label>
+              <label>
+                <span className="field-label">Password</span>
+                <Input className="field-input" data-testid="login-password-input" onChange={(e) => setLoginForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={loginForm.password} />
+              </label>
+              <Button className="rounded-full py-6 text-base" data-testid="login-submit-button" disabled={isSubmitting} type="submit">
+                {isSubmitting ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+            <div className="mt-6 rounded-[24px] border border-border/70 bg-muted/40 p-5">
+              <p className="eyebrow-text">Password recovery</p>
+              <form className="mt-4 grid gap-3" onSubmit={handleRecoveryRequest}>
+                <Input className="field-input" data-testid="password-recovery-email-input" onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Email for recovery code" type="email" value={recoveryEmail} />
+                <Button className="rounded-full" data-testid="password-recovery-request-button" disabled={isSubmitting} type="submit" variant="secondary">
+                  Request recovery code
                 </Button>
               </form>
-              <div className="mt-6 rounded-[24px] border border-border/70 bg-muted/40 p-5">
-                <p className="eyebrow-text">Password recovery</p>
-                <form className="mt-4 grid gap-3" onSubmit={handleRecoveryRequest}>
-                  <Input className="field-input" data-testid="password-recovery-email-input" onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Email for recovery code" type="email" value={recoveryEmail} />
-                  <Button className="rounded-full" data-testid="password-recovery-request-button" disabled={isSubmitting} type="submit" variant="secondary">
-                    Request recovery code
-                  </Button>
-                </form>
-                <form className="mt-4 grid gap-3" onSubmit={handleRecoveryVerify}>
-                  <Input className="field-input" data-testid="password-recovery-code-input" onChange={(e) => setRecoveryCode(e.target.value)} placeholder="6-digit recovery code" value={recoveryCode} />
-                  <Input className="field-input" data-testid="password-recovery-new-password-input" minLength={8} onChange={(e) => setRecoveryPassword(e.target.value)} placeholder="New password" type="password" value={recoveryPassword} />
-                  <Button className="rounded-full" data-testid="password-recovery-verify-button" disabled={isSubmitting} type="submit" variant="secondary">
-                    Reset password
-                  </Button>
-                </form>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+              <form className="mt-4 grid gap-3" onSubmit={handleRecoveryVerify}>
+                <Input className="field-input" data-testid="password-recovery-code-input" onChange={(e) => setRecoveryCode(e.target.value)} placeholder="6-digit recovery code" value={recoveryCode} />
+                <Input className="field-input" data-testid="password-recovery-new-password-input" minLength={8} onChange={(e) => setRecoveryPassword(e.target.value)} placeholder="New password" type="password" value={recoveryPassword} />
+                <Button className="rounded-full" data-testid="password-recovery-verify-button" disabled={isSubmitting} type="submit" variant="secondary">
+                  Reset password
+                </Button>
+              </form>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <footer className="page-section border-t border-border/40 py-6 mt-8" data-testid="auth-footer">
+    </div><footer className="page-section border-t border-border/40 py-6 mt-8" data-testid="auth-footer">
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="auth-footer-privacy-link" to="/privacy">
             Privacy Policy
@@ -297,7 +286,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
             Terms of Service
           </Link>
         </div>
-      </footer>
+      </footer></>
     </div>
   );
 };
