@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from emergentintegrations.payments.stripe.checkout import StripeCheckout
+import stripe
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -216,11 +216,10 @@ def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "o
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to perform this action.")
 
 
-def build_stripe_checkout(request: Request) -> StripeCheckout:
-    api_key = os.environ["STRIPE_API_KEY"]
-    host_url = str(request.base_url).rstrip("/")
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    return StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+def build_stripe_checkout(request: Request) -> stripe.Stripe:
+    """Build a Stripe client. Requires STRIPE_API_KEY environment variable."""
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    return stripe.Stripe(api_key=api_key)
 
 
 def parse_datetime_safe(value: str | None) -> datetime | None:

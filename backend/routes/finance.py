@@ -1,9 +1,10 @@
 """Finance routes: travel plans, budget plans, payments, funds overview."""
 
+import os
 import uuid
 from typing import Any, Literal
 
-from emergentintegrations.payments.stripe.checkout import CheckoutSessionRequest
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from db import budget_plans_collection, payments_collection, travel_plans_collection
@@ -195,21 +196,38 @@ async def create_checkout_session(
     if not package:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contribution package.")
 
-    stripe_checkout = build_stripe_checkout(request)
-    checkout_request = CheckoutSessionRequest(
-        amount=float(package["amount"]),
-        currency="usd",
-        success_url=f"{payload.origin_url.rstrip('/')}/funds-travel?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{payload.origin_url.rstrip('/')}/funds-travel",
-        metadata={
-            "community_id": current_user["community_id"],
-            "user_id": current_user["id"],
-            "user_email": current_user["email"],
-            "package_id": package["id"],
-            "contribution_label": package["label"],
-        },
-    )
-    session = await stripe_checkout.create_checkout_session(checkout_request)
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    metadata = {
+        "community_id": current_user["community_id"],
+        "user_id": current_user["id"],
+        "user_email": current_user["email"],
+        "package_id": package["id"],
+        "contribution_label": package["label"],
+    }
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": int(float(package["amount"]) * 100),
+                        "product_data": {
+                            "name": package["label"],
+                            "description": package["description"],
+                        },
+                    },
+                    "quantity": 1,
+                }
+            ],
+            mode="payment",
+            success_url=f"{payload.origin_url.rstrip('/')}/funds-travel?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{payload.origin_url.rstrip('/')}/funds-travel",
+            metadata=metadata,
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
 
     transaction_doc = {
         "id": str(uuid.uuid4()),
@@ -220,8 +238,8 @@ async def create_checkout_session(
         "contribution_label": package["label"],
         "amount": float(package["amount"]),
         "currency": "usd",
-        "metadata": checkout_request.metadata,
-        "session_id": session.session_id,
+        "metadata": metadata,
+        "session_id": session.id,
         "payment_id": "",
         "status": "initiated",
         "payment_status": "unpaid",
@@ -229,7 +247,7 @@ async def create_checkout_session(
         "completed_at": None,
     }
     await payments_collection.insert_one(transaction_doc.copy())
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 
 @router.get("/payments/checkout/status/{session_id}")
@@ -238,37 +256,66 @@ async def get_checkout_status(session_id: str, request: Request, current_user: d
     if not transaction_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment session not found.")
 
-    stripe_checkout = build_stripe_checkout(request)
-    checkout_status = await stripe_checkout.get_checkout_status(session_id)
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.InvalidRequestError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checkout session not found.")
+
+    # Map Stripe payment_status to our payment_status
+    payment_status = "unpaid"
+    if session.payment_status == "paid":
+        payment_status = "paid"
+
     update_payload = {
-        "status": checkout_status.status,
-        "payment_status": checkout_status.payment_status,
+        "status": session.status,
+        "payment_status": payment_status,
         "amount": transaction_doc.get("amount", 0),
         "currency": transaction_doc.get("currency", "usd"),
     }
-    if checkout_status.payment_status == "paid" and not transaction_doc.get("completed_at"):
+    if payment_status == "paid" and not transaction_doc.get("completed_at"):
         update_payload["completed_at"] = now_iso()
     await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
     updated_transaction = await payments_collection.find_one({"session_id": session_id}, {"_id": 0})
     return {
-        "status": checkout_status.status,
-        "payment_status": checkout_status.payment_status,
-        "amount_total": checkout_status.amount_total,
-        "currency": checkout_status.currency,
-        "metadata": checkout_status.metadata,
+        "status": session.status,
+        "payment_status": payment_status,
+        "amount_total": session.amount_total and session.amount_total / 100 or 0,
+        "currency": session.currency,
+        "metadata": session.metadata,
         "transaction": updated_transaction,
     }
 
 
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    stripe_checkout = build_stripe_checkout(request)
-    request_body = await request.body()
-    webhook_response = await stripe_checkout.handle_webhook(request_body, request.headers.get("Stripe-Signature"))
+    """Handle Stripe webhook events. Requires STRIPE_WEBHOOK_SECRET environment variable."""
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
-    session_id = getattr(webhook_response, "session_id", None)
-    payment_status = getattr(webhook_response, "payment_status", None)
-    event_type = getattr(webhook_response, "event_type", None)
+    request_body = await request.body()
+    sig_header = request.headers.get("Stripe-Signature")
+
+    try:
+        event = stripe.Webhook.construct_event(request_body, sig_header, webhook_secret)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request body")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+
+    session_id = None
+    payment_status = None
+    event_type = event.get("type")
+
+    if event_type == "checkout.session.completed":
+        checkout_session = event.get("data", {}).get("object", {})
+        session_id = checkout_session.get("id")
+        payment_status = checkout_session.get("payment_status")
+        if payment_status == "paid":
+            payment_status = "paid"
+        else:
+            payment_status = "unpaid"
+
     if session_id:
         update_payload = {"status": event_type or "webhook-received", "payment_status": payment_status or "unpaid"}
         if payment_status == "paid":

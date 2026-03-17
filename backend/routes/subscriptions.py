@@ -1,10 +1,11 @@
 """Subscription routes."""
 
+import os
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from emergentintegrations.payments.stripe.checkout import CheckoutSessionRequest
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from db import subscriptions_collection, subyards_collection, users_collection
@@ -79,23 +80,40 @@ async def create_subscription_checkout(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contact sales for Elder Grove pricing.")
 
     amount = tier["annual_price"] if payload.billing_cycle == "annual" else tier["monthly_price"]
-    stripe_checkout = build_stripe_checkout(request)
-    checkout_request = CheckoutSessionRequest(
-        amount=float(amount),
-        currency="usd",
-        success_url=f"{payload.origin_url.rstrip('/')}/subscription?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{payload.origin_url.rstrip('/')}/subscription",
-        metadata={
-            "type": "subscription",
-            "community_id": current_user["community_id"],
-            "user_id": current_user["id"],
-            "user_email": current_user["email"],
-            "plan_id": tier["id"],
-            "plan_name": tier["name"],
-            "billing_cycle": payload.billing_cycle,
-        },
-    )
-    session = await stripe_checkout.create_checkout_session(checkout_request)
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    metadata = {
+        "type": "subscription",
+        "community_id": current_user["community_id"],
+        "user_id": current_user["id"],
+        "user_email": current_user["email"],
+        "plan_id": tier["id"],
+        "plan_name": tier["name"],
+        "billing_cycle": payload.billing_cycle,
+    }
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": int(float(amount) * 100),
+                        "product_data": {
+                            "name": f"{tier['name']} Plan ({payload.billing_cycle})",
+                            "description": f"Kindred {tier['name']} subscription",
+                        },
+                    },
+                    "quantity": 1,
+                }
+            ],
+            mode="payment",
+            success_url=f"{payload.origin_url.rstrip('/')}/subscription?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{payload.origin_url.rstrip('/')}/subscription",
+            metadata=metadata,
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
 
     sub_doc = {
         "id": str(uuid.uuid4()),
@@ -107,7 +125,7 @@ async def create_subscription_checkout(
         "billing_cycle": payload.billing_cycle,
         "amount": float(amount),
         "currency": "usd",
-        "session_id": session.session_id,
+        "session_id": session.id,
         "status": "pending",
         "payment_status": "unpaid",
         "created_at": now_iso(),
@@ -116,7 +134,7 @@ async def create_subscription_checkout(
         "cancelled_at": None,
     }
     await subscriptions_collection.insert_one(sub_doc.copy())
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 
 @router.get("/subscriptions/checkout/status/{session_id}")
@@ -131,14 +149,22 @@ async def get_subscription_checkout_status(
     if not sub_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription session not found.")
 
-    stripe_checkout = build_stripe_checkout(request)
-    checkout_status = await stripe_checkout.get_checkout_status(session_id)
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.InvalidRequestError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checkout session not found.")
+
+    # Map Stripe payment_status to our payment_status
+    payment_status = "unpaid"
+    if session.payment_status == "paid":
+        payment_status = "paid"
 
     update_payload = {
-        "payment_status": checkout_status.payment_status,
+        "payment_status": payment_status,
     }
 
-    if checkout_status.payment_status == "paid" and sub_doc.get("status") != "active":
+    if payment_status == "paid" and sub_doc.get("status") != "active":
         now = datetime.now(timezone.utc)
         if sub_doc.get("billing_cycle") == "annual":
             expires = now + timedelta(days=365)
@@ -157,8 +183,8 @@ async def get_subscription_checkout_status(
     await subscriptions_collection.update_one({"session_id": session_id}, {"$set": update_payload})
     updated = await subscriptions_collection.find_one({"session_id": session_id}, {"_id": 0})
     return {
-        "status": checkout_status.status,
-        "payment_status": checkout_status.payment_status,
+        "status": session.status,
+        "payment_status": payment_status,
         "subscription": updated,
     }
 
@@ -257,22 +283,40 @@ async def addon_checkout(
     if not addon:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Add-on not found.")
 
-    stripe_checkout = build_stripe_checkout(request)
-    checkout_request = CheckoutSessionRequest(
-        amount=float(addon["price_cents"] / 100),
-        currency="usd",
-        success_url=f"{origin_url}?addon_success={addon_id}",
-        cancel_url=f"{origin_url}?addon_cancel=1",
-        metadata={
-            "type": "addon",
-            "user_id": current_user["id"],
-            "community_id": current_user["community_id"],
-            "addon_id": addon_id,
-            "addon_name": addon["name"],
-        },
-    )
-    session = await stripe_checkout.create_checkout_session(checkout_request)
-    return {"checkout_url": session.url, "session_id": session.session_id}
+    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    metadata = {
+        "type": "addon",
+        "user_id": current_user["id"],
+        "community_id": current_user["community_id"],
+        "addon_id": addon_id,
+        "addon_name": addon["name"],
+    }
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": addon["price_cents"],
+                        "product_data": {
+                            "name": addon["name"],
+                            "description": addon["description"],
+                        },
+                    },
+                    "quantity": 1,
+                }
+            ],
+            mode="payment",
+            success_url=f"{origin_url}?addon_success={addon_id}",
+            cancel_url=f"{origin_url}?addon_cancel=1",
+            metadata=metadata,
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
+
+    return {"checkout_url": session.url, "session_id": session.id}
 
 
 @router.get("/addons/purchased")

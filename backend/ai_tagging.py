@@ -1,8 +1,10 @@
+import base64
 import json
+import os
 import re
 import uuid
 
-from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
+import litellm
 
 
 SYSTEM_PROMPT = """
@@ -121,17 +123,35 @@ Special focus: {special_focus}
 Return the JSON only.
 """.strip()
 
-        file_contents = []
+        # Build messages for litellm
+        # Note: Using OPENAI_API_KEY environment variable. Set GOOGLE_CLIENT_ID if using Google models.
+        messages = [{"role": "user", "content": prompt}]
+
+        # Add image to message if provided
         if image_data_url and image_data_url.startswith("data:image") and "," in image_data_url:
-            file_contents.append(ImageContent(image_data_url.split(",", 1)[1]))
+            # Extract base64 data and media type from data URL
+            header, data = image_data_url.split(",", 1)
+            media_type = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
 
-        chat = LlmChat(
+            messages = [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_data_url}}
+                ]
+            }]
+
+        # Use litellm.acompletion for async calls with LLM provider
+        # Supports multiple providers: openai, gemini, claude, etc.
+        response = await litellm.acompletion(
+            model=model,
+            messages=messages,
+            system_prompt=SYSTEM_PROMPT,
             api_key=api_key,
-            session_id=str(uuid.uuid4()),
-            system_message=SYSTEM_PROMPT,
-        ).with_model("gemini", model).with_params(temperature=0.3)
+            temperature=0.3,
+        )
 
-        raw = await chat.send_message(UserMessage(text=prompt, file_contents=file_contents))
+        raw = response.choices[0].message.content
         parsed = _clean_json(raw)
         tags = parsed.get("tags", []) if isinstance(parsed, dict) else []
         summary = parsed.get("summary") if isinstance(parsed, dict) else None
