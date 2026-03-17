@@ -287,6 +287,5 @@ export const AuthPage = ({ onAuthSuccess }) => {
           </Link>
         </div>
       </footer></>
-    </div>
   );
 };
