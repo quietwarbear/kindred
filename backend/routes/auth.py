@@ -1,14 +1,13 @@
 """Authentication routes."""
 
-import json
 import os
 import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
-from urllib.error import HTTPError
-from urllib.request import Request as UrlRequest, urlopen
 
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import id_token
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from courtyard_helpers import ROLE_TOOLING, build_default_subyards, build_planning_checklist, build_role_suggestions
@@ -181,24 +180,36 @@ async def me(current_user: dict[str, Any] = Depends(get_current_user)):
 
 @router.post("/auth/google/session")
 async def google_session_login(payload: GoogleSessionRequest, response: Response):
+    """
+    Validate Google OAuth ID token and log the user in.
+    Requires GOOGLE_CLIENT_ID environment variable.
+    """
     try:
-        req = UrlRequest(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": payload.session_id},
-            method="GET",
+        google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+        if not google_client_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.",
+            )
+
+        # Verify the ID token
+        idinfo = id_token.verify_oauth2_token(
+            payload.session_id,
+            GoogleRequest(),
+            google_client_id,
         )
-        with urlopen(req, timeout=20) as res:
-            session_payload = json.loads(res.read().decode("utf-8"))
-    except HTTPError as exc:
+
+        # Extract user information from the verified token
+        google_user = {
+            "email": idinfo.get("email", ""),
+            "name": idinfo.get("name", ""),
+            "picture": idinfo.get("picture", ""),
+        }
+    except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unable to validate Google session.") from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google session validation failed.") from exc
 
-    google_user = {
-        "email": session_payload.get("email", ""),
-        "name": session_payload.get("name", ""),
-        "picture": session_payload.get("picture", ""),
-    }
     email = normalize_email(google_user.get("email", ""))
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account did not return a usable email.")
@@ -293,22 +304,22 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
             else:
                 await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
 
-    session_token = session_payload.get("session_token")
-    if session_token:
-        await user_sessions_collection.update_one(
-            {"session_token": session_token},
-            {
-                "$set": {
-                    "session_token": session_token,
-                    "user_id": user_doc["id"],
-                    "email": email,
-                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-                    "created_at": now_iso(),
-                }
-            },
-            upsert=True,
-        )
-        apply_session_cookie(response, session_token)
+    # Generate a session token for the user
+    session_token = secrets.token_urlsafe(32)
+    await user_sessions_collection.update_one(
+        {"session_token": session_token},
+        {
+            "$set": {
+                "session_token": session_token,
+                "user_id": user_doc["id"],
+                "email": email,
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "created_at": now_iso(),
+            }
+        },
+        upsert=True,
+    )
+    apply_session_cookie(response, session_token)
 
     community_doc = await get_community_for_user(user_doc)
     return build_auth_response(user_doc, community_doc)

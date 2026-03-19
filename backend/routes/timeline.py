@@ -135,8 +135,8 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
     ai_tags = []
     ai_summary = ""
     if payload.description.strip():
-        api_key = os.environ.get("EMERGENT_LLM_KEY", "")
-        model = os.environ.get("GEMINI_MODEL", "gemini-3-flash")
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
         tag_result = await generate_memory_tags(
             api_key=api_key,
             model=model,
@@ -260,8 +260,8 @@ async def batch_retag(current_user: dict[str, Any] = Depends(get_current_user)):
     if not memories:
         return {"updated": 0, "results": []}
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
-    model = os.environ.get("GEMINI_MODEL", "gemini-3-flash")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
 
     results = await batch_retag_memories(
         api_key=api_key,

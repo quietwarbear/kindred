@@ -283,7 +283,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
               <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />
               <Route element={<EventsPage token={token} user={user} />} path="events" />
-              <Route element={<StrategyPage mode="app" />} path="app-strategy" />
+              <Route element={user?.is_platform_admin ? <StrategyPage mode="app" /> : <Navigate replace to="/home" />} path="app-strategy" />
               <Route element={<Navigate replace to="/home" />} path="*" />
             </Routes>
           </main>
