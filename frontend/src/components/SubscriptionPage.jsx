@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import {
+  isIOS,
+  makePurchase,
+  syncRevenueCatUser,
+  TIER_TO_PRODUCT_ID,
+} from "@/lib/revenuecat";
 
 const TIER_ICONS = {
   seedling: Leaf,
@@ -288,7 +294,14 @@ export const SubscriptionPage = ({ token, user }) => {
   useEffect(() => {
     loadPlans();
     loadCurrentSub();
-  }, [loadPlans, loadCurrentSub]);
+
+    // Sync user with RevenueCat if on iOS
+    if (isIOS() && user?.id) {
+      syncRevenueCatUser(user.id).catch((error) => {
+        console.warn("[Kindred] RevenueCat user sync failed:", error);
+      });
+    }
+  }, [loadPlans, loadCurrentSub, user?.id]);
 
   // Handle redirect back from Stripe with session_id
   useEffect(() => {
@@ -341,13 +354,53 @@ export const SubscriptionPage = ({ token, user }) => {
     }
     setCheckoutLoading(planId);
     try {
-      const res = await apiRequest("/subscriptions/checkout", {
-        method: "POST",
-        token,
-        data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
-      });
-      if (res.url) {
-        window.location.href = res.url;
+      // Determine if we're on iOS and should use RevenueCat
+      const useRevenueCat = isIOS();
+
+      if (useRevenueCat) {
+        // iOS: Use RevenueCat for native IAP
+        const productIdMap = TIER_TO_PRODUCT_ID[planId];
+        if (!productIdMap) {
+          toast.error("Plan not available on this platform.");
+          setCheckoutLoading(null);
+          return;
+        }
+
+        const productId = billingCycle === "annual" ? productIdMap.annual : productIdMap.monthly;
+
+        try {
+          const result = await makePurchase(productId);
+
+          if (result.success) {
+            toast.success("Purchase completed! Activating your plan...");
+            // Sync user to RevenueCat and refresh subscription
+            await syncRevenueCatUser(user?.id);
+            // Give a moment for the backend to receive webhook notification
+            setTimeout(() => {
+              loadCurrentSub();
+            }, 2000);
+          } else {
+            toast.error(result.message || "Purchase was cancelled or failed.");
+          }
+        } catch (error) {
+          console.error("[Kindred] RevenueCat purchase error:", error);
+          // Check if user cancelled (common for iOS purchases)
+          if (error.message?.includes("cancelled") || error.message?.includes("user cancelled")) {
+            toast.info("Purchase was cancelled.");
+          } else {
+            toast.error("Unable to complete purchase. Please try again.");
+          }
+        }
+      } else {
+        // Web: Use existing Stripe backend flow
+        const res = await apiRequest("/subscriptions/checkout", {
+          method: "POST",
+          token,
+          data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
+        });
+        if (res.url) {
+          window.location.href = res.url;
+        }
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Unable to start checkout.");
