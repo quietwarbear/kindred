@@ -193,6 +193,10 @@ def sanitize_doc(document: dict[str, Any] | None) -> dict[str, Any] | None:
 def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any]) -> dict[str, Any]:
     user_safe = sanitize_doc(user_doc) or {}
     user_safe.pop("password_hash", None)
+    platform_admin_email = normalize_email(os.environ.get("PLATFORM_ADMIN_EMAIL", ""))
+    user_safe["is_platform_admin"] = bool(
+        platform_admin_email and normalize_email(user_safe.get("email", "")) == platform_admin_email
+    )
     token = create_access_token(
         user_safe["id"],
         {"community_id": user_safe["community_id"], "role": user_safe["role"]},
