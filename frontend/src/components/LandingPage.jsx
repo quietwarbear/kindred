@@ -70,6 +70,9 @@ export const LandingPage = ({ isAuthenticated }) => {
                   <Link className="pill-button-secondary" data-testid="landing-strategy-cta" to="/strategy">
                     Explore the strategy deck
                   </Link>
+                  <Link className="pill-button-secondary" data-testid="landing-pricing-cta" to="/subscription">
+                    View Plans
+                  </Link>
                 </div>
               </div>
 
