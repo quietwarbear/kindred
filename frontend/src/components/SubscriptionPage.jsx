@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import {
+  isIOS,
+  makePurchase,
+  syncRevenueCatUser,
+  TIER_TO_PRODUCT_ID,
+} from "@/lib/revenuecat";
 
 const TIER_ICONS = {
   seedling: Leaf,
@@ -114,7 +120,7 @@ const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, curr
             </p>
             {monthlyEquivalent && (
               <p className="mt-1 text-xs text-muted-foreground">
-                ~${monthlyEquivalent}/mo · Save {billingCycle === "annual" ? "~15%" : ""}
+                ~${monthlyEquivalent}/mo · Save {billingCycle === "annual" ? "~25%" : ""}
               </p>
             )}
           </>
@@ -288,7 +294,14 @@ export const SubscriptionPage = ({ token, user }) => {
   useEffect(() => {
     loadPlans();
     loadCurrentSub();
-  }, [loadPlans, loadCurrentSub]);
+
+    // Sync user with RevenueCat if on iOS
+    if (isIOS() && user?.id) {
+      syncRevenueCatUser(user.id).catch((error) => {
+        console.warn("[Kindred] RevenueCat user sync failed:", error);
+      });
+    }
+  }, [loadPlans, loadCurrentSub, user?.id]);
 
   // Handle redirect back from Stripe with session_id
   useEffect(() => {
@@ -341,13 +354,53 @@ export const SubscriptionPage = ({ token, user }) => {
     }
     setCheckoutLoading(planId);
     try {
-      const res = await apiRequest("/subscriptions/checkout", {
-        method: "POST",
-        token,
-        data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
-      });
-      if (res.url) {
-        window.location.href = res.url;
+      // Determine if we're on iOS and should use RevenueCat
+      const useRevenueCat = isIOS();
+
+      if (useRevenueCat) {
+        // iOS: Use RevenueCat for native IAP
+        const productIdMap = TIER_TO_PRODUCT_ID[planId];
+        if (!productIdMap) {
+          toast.error("Plan not available on this platform.");
+          setCheckoutLoading(null);
+          return;
+        }
+
+        const productId = billingCycle === "annual" ? productIdMap.annual : productIdMap.monthly;
+
+        try {
+          const result = await makePurchase(productId);
+
+          if (result.success) {
+            toast.success("Purchase completed! Activating your plan...");
+            // Sync user to RevenueCat and refresh subscription
+            await syncRevenueCatUser(user?.id);
+            // Give a moment for the backend to receive webhook notification
+            setTimeout(() => {
+              loadCurrentSub();
+            }, 2000);
+          } else {
+            toast.error(result.message || "Purchase was cancelled or failed.");
+          }
+        } catch (error) {
+          console.error("[Kindred] RevenueCat purchase error:", error);
+          // Check if user cancelled (common for iOS purchases)
+          if (error.message?.includes("cancelled") || error.message?.includes("user cancelled")) {
+            toast.info("Purchase was cancelled.");
+          } else {
+            toast.error("Unable to complete purchase. Please try again.");
+          }
+        }
+      } else {
+        // Web: Use existing Stripe backend flow
+        const res = await apiRequest("/subscriptions/checkout", {
+          method: "POST",
+          token,
+          data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
+        });
+        if (res.url) {
+          window.location.href = res.url;
+        }
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Unable to start checkout.");
@@ -402,7 +455,7 @@ export const SubscriptionPage = ({ token, user }) => {
           >
             Annual
             <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-              Save ~15%
+              Save ~25%
             </span>
           </button>
         </div>
@@ -472,7 +525,7 @@ export const SubscriptionPage = ({ token, user }) => {
         <h2 className="font-display text-xl text-foreground">Pricing Notes</h2>
         <div className="mt-3 space-y-3 text-sm text-muted-foreground">
           <p>All plans include a 14-day free trial. Cancel anytime before the trial ends and you won't be charged.</p>
-          <p>Annual billing offers approximately 15% savings compared to monthly billing.</p>
+          <p>Annual billing offers approximately 25% savings compared to monthly billing.</p>
           <p>Downgrading takes effect at the end of your current billing period. Your community data is always preserved.</p>
           <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
         </div>

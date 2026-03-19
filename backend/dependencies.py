@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from emergentintegrations.payments.stripe.checkout import StripeCheckout
+import stripe
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -50,8 +50,8 @@ SUBSCRIPTION_TIERS = {
         "emoji": "seedling",
         "tagline": "Perfect for small circles just getting started.",
         "max_members": 10,
-        "monthly_price": 19.00,
-        "annual_price": 194.00,
+        "monthly_price": 0.00,
+        "annual_price": 0.00,
         "features": [
             "Full event planning suite",
             "Community feed & posts",
@@ -66,8 +66,8 @@ SUBSCRIPTION_TIERS = {
         "emoji": "sapling",
         "tagline": "Growing communities that need more room.",
         "max_members": 25,
-        "monthly_price": 49.00,
-        "annual_price": 500.00,
+        "monthly_price": 9.99,
+        "annual_price": 89.99,
         "features": [
             "All Seedling features",
             "Unlimited subyards",
@@ -83,8 +83,8 @@ SUBSCRIPTION_TIERS = {
         "emoji": "oak",
         "tagline": "Full coordination tools for mid-size communities.",
         "max_members": 50,
-        "monthly_price": 79.00,
-        "annual_price": 806.00,
+        "monthly_price": 19.99,
+        "annual_price": 179.99,
         "features": [
             "All Sapling features",
             "Travel coordination",
@@ -100,8 +100,8 @@ SUBSCRIPTION_TIERS = {
         "emoji": "redwood",
         "tagline": "Advanced tools for large, active communities.",
         "max_members": 100,
-        "monthly_price": 129.00,
-        "annual_price": 1316.00,
+        "monthly_price": 39.99,
+        "annual_price": 359.99,
         "features": [
             "All Oak features",
             "Advanced analytics & engagement tracking",
@@ -193,6 +193,10 @@ def sanitize_doc(document: dict[str, Any] | None) -> dict[str, Any] | None:
 def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any]) -> dict[str, Any]:
     user_safe = sanitize_doc(user_doc) or {}
     user_safe.pop("password_hash", None)
+    platform_admin_email = normalize_email(os.environ.get("PLATFORM_ADMIN_EMAIL", ""))
+    user_safe["is_platform_admin"] = bool(
+        platform_admin_email and normalize_email(user_safe.get("email", "")) == platform_admin_email
+    )
     token = create_access_token(
         user_safe["id"],
         {"community_id": user_safe["community_id"], "role": user_safe["role"]},
@@ -216,11 +220,10 @@ def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "o
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to perform this action.")
 
 
-def build_stripe_checkout(request: Request) -> StripeCheckout:
-    api_key = os.environ["STRIPE_API_KEY"]
-    host_url = str(request.base_url).rstrip("/")
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    return StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+def build_stripe_checkout(request: Request) -> stripe.Stripe:
+    """Build a Stripe client. Requires STRIPE_API_KEY environment variable."""
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    return stripe.Stripe(api_key=api_key)
 
 
 def parse_datetime_safe(value: str | None) -> datetime | None:

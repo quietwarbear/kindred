@@ -94,6 +94,7 @@ class UserPublic(BaseModel):
     google_picture: str = ""
     auth_provider: str = "email"
     onboarding_completed: bool = False
+    is_platform_admin: bool = False
     created_at: str = ""
 
 
