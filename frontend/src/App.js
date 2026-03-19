@@ -9,7 +9,6 @@ import { AuthPage } from "@/components/AuthPage";
 import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
-import { StrategyPage } from "@/components/StrategyPage";
 import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
@@ -169,7 +168,6 @@ function App() {
               element={session?.token ? (needsGoogleOnboarding ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/home" />) : <Navigate replace to="/login" />}
               path="/welcome"
             />
-            <Route element={<StrategyPage mode="public" />} path="/strategy" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
             <Route element={<TermsOfServicePage />} path="/terms" />
             <Route element={<SupportPage />} path="/support" />
