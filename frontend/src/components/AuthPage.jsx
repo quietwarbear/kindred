@@ -155,8 +155,6 @@ export const AuthPage = ({ onAuthSuccess }) => {
         </div>
 
         <div className="archival-card">
-
-        </div>
         <Tabs defaultValue="launch">
           <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
             <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
@@ -275,6 +273,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
             </div>
           </TabsContent>
         </Tabs>
+        </div>
       </div>
     </div><footer className="page-section border-t border-border/40 py-6 mt-8" data-testid="auth-footer">
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
