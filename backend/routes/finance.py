@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from db import budget_plans_collection, payments_collection, subscriptions_collection, travel_plans_collection, users_collection
 from dependencies import (
     CONTRIBUTION_PACKAGES,
-    build_stripe_checkout,
     ensure_minimum_role,
     get_current_user,
     now_iso,

@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-import stripe
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -130,20 +129,20 @@ SUBSCRIPTION_TIERS = {
 
 TIER_ORDER = ["seedling", "sapling", "oak", "redwood", "elder-grove"]
 
-# Stripe recurring Price IDs — populated by setup_stripe_subscriptions.py
-# Set these as environment variables in Railway / .env after running the setup script.
+# Stripe recurring Price IDs — defaults match live Stripe products.
+# Can be overridden via environment variables in Railway / .env if needed.
 STRIPE_PRICE_IDS: dict[str, dict[str, str]] = {
     "sapling": {
-        "monthly": os.environ.get("STRIPE_PRICE_SAPLING_MONTHLY", ""),
-        "annual": os.environ.get("STRIPE_PRICE_SAPLING_ANNUAL", ""),
+        "monthly": os.environ.get("STRIPE_PRICE_SAPLING_MONTHLY", "price_1TCNAdAk1UyEdCJUIlI3clyU"),
+        "annual": os.environ.get("STRIPE_PRICE_SAPLING_ANNUAL", "price_1TCMNIAk1UyEdCJUHIFvOqex"),
     },
     "oak": {
-        "monthly": os.environ.get("STRIPE_PRICE_OAK_MONTHLY", ""),
-        "annual": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", ""),
+        "monthly": os.environ.get("STRIPE_PRICE_OAK_MONTHLY", "price_1TCN7VAk1UyEdCJU3LdlXY14"),
+        "annual": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", "price_1TCMQRAk1UyEdCJU8yS5hdLe"),
     },
     "redwood": {
-        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", ""),
-        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", ""),
+        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCMVYAk1UyEdCJUJqhBRIFc"),
+        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCN3XAk1UyEdCJUuhFERcuD"),
     },
 }
 
@@ -236,11 +235,6 @@ def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "o
     if ROLE_ORDER.get(user["role"], 0) < ROLE_ORDER[minimum_role]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to perform this action.")
 
-
-def build_stripe_checkout(request: Request) -> stripe.Stripe:
-    """Build a Stripe client. Requires STRIPE_API_KEY environment variable."""
-    api_key = os.environ.get("STRIPE_API_KEY", "")
-    return stripe.Stripe(api_key=api_key)
 
 
 def parse_datetime_safe(value: str | None) -> datetime | None:

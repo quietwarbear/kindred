@@ -13,7 +13,6 @@ from dependencies import (
     STRIPE_PRICE_IDS,
     SUBSCRIPTION_TIERS,
     TIER_ORDER,
-    build_stripe_checkout,
     ensure_minimum_role,
     get_community_tier,
     get_current_user,
