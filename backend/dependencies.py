@@ -130,6 +130,23 @@ SUBSCRIPTION_TIERS = {
 
 TIER_ORDER = ["seedling", "sapling", "oak", "redwood", "elder-grove"]
 
+# Stripe recurring Price IDs — populated by setup_stripe_subscriptions.py
+# Set these as environment variables in Railway / .env after running the setup script.
+STRIPE_PRICE_IDS: dict[str, dict[str, str]] = {
+    "sapling": {
+        "monthly": os.environ.get("STRIPE_PRICE_SAPLING_MONTHLY", ""),
+        "annual": os.environ.get("STRIPE_PRICE_SAPLING_ANNUAL", ""),
+    },
+    "oak": {
+        "monthly": os.environ.get("STRIPE_PRICE_OAK_MONTHLY", ""),
+        "annual": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", ""),
+    },
+    "redwood": {
+        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", ""),
+        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", ""),
+    },
+}
+
 
 def get_community_tier(subscription: dict | None) -> dict:
     """Return the tier config for a subscription, defaulting to seedling."""
