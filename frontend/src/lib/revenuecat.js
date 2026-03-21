@@ -47,7 +47,7 @@ export const initializeRevenueCat = async () => {
   }
 
   try {
-    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
 
     // Configure RevenueCat
     await Purchases.configure({
@@ -75,7 +75,7 @@ export const fetchOfferings = async () => {
   }
 
   try {
-    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
     const offerings = await Purchases.getOfferings();
     return offerings;
   } catch (error) {
@@ -97,7 +97,7 @@ export const getPackageByProductId = async (productId) => {
   }
 
   try {
-    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
     const offerings = await Purchases.getOfferings();
 
     // Search for the package in current offering
@@ -125,7 +125,7 @@ export const makePurchase = async (productId) => {
   }
 
   try {
-    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
 
     // Get the package first
     const pkg = await getPackageByProductId(productId);
@@ -168,7 +168,7 @@ export const syncRevenueCatUser = async (userId) => {
   }
 
   try {
-    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
     await Purchases.logIn({
       appUserID: userId,
     });
