@@ -56,7 +56,7 @@ const TIER_BTN = {
 
 const formatPrice = (val) =>
   val === 0
-    ? "Custom"
+    ? "Free"
     : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
 const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, currentTierId }) => {

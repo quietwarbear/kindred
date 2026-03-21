@@ -34,6 +34,7 @@ from db import (
 from dependencies import (
     apply_session_cookie,
     build_auth_response,
+    enforce_member_limit,
     ensure_chat_rooms_for_community,
     get_community_for_user,
     get_current_user,
@@ -138,6 +139,8 @@ async def register_with_invite(payload: InviteRegistrationRequest):
     if existing_user:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
 
+    await enforce_member_limit(invite_doc["community_id"])
+
     created_at = now_iso()
     user_doc = {
         "id": str(uuid.uuid4()),
@@ -234,6 +237,7 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
         user_id = str(uuid.uuid4())
 
         if invite_doc:
+            await enforce_member_limit(invite_doc["community_id"])
             user_doc = {
                 "id": user_id,
                 "full_name": google_user.get("name") or email.split("@")[0],

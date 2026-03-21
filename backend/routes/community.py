@@ -25,6 +25,8 @@ from dependencies import (
     build_notifications,
     ensure_chat_rooms_for_community,
     ensure_minimum_role,
+    enforce_member_limit,
+    enforce_subyard_limit,
     get_community_for_user,
     get_current_user,
     get_subyard_for_user,
@@ -206,6 +208,7 @@ async def list_subyards(current_user: dict[str, Any] = Depends(get_current_user)
 @router.post("/subyards")
 async def create_subyard(payload: SubyardCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
+    await enforce_subyard_limit(current_user["community_id"])
     role_focus = [role.strip().lower() for role in payload.role_focus if role.strip()]
     subyard_doc = {
         "id": str(uuid.uuid4()),
@@ -439,6 +442,7 @@ async def join_community_with_invite(body: dict, current_user: dict[str, Any] = 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This invite was not sent to your email address.")
 
     target_community_id = invite_doc["community_id"]
+    await enforce_member_limit(target_community_id)
     community_ids = current_user.get("community_ids", [current_user["community_id"]])
     if target_community_id in community_ids:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You are already a member of this community.")

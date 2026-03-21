@@ -154,6 +154,68 @@ def get_community_tier(subscription: dict | None) -> dict:
     return SUBSCRIPTION_TIERS.get(subscription.get("plan_id", "seedling"), SUBSCRIPTION_TIERS["seedling"])
 
 
+# ---------------------------------------------------------------------------
+# Tier enforcement helpers
+# ---------------------------------------------------------------------------
+
+async def _get_active_subscription(community_id: str) -> dict | None:
+    """Fetch the active subscription for a community."""
+    from db import subscriptions_collection
+    return await subscriptions_collection.find_one(
+        {"community_id": community_id, "status": {"$in": ["active", "trialing"]}},
+        {"_id": 0},
+    )
+
+
+async def get_tier_for_community(community_id: str) -> dict:
+    """Look up the active subscription and return the tier config."""
+    sub = await _get_active_subscription(community_id)
+    return get_community_tier(sub)
+
+
+def require_tier_feature(tier: dict, feature_key: str) -> None:
+    """Raise 403 if the tier does not include the requested feature."""
+    limits = tier.get("limits", {})
+    if not limits.get(feature_key, False):
+        tier_name = tier.get("name", "your current plan")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{feature_key.replace('_', ' ').title()} is not available on the {tier_name} plan. Please upgrade to access this feature.",
+        )
+
+
+async def require_feature(current_user: dict[str, Any], feature_key: str) -> dict:
+    """Convenience: look up tier and enforce a boolean feature gate. Returns the tier."""
+    tier = await get_tier_for_community(current_user["community_id"])
+    require_tier_feature(tier, feature_key)
+    return tier
+
+
+async def enforce_member_limit(community_id: str) -> None:
+    """Raise 403 if the community has reached its member cap for the tier."""
+    tier = await get_tier_for_community(community_id)
+    member_count = await users_collection.count_documents({"community_id": community_id})
+    max_members = tier.get("max_members", 10)
+    if member_count >= max_members:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your {tier['name']} plan supports up to {max_members} members. Please upgrade to add more.",
+        )
+
+
+async def enforce_subyard_limit(community_id: str) -> None:
+    """Raise 403 if the community has reached its subyard cap for the tier."""
+    from db import subyards_collection
+    tier = await get_tier_for_community(community_id)
+    subyard_count = await subyards_collection.count_documents({"community_id": community_id})
+    max_subyards = tier.get("limits", {}).get("max_subyards", 1)
+    if subyard_count >= max_subyards:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your {tier['name']} plan supports up to {max_subyards} subyard(s). Please upgrade for more.",
+        )
+
+
 GATHERING_TEMPLATES = [
     {
         "id": "reunion",

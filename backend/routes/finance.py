@@ -16,6 +16,7 @@ from dependencies import (
     ensure_minimum_role,
     get_current_user,
     now_iso,
+    require_feature,
 )
 from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreateRequest
 
@@ -36,6 +37,7 @@ async def list_travel_plans(
 
 @router.post("/travel-plans")
 async def create_travel_plan(payload: TravelPlanCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    await require_feature(current_user, "travel_coordination")
     plan_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -118,6 +120,7 @@ async def list_budget_plans(current_user: dict[str, Any] = Depends(get_current_u
 @router.post("/budget-plans")
 async def create_budget_plan(payload: BudgetCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
+    await require_feature(current_user, "shared_funds")
     budget_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
