@@ -141,8 +141,8 @@ STRIPE_PRICE_IDS: dict[str, dict[str, str]] = {
         "annual": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", "price_1TCMQRAk1UyEdCJU8yS5hdLe"),
     },
     "redwood": {
-        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCMVYAk1UyEdCJUJqhBRIFc"),
-        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCN3XAk1UyEdCJUuhFERcuD"),
+        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCN3XAk1UyEdCJUuhFERcuD"),
+        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCMVYAk1UyEdCJUJqhBRIFc"),
     },
 }
 
