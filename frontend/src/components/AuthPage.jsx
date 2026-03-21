@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
-const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "668884884587-apbs33q00brkr3n5haiuc79qpqa2hqlr.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "168719752136-i70p8s13ajg5j8dc8gchm43jb84kv0s5.apps.googleusercontent.com";
 
 const initialLaunchState = {
   full_name: "",
