@@ -57,13 +57,13 @@ const TIER_BTN = {
 const formatPrice = (val) =>
   val === 0
     ? "Custom"
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
+    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
 const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, currentTierId }) => {
   const Icon = TIER_ICONS[plan.id] || Leaf;
   const isElderGrove = plan.id === "elder-grove";
   const price = billingCycle === "annual" ? plan.annual_price : plan.monthly_price;
-  const monthlyEquivalent = billingCycle === "annual" && plan.annual_price > 0 ? (plan.annual_price / 12).toFixed(0) : null;
+  const monthlyEquivalent = billingCycle === "annual" && plan.annual_price > 0 ? (plan.annual_price / 12).toFixed(2) : null;
   const isPopular = plan.id === "oak";
 
   const tierOrder = ["seedling", "sapling", "oak", "redwood", "elder-grove"];

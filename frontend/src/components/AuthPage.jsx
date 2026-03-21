@@ -47,7 +47,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const handleSuccess = (payload, message) => {
     onAuthSuccess(payload);
     toast.success(message);
-    navigate("/dashboard");
+    navigate("/subscription");
   };
 
   const handleLaunch = async (event) => {
