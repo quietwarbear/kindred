@@ -64,6 +64,7 @@ function App() {
   });
   const [isLoading, setIsLoading] = useState(Boolean(session?.token));
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
+  const [freshLogin, setFreshLogin] = useState(false);
 
   const handleAuthSuccess = (payload) => {
     const nextSession = {
@@ -75,7 +76,21 @@ function App() {
     localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
   };
 
+  const handleFreshLogin = (payload) => {
+    setFreshLogin(true);
+    handleAuthSuccess(payload);
+  };
+
   useEffect(() => {
+    // Skip re-validation when we just completed a fresh login — the token
+    // is already valid and re-calling /auth/me can race on slower devices
+    // (iPad, spotty connections) causing the session to be cleared.
+    if (freshLogin) {
+      setIsLoading(false);
+      setHasCheckedSession(true);
+      return;
+    }
+
     const validateSession = async () => {
       try {
         const sessionId = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session_id");
@@ -104,7 +119,7 @@ function App() {
     };
 
     validateSession();
-  }, [session?.token]);
+  }, [session?.token, freshLogin]);
 
   // Initialize native features when running in Capacitor
   useEffect(() => {
@@ -141,7 +156,7 @@ function App() {
   };
 
   const publicAuthPage = useMemo(
-    () => <AuthPage onAuthSuccess={handleAuthSuccess} session={session} />,
+    () => <AuthPage onAuthSuccess={handleFreshLogin} session={session} />,
     [session]
   );
   const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
