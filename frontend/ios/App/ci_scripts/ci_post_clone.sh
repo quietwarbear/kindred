@@ -1,8 +1,17 @@
 #!/bin/sh
 set -e
-brew install cocoapods
+
+# Install Node.js via nvm (Xcode Cloud doesn't include it by default)
+export NVM_DIR="$HOME/.nvm"
+if [ ! -d "$NVM_DIR" ]; then
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+fi
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install 18
+nvm use 18
+
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend
-npm install
+npm install --legacy-peer-deps
 npx cap sync ios
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend/ios/App
 pod install
