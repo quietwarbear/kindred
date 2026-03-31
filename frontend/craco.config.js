@@ -38,6 +38,14 @@ let webpackConfig = {
     },
     configure: (webpackConfig) => {
 
+      // Disable CSS minimization to work around postcss-js "Missed semicolon" error
+      // caused by Tailwind @apply directives in compiled CSS output
+      if (webpackConfig.optimization && webpackConfig.optimization.minimizer) {
+        webpackConfig.optimization.minimizer = webpackConfig.optimization.minimizer.filter(
+          plugin => !(plugin.constructor && plugin.constructor.name === 'CssMinimizerPlugin')
+        );
+      }
+
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
           ...webpackConfig.watchOptions,

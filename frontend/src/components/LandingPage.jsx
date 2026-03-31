@@ -157,19 +157,29 @@ export const LandingPage = ({ isAuthenticated }) => {
       </section>
 
       <footer className="page-section border-t border-border/40 py-8" data-testid="landing-footer">
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-          <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} Ubuntu Market LLC. All rights reserved.</p>
-          <nav className="flex gap-6">
-            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-privacy-link" to="/privacy">
-              Privacy Policy
-            </Link>
-            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-terms-link" to="/terms">
-              Terms of Service
-            </Link>
-            <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-support-link" to="/support">
-              Support
-            </Link>
-          </nav>
+        <div className="flex flex-col items-center gap-6">
+          <div className="flex items-center gap-3 flex-wrap justify-center">
+            <a href="https://apps.apple.com/app/heykindred/id6760608478" target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
+              <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store" style={{ height: '40px' }} />
+            </a>
+            <a href="https://play.google.com/store/apps/details?id=com.ubuntumarket.kindred" target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" style={{ height: '40px' }} />
+            </a>
+          </div>
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between w-full">
+            <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} Ubuntu Market LLC. All rights reserved.</p>
+            <nav className="flex gap-6">
+              <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-privacy-link" to="/privacy">
+                Privacy Policy
+              </Link>
+              <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-terms-link" to="/terms">
+                Terms of Service
+              </Link>
+              <Link className="text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="landing-footer-support-link" to="/support">
+                Support
+              </Link>
+            </nav>
+          </div>
         </div>
       </footer>
     </div>
