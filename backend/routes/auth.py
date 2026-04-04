@@ -197,7 +197,7 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
 
         # Verify the ID token
         idinfo = id_token.verify_oauth2_token(
-            payload.session_id,
+            payload.credential,
             GoogleRequest(),
             google_client_id,
         )
