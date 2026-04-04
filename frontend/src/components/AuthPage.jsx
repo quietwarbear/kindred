@@ -49,13 +49,15 @@ export const AuthPage = ({ onAuthSuccess }) => {
     try {
       const payload = await apiRequest("/auth/google/session", {
         method: "POST",
-        data: { session_id: response.credential },
+        data: { credential: response.credential },
       });
       onAuthSuccess(payload);
       toast.success("Signed in with Google.");
       navigate("/subscription");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to sign in with Google.");
+      const detail = error.response?.data?.detail;
+        const msg = Array.isArray(detail) ? detail.map(e => e.msg).join(", ") : detail;
+        toast.error(msg || "Unable to sign in with Google.");
     } finally {
       setIsSubmitting(false);
     }
