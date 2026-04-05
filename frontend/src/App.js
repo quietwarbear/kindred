@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/api";
 import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
 
 const APP_STATE_KEY = "gathering-cypher-auth";
+const MOBILE_GOOGLE_CALLBACK_URL = process.env.REACT_APP_MOBILE_GOOGLE_CALLBACK_URL || "kindred://auth/google/callback";
 
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
@@ -66,7 +67,7 @@ function App() {
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
   const [freshLogin, setFreshLogin] = useState(false);
 
-  const handleAuthSuccess = (payload) => {
+  const handleAuthSuccess = useCallback((payload) => {
     const nextSession = {
       token: payload.token,
       user: payload.user,
@@ -74,12 +75,35 @@ function App() {
     };
     setSession(nextSession);
     localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSession));
-  };
+  }, []);
 
-  const handleFreshLogin = (payload) => {
+  const handleFreshLogin = useCallback((payload) => {
     setFreshLogin(true);
     handleAuthSuccess(payload);
-  };
+  }, [handleAuthSuccess]);
+
+  const handleNativeGoogleCallback = useCallback(async (url) => {
+    if (!url?.startsWith(MOBILE_GOOGLE_CALLBACK_URL)) return;
+    try {
+      const parsed = new URL(url);
+      const googleError = parsed.searchParams.get("google_error");
+      const googleSuccess = parsed.searchParams.get("google_success");
+      try {
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.close();
+      } catch (_) {
+        // ignore close failures
+      }
+      if (googleError) {
+        throw new Error(googleError);
+      }
+      if (!googleSuccess) return;
+      const payload = await apiRequest("/auth/me");
+      handleFreshLogin(payload);
+    } catch (error) {
+      console.error("[Kindred] Native Google callback failed:", error);
+    }
+  }, [handleFreshLogin]);
 
   useEffect(() => {
     // Skip re-validation when we just completed a fresh login — the token
@@ -93,23 +117,9 @@ function App() {
 
     const validateSession = async () => {
       try {
-        const sessionId = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session_id");
-        if (sessionId) {
-          const payload = await apiRequest("/auth/google/session", {
-            method: "POST",
-            data: { session_id: sessionId },
-          });
-          handleAuthSuccess(payload);
-          window.history.replaceState({}, document.title, window.location.pathname);
-          return;
-        }
-
         const payload = await apiRequest("/auth/me", session?.token ? { token: session.token } : {});
         handleAuthSuccess({ ...payload, token: payload.token || session?.token });
       } catch {
-        if (window.location.hash?.includes("session_id=")) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
         localStorage.removeItem(APP_STATE_KEY);
         setSession(null);
       } finally {
@@ -119,13 +129,13 @@ function App() {
     };
 
     validateSession();
-  }, [session?.token, freshLogin]);
+  }, [session?.token, freshLogin, handleAuthSuccess]);
 
   // Initialize native features when running in Capacitor
   useEffect(() => {
     if (isNative()) {
       configureStatusBar();
-      setupAppListeners();
+      setupAppListeners(undefined, handleNativeGoogleCallback);
       if (session?.token) {
         registerPush(
           (pushToken) => {
@@ -142,7 +152,7 @@ function App() {
         );
       }
     }
-  }, [session?.token]);
+  }, [session?.token, handleNativeGoogleCallback]);
 
   const handleLogout = () => {
     localStorage.removeItem(APP_STATE_KEY);
@@ -155,9 +165,20 @@ function App() {
     handleAuthSuccess({ ...payload, token: session.token });
   };
 
+  const handleNativeGoogleSignIn = useCallback(async () => {
+    if (!isNative()) return;
+    const authUrl = `${process.env.REACT_APP_BACKEND_URL || ""}/api/auth/google/start?redirect_uri=${encodeURIComponent(MOBILE_GOOGLE_CALLBACK_URL)}`;
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: authUrl, presentationStyle: "popover" });
+    } catch (_) {
+      window.location.assign(authUrl);
+    }
+  }, []);
+
   const publicAuthPage = useMemo(
-    () => <AuthPage onAuthSuccess={handleFreshLogin} session={session} />,
-    [session]
+    () => <AuthPage onAuthSuccess={handleFreshLogin} onGoogleNativeSignIn={handleNativeGoogleSignIn} session={session} />,
+    [handleFreshLogin, handleNativeGoogleSignIn, session]
   );
   const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
 

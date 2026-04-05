@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api";
+import { isNative } from "@/lib/native-bridge";
 import { toast } from "@/components/ui/sonner";
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "168719752136-i70p8s13ajg5j8dc8gchm43jb84kv0s5.apps.googleusercontent.com";
@@ -34,7 +35,7 @@ const initialLoginState = {
   password: "",
 };
 
-export const AuthPage = ({ onAuthSuccess }) => {
+export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
   const navigate = useNavigate();
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
@@ -64,6 +65,9 @@ export const AuthPage = ({ onAuthSuccess }) => {
   }, [onAuthSuccess, navigate]);
 
   useEffect(() => {
+    if (isNative()) {
+      return undefined;
+    }
     const initGoogle = () => {
       if (!window.google?.accounts?.id) return;
       window.google.accounts.id.initialize({
@@ -86,6 +90,10 @@ export const AuthPage = ({ onAuthSuccess }) => {
   }, [handleGoogleCredential]);
 
   const triggerGoogleSignIn = () => {
+    if (isNative()) {
+      onGoogleNativeSignIn?.();
+      return;
+    }
     if (window.google?.accounts?.id) {
       window.google.accounts.id.prompt();
     } else {

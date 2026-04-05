@@ -2,13 +2,16 @@
 
 import os
 import secrets
+import urllib.parse
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+import requests
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 
 from courtyard_helpers import ROLE_TOOLING, build_default_subyards, build_planning_checklist, build_role_suggestions
 from db import (
@@ -59,6 +62,167 @@ from models import (
 from security import hash_password, verify_password
 
 router = APIRouter(prefix="/api")
+DEFAULT_MOBILE_GOOGLE_REDIRECT = os.environ.get(
+    "GOOGLE_MOBILE_REDIRECT_URI",
+    "kindred://auth/google/callback",
+)
+ALLOWED_MOBILE_GOOGLE_SCHEMES = {
+    scheme.strip()
+    for scheme in os.environ.get(
+        "GOOGLE_MOBILE_REDIRECT_SCHEMES",
+        "kindred,com.ubuntumarket.kindred",
+    ).split(",")
+    if scheme.strip()
+}
+
+
+def _append_query_value(url: str, key: str, value: str) -> str:
+    parts = urllib.parse.urlsplit(url)
+    query = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    query.append((key, value))
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+
+
+def _validate_mobile_redirect_uri(redirect_uri: str) -> str:
+    parsed = urllib.parse.urlparse(redirect_uri)
+    if parsed.scheme not in ALLOWED_MOBILE_GOOGLE_SCHEMES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported mobile redirect URI.")
+    if not parsed.netloc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mobile redirect URI must include a host.")
+    return redirect_uri
+
+
+def _external_base_url(request: Request) -> str:
+    """
+    Build the public-facing base URL behind a proxy like Railway.
+    """
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}"
+
+    public_base_url = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if public_base_url:
+        return public_base_url
+
+    return str(request.base_url).rstrip("/")
+
+
+async def _build_google_auth_response(google_user: dict[str, str], response: Response):
+    email = normalize_email(google_user.get("email", ""))
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account did not return a usable email.")
+
+    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    if user_doc:
+        update_payload = {
+            "full_name": google_user.get("name") or user_doc.get("full_name"),
+            "google_picture": google_user.get("picture", ""),
+            "auth_provider": "google",
+        }
+        if user_doc.get("auth_provider") != "google" or "onboarding_completed" not in user_doc:
+            update_payload["onboarding_completed"] = False
+        await users_collection.update_one(
+            {"id": user_doc["id"]},
+            {"$set": update_payload},
+        )
+        user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
+    else:
+        invite_doc = await invites_collection.find_one({"email": email, "status": "pending"}, {"_id": 0})
+        created_at = now_iso()
+        user_id = str(uuid.uuid4())
+
+        if invite_doc:
+            await enforce_member_limit(invite_doc["community_id"])
+            user_doc = {
+                "id": user_id,
+                "full_name": google_user.get("name") or email.split("@")[0],
+                "nickname": "",
+                "email": email,
+                "phone_number": "",
+                "profile_image_url": "",
+                "google_picture": google_user.get("picture", ""),
+                "password_hash": "",
+                "role": invite_doc["role"],
+                "community_id": invite_doc["community_id"],
+                "auth_provider": "google",
+                "onboarding_completed": False,
+                "created_at": created_at,
+            }
+            await users_collection.insert_one(user_doc.copy())
+            await invites_collection.update_one({"id": invite_doc["id"]}, {"$set": {"status": "accepted", "accepted_at": created_at}})
+        else:
+            community_id = str(uuid.uuid4())
+            display_name = (google_user.get("name") or email.split("@")[0]).split(" ")[0]
+            community_doc = {
+                "id": community_id,
+                "name": f"{display_name}'s Circle",
+                "community_type": "community",
+                "location": "",
+                "description": "A new Kindred courtyard created through Google sign up.",
+                "motto": "",
+                "owner_user_id": user_id,
+                "created_at": created_at,
+            }
+            user_doc = {
+                "id": user_id,
+                "full_name": google_user.get("name") or display_name,
+                "nickname": "",
+                "email": email,
+                "phone_number": "",
+                "profile_image_url": "",
+                "google_picture": google_user.get("picture", ""),
+                "password_hash": "",
+                "role": "host",
+                "community_id": community_id,
+                "auth_provider": "google",
+                "onboarding_completed": False,
+                "created_at": created_at,
+            }
+            await communities_collection.insert_one(community_doc.copy())
+            await users_collection.insert_one(user_doc.copy())
+
+            default_subyards = []
+            for template in build_default_subyards(community_doc["community_type"]):
+                default_subyards.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "community_id": community_id,
+                        "name": template["name"],
+                        "description": template["description"],
+                        "inherited_roles": True,
+                        "role_focus": template["role_focus"],
+                        "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
+                        "visibility": "shared",
+                        "created_by": user_id,
+                        "created_at": created_at,
+                    }
+                )
+            if default_subyards:
+                await subyards_collection.insert_many([item.copy() for item in default_subyards])
+                await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
+            else:
+                await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
+
+    session_token = secrets.token_urlsafe(32)
+    await user_sessions_collection.update_one(
+        {"session_token": session_token},
+        {
+            "$set": {
+                "session_token": session_token,
+                "user_id": user_doc["id"],
+                "email": email,
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "created_at": now_iso(),
+            }
+        },
+        upsert=True,
+    )
+    apply_session_cookie(response, session_token)
+
+    community_doc = await get_community_for_user(user_doc)
+    return build_auth_response(user_doc, community_doc)
 
 
 @router.post("/auth/bootstrap", response_model=AuthResponse)
@@ -213,120 +377,98 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google session validation failed.") from exc
 
-    email = normalize_email(google_user.get("email", ""))
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account did not return a usable email.")
+    return await _build_google_auth_response(google_user, response)
 
-    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
-    if user_doc:
-        update_payload = {
-            "full_name": google_user.get("name") or user_doc.get("full_name"),
-            "google_picture": google_user.get("picture", ""),
-            "auth_provider": "google",
-        }
-        if user_doc.get("auth_provider") != "google" or "onboarding_completed" not in user_doc:
-            update_payload["onboarding_completed"] = False
-        await users_collection.update_one(
-            {"id": user_doc["id"]},
-            {"$set": update_payload},
+
+@router.get("/auth/google/start")
+async def google_login_start(request: Request, redirect_uri: str = DEFAULT_MOBILE_GOOGLE_REDIRECT):
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not google_client_id or not google_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Google OAuth is not configured.",
         )
-        user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
-    else:
-        invite_doc = await invites_collection.find_one({"email": email, "status": "pending"}, {"_id": 0})
-        created_at = now_iso()
-        user_id = str(uuid.uuid4())
 
-        if invite_doc:
-            await enforce_member_limit(invite_doc["community_id"])
-            user_doc = {
-                "id": user_id,
-                "full_name": google_user.get("name") or email.split("@")[0],
-                "nickname": "",
-                "email": email,
-                "phone_number": "",
-                "profile_image_url": "",
-                "google_picture": google_user.get("picture", ""),
-                "password_hash": "",
-                "role": invite_doc["role"],
-                "community_id": invite_doc["community_id"],
-                "auth_provider": "google",
-                "onboarding_completed": False,
-                "created_at": created_at,
-            }
-            await users_collection.insert_one(user_doc.copy())
-            await invites_collection.update_one({"id": invite_doc["id"]}, {"$set": {"status": "accepted", "accepted_at": created_at}})
-        else:
-            community_id = str(uuid.uuid4())
-            display_name = (google_user.get("name") or email.split("@")[0]).split(" ")[0]
-            community_doc = {
-                "id": community_id,
-                "name": f"{display_name}'s Circle",
-                "community_type": "community",
-                "location": "",
-                "description": "A new Kindred courtyard created through Google sign up.",
-                "motto": "",
-                "owner_user_id": user_id,
-                "created_at": created_at,
-            }
-            user_doc = {
-                "id": user_id,
-                "full_name": google_user.get("name") or display_name,
-                "nickname": "",
-                "email": email,
-                "phone_number": "",
-                "profile_image_url": "",
-                "google_picture": google_user.get("picture", ""),
-                "password_hash": "",
-                "role": "host",
-                "community_id": community_id,
-                "auth_provider": "google",
-                "onboarding_completed": False,
-                "created_at": created_at,
-            }
-            await communities_collection.insert_one(community_doc.copy())
-            await users_collection.insert_one(user_doc.copy())
+    app_redirect_uri = _validate_mobile_redirect_uri(redirect_uri)
+    oauth_callback_uri = _external_base_url(request) + "/api/auth/google/callback"
+    params = {
+        "client_id": google_client_id,
+        "redirect_uri": oauth_callback_uri,
+        "scope": "openid email profile",
+        "response_type": "code",
+        "access_type": "online",
+        "prompt": "select_account",
+        "state": app_redirect_uri,
+    }
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url=auth_url)
 
-            default_subyards = []
-            for template in build_default_subyards(community_doc["community_type"]):
-                default_subyards.append(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "community_id": community_id,
-                        "name": template["name"],
-                        "description": template["description"],
-                        "inherited_roles": True,
-                        "role_focus": template["role_focus"],
-                        "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
-                        "visibility": "shared",
-                        "created_by": user_id,
-                        "created_at": created_at,
-                    }
-                )
-            if default_subyards:
-                await subyards_collection.insert_many([item.copy() for item in default_subyards])
-                await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
-            else:
-                await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
 
-    # Generate a session token for the user
-    session_token = secrets.token_urlsafe(32)
-    await user_sessions_collection.update_one(
-        {"session_token": session_token},
-        {
-            "$set": {
-                "session_token": session_token,
-                "user_id": user_doc["id"],
-                "email": email,
-                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-                "created_at": now_iso(),
-            }
+@router.get("/auth/google/callback")
+async def google_login_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    app_redirect_uri = _validate_mobile_redirect_uri(state or DEFAULT_MOBILE_GOOGLE_REDIRECT)
+
+    if error:
+        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", error))
+
+    if not code:
+        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "no_code"))
+
+    oauth_callback_uri = _external_base_url(request) + "/api/auth/google/callback"
+    token_response = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": google_client_id,
+            "client_secret": google_client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": oauth_callback_uri,
         },
-        upsert=True,
+        timeout=20,
     )
-    apply_session_cookie(response, session_token)
 
-    community_doc = await get_community_for_user(user_doc)
-    return build_auth_response(user_doc, community_doc)
+    if token_response.status_code != 200:
+        try:
+            error_detail = token_response.json().get("error_description", "token_exchange_failed")
+        except Exception:
+            error_detail = "token_exchange_failed"
+        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", error_detail))
+
+    tokens = token_response.json()
+    id_token_value = tokens.get("id_token")
+    if not id_token_value:
+        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "missing_id_token"))
+
+    response = Response()
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            id_token_value,
+            GoogleRequest(),
+            google_client_id,
+        )
+        auth_payload = await _build_google_auth_response(
+            {
+                "email": idinfo.get("email", ""),
+                "name": idinfo.get("name", ""),
+                "picture": idinfo.get("picture", ""),
+            },
+            response,
+        )
+    except Exception:
+        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
+
+    redirect_url = _append_query_value(app_redirect_uri, "google_success", "1")
+    if auth_payload.get("user", {}).get("onboarding_completed") is False:
+        redirect_url = _append_query_value(redirect_url, "needs_onboarding", "1")
+
+    redirect = RedirectResponse(url=redirect_url)
+    for header_name, header_value in response.headers.items():
+        if header_name.lower() == "set-cookie":
+            redirect.headers.append("set-cookie", header_value)
+    return redirect
 
 
 @router.post("/auth/password-recovery/request")

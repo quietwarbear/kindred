@@ -30,6 +30,16 @@
                 <data android:scheme="rc-88980e6fd6" />
             </intent-filter>
 
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="kindred"
+                    android:host="auth"
+                    android:pathPrefix="/google/callback" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -46,4 +56,5 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="com.android.vending.BILLING" />
 </manifest>
