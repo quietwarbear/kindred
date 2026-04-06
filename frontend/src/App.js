@@ -88,6 +88,7 @@ function App() {
       const parsed = new URL(url);
       const googleError = parsed.searchParams.get("google_error");
       const googleSuccess = parsed.searchParams.get("google_success");
+      const token = parsed.searchParams.get("token");
       try {
         const { Browser } = await import("@capacitor/browser");
         await Browser.close();
@@ -97,9 +98,9 @@ function App() {
       if (googleError) {
         throw new Error(googleError);
       }
-      if (!googleSuccess) return;
-      const payload = await apiRequest("/auth/me");
-      handleFreshLogin(payload);
+      if (!googleSuccess || !token) return;
+      const payload = await apiRequest("/auth/me", { token });
+      handleFreshLogin({ ...payload, token });
     } catch (error) {
       console.error("[Kindred] Native Google callback failed:", error);
     }

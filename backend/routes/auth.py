@@ -461,6 +461,7 @@ async def google_login_callback(request: Request, code: str | None = None, state
         return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
 
     redirect_url = _append_query_value(app_redirect_uri, "google_success", "1")
+    redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
     if auth_payload.get("user", {}).get("onboarding_completed") is False:
         redirect_url = _append_query_value(redirect_url, "needs_onboarding", "1")
 
