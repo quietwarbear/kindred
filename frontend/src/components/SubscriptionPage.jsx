@@ -530,6 +530,23 @@ export const SubscriptionPage = ({ token, user }) => {
           <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
         </div>
       </div>
+
+      {/* Auto-Renewal Disclosure (Apple 3.1.2(c) / Google Play compliance) */}
+      <div className="archival-card space-y-3" data-testid="subscription-legal">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Paid plans are auto-renewable subscriptions. Payment is charged to your Apple ID account (iOS),
+          Google Play account (Android), or payment method on file (web) at confirmation of purchase.
+          Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the
+          end of the current billing period. Your account will be charged for renewal within 24 hours prior
+          to the end of the current period. You can manage and cancel subscriptions at any time: on iOS, go
+          to Settings &gt; [Your Name] &gt; Subscriptions; on Android, go to Google Play Store &gt; Menu &gt;
+          Subscriptions; on web, use the Cancel Plan button above.
+        </p>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <a href="/terms" className="text-primary hover:underline">Terms of Service</a>
+          <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>
+        </div>
+      </div>
     </div>
   );
 };
