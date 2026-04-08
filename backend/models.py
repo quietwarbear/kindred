@@ -61,11 +61,18 @@ class GoogleOnboardingRequest(BaseModel):
     nickname: str = ""
     phone_number: str = ""
     profile_image_url: str = ""
-    community_name: str = Field(min_length=1)
+    community_name: str = ""
     community_type: str = "family"
     location: str = ""
     description: str = ""
     motto: str = ""
+    first_subyard_name: str = ""
+    first_subyard_description: str = ""
+    first_gathering_title: str = ""
+    first_gathering_template: str = "reunion"
+    first_gathering_start_at: str | None = None
+    first_gathering_location: str = ""
+    invite_emails: list[str] = []
 
 
 class CommunityPublic(BaseModel):
