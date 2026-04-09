@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://kindred.ubuntumarket.com";
 export const API_URL = `${BACKEND_URL}/api`;
 
 export const apiRequest = async (path, { method = "GET", data, token, params } = {}) => {
