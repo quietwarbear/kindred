@@ -12,6 +12,7 @@ nvm use 18
 
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend
 npm install --legacy-peer-deps
+GENERATE_SOURCEMAP=false CI=false npm run build
 npx cap sync ios
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend/ios/App
 pod install
