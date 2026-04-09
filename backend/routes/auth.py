@@ -7,7 +7,10 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+import jwt
 import requests
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
+from cryptography.hazmat.backends import default_backend
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -47,6 +50,7 @@ from dependencies import (
 )
 from models import (
     AccountDeleteRequest,
+    AppleSessionRequest,
     AuthResponse,
     CommunityBootstrapRequest,
     GoogleOnboardingRequest,
@@ -109,19 +113,19 @@ def _external_base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-async def _build_google_auth_response(google_user: dict[str, str], response: Response):
+async def _build_google_auth_response(google_user: dict[str, str], response: Response, *, provider: str = "google"):
     email = normalize_email(google_user.get("email", ""))
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account did not return a usable email.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Social sign-in did not return a usable email.")
 
     user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
     if user_doc:
         update_payload = {
             "full_name": google_user.get("name") or user_doc.get("full_name"),
             "google_picture": google_user.get("picture", ""),
-            "auth_provider": "google",
+            "auth_provider": provider,
         }
-        if user_doc.get("auth_provider") != "google" or "onboarding_completed" not in user_doc:
+        if user_doc.get("auth_provider") != provider or "onboarding_completed" not in user_doc:
             update_payload["onboarding_completed"] = False
         await users_collection.update_one(
             {"id": user_doc["id"]},
@@ -146,7 +150,7 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "password_hash": "",
                 "role": invite_doc["role"],
                 "community_id": invite_doc["community_id"],
-                "auth_provider": "google",
+                "auth_provider": provider,
                 "onboarding_completed": False,
                 "created_at": created_at,
             }
@@ -160,7 +164,7 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "name": f"{display_name}'s Circle",
                 "community_type": "community",
                 "location": "",
-                "description": "A new Kindred courtyard created through Google sign up.",
+                "description": "A new Kindred courtyard created through social sign up.",
                 "motto": "",
                 "owner_user_id": user_id,
                 "created_at": created_at,
@@ -176,7 +180,7 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "password_hash": "",
                 "role": "host",
                 "community_id": community_id,
-                "auth_provider": "google",
+                "auth_provider": provider,
                 "onboarding_completed": False,
                 "created_at": created_at,
             }
@@ -223,6 +227,191 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
 
     community_doc = await get_community_for_user(user_doc)
     return build_auth_response(user_doc, community_doc)
+
+
+# ---- Apple Sign In helpers ----
+
+_apple_jwks_cache: dict[str, Any] = {}
+_apple_jwks_fetched_at: float = 0
+
+
+def _get_apple_public_key(kid: str):
+    """Fetch Apple's public keys and return the one matching *kid*."""
+    import time, base64
+
+    global _apple_jwks_cache, _apple_jwks_fetched_at
+    now = time.time()
+    # Refresh cache every 24 hours
+    if not _apple_jwks_cache or now - _apple_jwks_fetched_at > 86400:
+        resp = requests.get("https://appleid.apple.com/auth/keys", timeout=10)
+        resp.raise_for_status()
+        keys = {k["kid"]: k for k in resp.json()["keys"]}
+        _apple_jwks_cache = keys
+        _apple_jwks_fetched_at = now
+
+    jwk = _apple_jwks_cache.get(kid)
+    if not jwk:
+        # Force refresh in case Apple rotated keys
+        resp = requests.get("https://appleid.apple.com/auth/keys", timeout=10)
+        resp.raise_for_status()
+        keys = {k["kid"]: k for k in resp.json()["keys"]}
+        _apple_jwks_cache = keys
+        _apple_jwks_fetched_at = now
+        jwk = _apple_jwks_cache.get(kid)
+    if not jwk:
+        raise ValueError(f"Apple public key {kid} not found")
+
+    # Convert JWK to PEM public key
+    def _b64_to_int(b64: str) -> int:
+        data = base64.urlsafe_b64decode(b64 + "==")
+        return int.from_bytes(data, "big")
+
+    numbers = RSAPublicNumbers(e=_b64_to_int(jwk["e"]), n=_b64_to_int(jwk["n"]))
+    return numbers.public_key(default_backend())
+
+
+def _verify_apple_id_token(id_token_str: str) -> dict[str, Any]:
+    """Verify an Apple Sign In identity token and return claims."""
+    # Decode header to get kid
+    header = jwt.get_unverified_header(id_token_str)
+    kid = header.get("kid")
+    if not kid:
+        raise ValueError("Apple ID token has no kid in header")
+
+    apple_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "com.ubuntumarket.kindred")
+    apple_service_id = os.environ.get("APPLE_SERVICE_ID", "")
+    valid_audiences = [apple_bundle_id]
+    if apple_service_id:
+        valid_audiences.append(apple_service_id)
+
+    public_key = _get_apple_public_key(kid)
+    claims = jwt.decode(
+        id_token_str,
+        public_key,
+        algorithms=["RS256"],
+        audience=valid_audiences,
+        issuer="https://appleid.apple.com",
+    )
+    return claims
+
+
+@router.post("/auth/apple/session")
+async def apple_session_login(payload: AppleSessionRequest, response: Response):
+    """
+    Validate Apple Sign In identity token and log the user in.
+    Apple only sends the user's name on first sign-in, so the client must
+    forward it in *full_name*. Subsequent sign-ins rely on the email in the token.
+    """
+    try:
+        claims = _verify_apple_id_token(payload.id_token)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unable to validate Apple identity token.",
+        ) from exc
+
+    email = claims.get("email") or payload.email or ""
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Apple account did not provide an email address.",
+        )
+
+    # Apple may relay a private email; store it as-is
+    apple_user = {
+        "email": email,
+        "name": payload.full_name or email.split("@")[0],
+        "picture": "",
+    }
+
+    # Reuse the same social auth flow as Google
+    return await _build_google_auth_response(apple_user, response, provider="apple")
+
+
+DEFAULT_MOBILE_APPLE_REDIRECT = os.environ.get(
+    "APPLE_MOBILE_REDIRECT_URI",
+    "kindred://auth/apple/callback",
+)
+
+
+@router.get("/auth/apple/start")
+async def apple_login_start(request: Request, redirect_uri: str = DEFAULT_MOBILE_APPLE_REDIRECT):
+    """
+    Start the Apple Sign In flow for native mobile clients.
+    Redirects to Apple's authorize endpoint, which triggers the native
+    Apple Sign In sheet. Apple posts back to /api/auth/apple/callback.
+    """
+    apple_service_id = os.environ.get("APPLE_SERVICE_ID", "com.ubuntumarket.kindred.signin")
+    callback_url = _external_base_url(request) + "/api/auth/apple/callback"
+    state = redirect_uri  # pass app redirect URI through state
+
+    params = {
+        "client_id": apple_service_id,
+        "redirect_uri": callback_url,
+        "response_type": "code id_token",
+        "scope": "name email",
+        "response_mode": "form_post",
+        "state": state,
+    }
+    auth_url = f"https://appleid.apple.com/auth/authorize?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url=auth_url)
+
+
+@router.post("/auth/apple/callback")
+async def apple_login_callback(request: Request):
+    """
+    Handle Apple's form_post callback after user authorizes.
+    Apple sends id_token, code, state, and optionally user info via POST.
+    We verify the token and redirect to the app with a session token.
+    """
+    form = await request.form()
+    id_token_str = form.get("id_token", "")
+    state = form.get("state", DEFAULT_MOBILE_APPLE_REDIRECT)
+    error_val = form.get("error", "")
+
+    # Parse user info (Apple sends JSON string on first auth only)
+    user_json = form.get("user", "")
+    apple_name = ""
+    apple_email = ""
+    if user_json:
+        import json
+        try:
+            user_data = json.loads(user_json)
+            name_parts = user_data.get("name", {})
+            apple_name = f"{name_parts.get('firstName', '')} {name_parts.get('lastName', '')}".strip()
+            apple_email = user_data.get("email", "")
+        except Exception:
+            pass
+
+    if error_val:
+        return RedirectResponse(url=_append_query_value(state, "apple_error", error_val))
+
+    if not id_token_str:
+        return RedirectResponse(url=_append_query_value(state, "apple_error", "no_id_token"))
+
+    response = Response()
+    try:
+        claims = _verify_apple_id_token(id_token_str)
+        email = claims.get("email") or apple_email or ""
+        apple_user = {
+            "email": email,
+            "name": apple_name or email.split("@")[0],
+            "picture": "",
+        }
+        auth_payload = await _build_google_auth_response(apple_user, response, provider="apple")
+    except Exception:
+        return RedirectResponse(url=_append_query_value(state, "apple_error", "validation_failed"))
+
+    redirect_url = _append_query_value(state, "apple_success", "1")
+    redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
+    if auth_payload.get("user", {}).get("onboarding_completed") is False:
+        redirect_url = _append_query_value(redirect_url, "needs_onboarding", "1")
+
+    redirect = RedirectResponse(url=redirect_url)
+    for header_name, header_value in response.headers.items():
+        if header_name.lower() == "set-cookie":
+            redirect.headers.append("set-cookie", header_value)
+    return redirect
 
 
 @router.post("/auth/bootstrap", response_model=AuthResponse)
@@ -537,7 +726,7 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
     user_id = current_user["id"]
     community_id = current_user["community_id"]
 
-    if current_user.get("auth_provider") != "google":
+    if current_user.get("auth_provider") not in ("google", "apple"):
         if not payload.password:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required to delete your account.")
         full_user = await users_collection.find_one({"id": user_id}, {"_id": 0})

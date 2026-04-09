@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import {
+  ensureInitialized,
   isIOS,
   makePurchase,
   syncRevenueCatUser,
@@ -295,11 +296,15 @@ export const SubscriptionPage = ({ token, user }) => {
     loadPlans();
     loadCurrentSub();
 
-    // Sync user with RevenueCat if on iOS
+    // Initialize and sync user with RevenueCat on iOS
     if (isIOS() && user?.id) {
-      syncRevenueCatUser(user.id).catch((error) => {
-        console.warn("[Kindred] RevenueCat user sync failed:", error);
-      });
+      ensureInitialized()
+        .then((ready) => {
+          if (ready) return syncRevenueCatUser(user.id);
+        })
+        .catch((error) => {
+          console.warn("[Kindred] RevenueCat setup failed:", error);
+        });
     }
   }, [loadPlans, loadCurrentSub, user?.id]);
 
@@ -380,15 +385,25 @@ export const SubscriptionPage = ({ token, user }) => {
               loadCurrentSub();
             }, 2000);
           } else {
-            toast.error(result.message || "Purchase was cancelled or failed.");
+            toast.error(result.message || "Purchase was not completed.");
           }
         } catch (error) {
           console.error("[Kindred] RevenueCat purchase error:", error);
           // Check if user cancelled (common for iOS purchases)
-          if (error.message?.includes("cancelled") || error.message?.includes("user cancelled")) {
+          const msg = error?.message || "";
+          if (
+            msg.includes("cancelled") ||
+            msg.includes("user cancelled") ||
+            msg.includes("PURCHASE_CANCELLED") ||
+            error?.code === 1 // RevenueCat: purchaseCancelledError
+          ) {
             toast.info("Purchase was cancelled.");
+          } else if (msg.includes("not yet available") || msg.includes("not found in offerings")) {
+            toast.error("This plan is not yet available for purchase. Please contact support.");
+          } else if (msg.includes("not ready")) {
+            toast.error("The subscription service is still loading. Please wait a moment and try again.");
           } else {
-            toast.error("Unable to complete purchase. Please try again.");
+            toast.error(msg || "Unable to complete purchase. Please try again.");
           }
         }
       } else {
@@ -517,8 +532,8 @@ export const SubscriptionPage = ({ token, user }) => {
         ))}
       </div>
 
-      {/* Add-Ons Section */}
-      <AddOnsSection token={token} />
+      {/* Add-Ons Section — hidden on iOS per App Store guideline 3.1.1 */}
+      {!isIOS() && <AddOnsSection token={token} />}
 
       {/* FAQ / Notes */}
       <div className="archival-card" data-testid="subscription-faq">

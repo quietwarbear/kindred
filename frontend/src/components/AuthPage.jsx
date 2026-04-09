@@ -11,6 +11,7 @@ import { isNative } from "@/lib/native-bridge";
 import { toast } from "@/components/ui/sonner";
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "168719752136-i70p8s13ajg5j8dc8gchm43jb84kv0s5.apps.googleusercontent.com";
+const APPLE_CLIENT_ID = process.env.REACT_APP_APPLE_SERVICE_ID || "com.ubuntumarket.kindred.signin";
 
 const initialLaunchState = {
   full_name: "",
@@ -63,6 +64,88 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
       setIsSubmitting(false);
     }
   }, [onAuthSuccess, navigate]);
+
+  const handleAppleSignIn = useCallback(async () => {
+    setIsSubmitting(true);
+    try {
+      // On native iOS, use ASAuthorizationAppleIDProvider via the REST approach:
+      // Open Apple's authorize endpoint in the system browser, which triggers
+      // the native Apple Sign In sheet. The response posts back to our backend
+      // which redirects to our deep link with the token.
+      if (isNative()) {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
+        const authUrl = `${backendUrl}/api/auth/apple/start?redirect_uri=${encodeURIComponent("kindred://auth/apple/callback")}`;
+        try {
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.open({ url: authUrl, presentationStyle: "popover" });
+        } catch (_) {
+          window.location.assign(authUrl);
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Web: use Apple JS SDK popup
+      if (!window.AppleID?.auth) {
+        toast.error("Apple Sign In is loading. Please try again in a moment.");
+        setIsSubmitting(false);
+        return;
+      }
+      const result = await window.AppleID.auth.signIn();
+      const idToken = result.authorization?.id_token;
+      const fullName = [result.user?.name?.firstName, result.user?.name?.lastName].filter(Boolean).join(" ");
+      const email = result.user?.email || "";
+
+      if (!idToken) {
+        toast.error("Apple Sign In did not return a valid token.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const payload = await apiRequest("/auth/apple/session", {
+        method: "POST",
+        data: { id_token: idToken, full_name: fullName, email },
+      });
+      onAuthSuccess(payload);
+      toast.success("Signed in with Apple.");
+      navigate("/subscription");
+    } catch (error) {
+      // Error code 1001 or popup closed = user cancelled
+      if (error?.code === "ERR_CANCELED" || error?.message?.includes("cancelled") || error?.code === 1001 || error?.error === "popup_closed_by_user") {
+        // User cancelled — no toast needed
+      } else {
+        const detail = error.response?.data?.detail;
+        const msg = Array.isArray(detail) ? detail.map(e => e.msg).join(", ") : detail;
+        toast.error(msg || "Unable to sign in with Apple.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [onAuthSuccess, navigate]);
+
+  // Initialize Apple JS SDK
+  useEffect(() => {
+    const initApple = () => {
+      window.AppleID?.auth?.init({
+        clientId: APPLE_CLIENT_ID,
+        scope: "name email",
+        redirectURI: window.location.origin + "/login",
+        usePopup: true,
+      });
+    };
+    if (window.AppleID?.auth) {
+      initApple();
+      return;
+    }
+    // Load Apple JS SDK if not already present
+    const existing = document.querySelector('script[src*="appleid.auth.js"]');
+    if (!existing) {
+      const script = document.createElement("script");
+      script.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+      script.onload = initApple;
+      document.head.appendChild(script);
+    }
+  }, []);
 
   useEffect(() => {
     if (isNative()) {
@@ -215,7 +298,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
           <div className="mb-6">
             <p className="eyebrow-text text-orange-700 dark:text-orange-200">Social sign in / sign up</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Use Google to sign in, join an invited circle, or automatically start your own Kindred space.
+              Use Apple or Google to sign in, join an invited circle, or automatically start your own Kindred space.
             </p>
             <button
               className="mt-4 flex w-full items-center justify-center gap-3 rounded-full border border-border/70 bg-background px-6 py-3.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent/60 hover:shadow-md disabled:opacity-50"
@@ -231,6 +314,18 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
               Continue with Google
+            </button>
+            <button
+              className="mt-3 flex w-full items-center justify-center gap-3 rounded-full border border-border/70 bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-900 hover:shadow-md disabled:opacity-50"
+              data-testid="apple-signin-button"
+              disabled={isSubmitting}
+              onClick={handleAppleSignIn}
+              type="button"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              Sign in with Apple
             </button>
           </div>
           <div className="border-t border-border/50 pt-6" />

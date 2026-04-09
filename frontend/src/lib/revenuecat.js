@@ -24,13 +24,16 @@ export const TIER_TO_PRODUCT_ID = {
 };
 
 let revenueCatInitialized = false;
+let initPromise = null;
 
 /**
  * Initialize RevenueCat SDK (iOS only)
- * Safe to call on web - will no-op
+ * Safe to call on web - will no-op.
+ * Re-entrant: returns the same promise if already in progress.
  */
 export const initializeRevenueCat = async () => {
-  if (revenueCatInitialized) return;
+  if (revenueCatInitialized) return true;
+  if (initPromise) return initPromise;
 
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
@@ -38,28 +41,44 @@ export const initializeRevenueCat = async () => {
   // Only initialize on iOS
   if (!isNative || platform !== "ios") {
     console.log("[Kindred] RevenueCat: skipping init (not iOS native)");
-    return;
+    return false;
   }
 
   if (!REVENUECAT_API_KEY) {
     console.warn("[Kindred] RevenueCat: REACT_APP_REVENUECAT_IOS_KEY not configured");
-    return;
+    return false;
   }
 
-  try {
-    const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
+  initPromise = (async () => {
+    try {
+      const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
 
-    // Configure RevenueCat
-    await Purchases.configure({
-      apiKey: REVENUECAT_API_KEY,
-      appUserID: null, // RevenueCat will generate one, can be overridden later with user ID
-    });
+      // Configure RevenueCat
+      await Purchases.configure({
+        apiKey: REVENUECAT_API_KEY,
+        appUserID: null, // RevenueCat will generate one, can be overridden later with user ID
+      });
 
-    revenueCatInitialized = true;
-    console.log("[Kindred] RevenueCat initialized successfully");
-  } catch (error) {
-    console.error("[Kindred] Failed to initialize RevenueCat:", error);
-  }
+      revenueCatInitialized = true;
+      console.log("[Kindred] RevenueCat initialized successfully");
+      return true;
+    } catch (error) {
+      console.error("[Kindred] Failed to initialize RevenueCat:", error);
+      initPromise = null; // Allow retry
+      return false;
+    }
+  })();
+
+  return initPromise;
+};
+
+/**
+ * Ensure RevenueCat is initialized before performing an action.
+ * Useful when the user reaches the subscription page before init completes.
+ */
+export const ensureInitialized = async () => {
+  if (revenueCatInitialized) return true;
+  return initializeRevenueCat();
 };
 
 /**
@@ -70,9 +89,11 @@ export const fetchOfferings = async () => {
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
 
-  if (!isNative || platform !== "ios" || !revenueCatInitialized) {
-    return null;
-  }
+  if (!isNative || platform !== "ios") return null;
+
+  // Ensure initialized before fetching
+  const ready = await ensureInitialized();
+  if (!ready) return null;
 
   try {
     const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
@@ -92,9 +113,10 @@ export const getPackageByProductId = async (productId) => {
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
 
-  if (!isNative || platform !== "ios" || !revenueCatInitialized) {
-    return null;
-  }
+  if (!isNative || platform !== "ios") return null;
+
+  const ready = await ensureInitialized();
+  if (!ready) return null;
 
   try {
     const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
@@ -102,7 +124,20 @@ export const getPackageByProductId = async (productId) => {
 
     // Search for the package in current offering
     if (offerings?.current?.availablePackages) {
-      return offerings.current.availablePackages.find((pkg) => pkg.product.identifier === productId);
+      const found = offerings.current.availablePackages.find(
+        (pkg) => pkg.product.identifier === productId
+      );
+      if (found) return found;
+    }
+
+    // Also search in all offerings (not just current)
+    if (offerings?.all) {
+      for (const offering of Object.values(offerings.all)) {
+        const found = (offering.availablePackages || []).find(
+          (pkg) => pkg.product.identifier === productId
+        );
+        if (found) return found;
+      }
     }
 
     return null;
@@ -114,14 +149,22 @@ export const getPackageByProductId = async (productId) => {
 
 /**
  * Make purchase on iOS
- * Handles transaction and receipt validation
+ * Handles transaction and receipt validation.
+ * Returns a structured result with clear success/failure info.
  */
 export const makePurchase = async (productId) => {
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
 
-  if (!isNative || platform !== "ios" || !revenueCatInitialized) {
-    throw new Error("RevenueCat purchase not available on this platform");
+  if (!isNative || platform !== "ios") {
+    throw new Error("In-app purchases are only available on iOS.");
+  }
+
+  const ready = await ensureInitialized();
+  if (!ready) {
+    throw new Error(
+      "Subscription service is not ready. Please restart the app and try again."
+    );
   }
 
   try {
@@ -130,7 +173,9 @@ export const makePurchase = async (productId) => {
     // Get the package first
     const pkg = await getPackageByProductId(productId);
     if (!pkg) {
-      throw new Error(`Product ${productId} not found in offerings`);
+      throw new Error(
+        "This subscription product is not yet available. Please try again later."
+      );
     }
 
     // Purchase the package
@@ -147,7 +192,7 @@ export const makePurchase = async (productId) => {
 
     return {
       success: false,
-      message: "Purchase failed or cancelled",
+      message: "Purchase was not completed. Please try again.",
     };
   } catch (error) {
     console.error("[Kindred] Purchase error:", error);
@@ -163,9 +208,10 @@ export const syncRevenueCatUser = async (userId) => {
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
 
-  if (!isNative || platform !== "ios" || !revenueCatInitialized) {
-    return;
-  }
+  if (!isNative || platform !== "ios") return;
+
+  const ready = await ensureInitialized();
+  if (!ready) return;
 
   try {
     const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");

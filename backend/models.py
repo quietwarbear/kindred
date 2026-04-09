@@ -31,6 +31,12 @@ class GoogleSessionRequest(BaseModel):
     credential: str
 
 
+class AppleSessionRequest(BaseModel):
+    id_token: str
+    full_name: str = ""
+    email: str = ""
+
+
 class PasswordRecoveryRequest(BaseModel):
     email: EmailStr
 

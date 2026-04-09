@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, formatDateTime, shortCurrency } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { isNative } from "@/lib/native-bridge";
 
 const initialBudgetForm = {
   title: "",
@@ -186,9 +187,13 @@ export const FundsTravelPage = ({ token, user }) => {
                   </div>
                   <div className="text-right">
                     <p className="font-display text-3xl text-foreground">{shortCurrency(item.amount)}</p>
-                    <Button className="mt-3 rounded-full" data-testid={`funds-travel-package-button-${item.id}`} onClick={() => handleCheckout(item.id)} type="button">
-                      {loadingPackageId === item.id ? "Opening..." : "Contribute"}
-                    </Button>
+                    {isNative() ? (
+                      <p className="mt-3 text-xs text-muted-foreground">Visit kindred on the web to contribute.</p>
+                    ) : (
+                      <Button className="mt-3 rounded-full" data-testid={`funds-travel-package-button-${item.id}`} onClick={() => handleCheckout(item.id)} type="button">
+                        {loadingPackageId === item.id ? "Opening..." : "Contribute"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -16,6 +16,7 @@ import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@
 
 const APP_STATE_KEY = "gathering-cypher-auth";
 const MOBILE_GOOGLE_CALLBACK_URL = process.env.REACT_APP_MOBILE_GOOGLE_CALLBACK_URL || "kindred://auth/google/callback";
+const MOBILE_APPLE_CALLBACK_URL = "kindred://auth/apple/callback";
 
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
@@ -82,27 +83,54 @@ function App() {
     handleAuthSuccess(payload);
   }, [handleAuthSuccess]);
 
-  const handleNativeGoogleCallback = useCallback(async (url) => {
-    if (!url?.startsWith(MOBILE_GOOGLE_CALLBACK_URL)) return;
-    try {
-      const parsed = new URL(url);
-      const googleError = parsed.searchParams.get("google_error");
-      const googleSuccess = parsed.searchParams.get("google_success");
-      const token = parsed.searchParams.get("token");
+  const handleNativeAuthCallback = useCallback(async (url) => {
+    // Handle Google callback
+    if (url?.startsWith(MOBILE_GOOGLE_CALLBACK_URL)) {
       try {
-        const { Browser } = await import("@capacitor/browser");
-        await Browser.close();
-      } catch (_) {
-        // ignore close failures
+        const parsed = new URL(url);
+        const googleError = parsed.searchParams.get("google_error");
+        const googleSuccess = parsed.searchParams.get("google_success");
+        const token = parsed.searchParams.get("token");
+        try {
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.close();
+        } catch (_) {
+          // ignore close failures
+        }
+        if (googleError) {
+          throw new Error(googleError);
+        }
+        if (!googleSuccess || !token) return;
+        const payload = await apiRequest("/auth/me", { token });
+        handleFreshLogin({ ...payload, token });
+      } catch (error) {
+        console.error("[Kindred] Native Google callback failed:", error);
       }
-      if (googleError) {
-        throw new Error(googleError);
+      return;
+    }
+
+    // Handle Apple callback
+    if (url?.startsWith(MOBILE_APPLE_CALLBACK_URL)) {
+      try {
+        const parsed = new URL(url);
+        const appleError = parsed.searchParams.get("apple_error");
+        const appleSuccess = parsed.searchParams.get("apple_success");
+        const token = parsed.searchParams.get("token");
+        try {
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.close();
+        } catch (_) {
+          // ignore close failures
+        }
+        if (appleError) {
+          throw new Error(appleError);
+        }
+        if (!appleSuccess || !token) return;
+        const payload = await apiRequest("/auth/me", { token });
+        handleFreshLogin({ ...payload, token });
+      } catch (error) {
+        console.error("[Kindred] Native Apple callback failed:", error);
       }
-      if (!googleSuccess || !token) return;
-      const payload = await apiRequest("/auth/me", { token });
-      handleFreshLogin({ ...payload, token });
-    } catch (error) {
-      console.error("[Kindred] Native Google callback failed:", error);
     }
   }, [handleFreshLogin]);
 
@@ -136,7 +164,7 @@ function App() {
   useEffect(() => {
     if (isNative()) {
       configureStatusBar();
-      setupAppListeners(undefined, handleNativeGoogleCallback);
+      setupAppListeners(undefined, handleNativeAuthCallback);
       if (session?.token) {
         registerPush(
           (pushToken) => {
@@ -153,7 +181,7 @@ function App() {
         );
       }
     }
-  }, [session?.token, handleNativeGoogleCallback]);
+  }, [session?.token, handleNativeAuthCallback]);
 
   const handleLogout = () => {
     localStorage.removeItem(APP_STATE_KEY);
