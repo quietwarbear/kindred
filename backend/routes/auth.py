@@ -14,7 +14,46 @@ from cryptography.hazmat.backends import default_backend
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+
+def _mobile_scheme_redirect(url: str) -> Response:
+    """Return a response that redirects to ``url``.
+
+    Chrome Custom Tabs (used by Capacitor Browser on Android) refuse to follow
+    HTTP 302 redirects whose target is a non-http(s) custom scheme, which
+    causes the in-app browser to hang on a blank page instead of firing the
+    Android deep link. Work around this by rendering a tiny HTML document that
+    performs the navigation in JavaScript — Custom Tabs honor client-side
+    navigation to custom schemes even though they block server-side ones.
+
+    http(s) targets fall back to a normal RedirectResponse.
+    """
+    parsed_scheme = urllib.parse.urlparse(url).scheme.lower()
+    if parsed_scheme in ("http", "https", ""):
+        return RedirectResponse(url=url)
+
+    escaped = (
+        url.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+    html_safe = url.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    html = (
+        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<title>Returning to Kindred\u2026</title>"
+        "<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,"
+        "Roboto,sans-serif;background:#0b0b0f;color:#f5f5f5;display:flex;"
+        "align-items:center;justify-content:center;min-height:100vh;margin:0;"
+        "text-align:center;padding:24px}a{color:#f0a500}</style>"
+        "<script>window.location.replace('" + escaped + "');</script>"
+        "</head><body><div><p>Returning to Kindred\u2026</p>"
+        "<p>If nothing happens, <a href=\"" + html_safe + "\">tap here</a>.</p>"
+        "</div></body></html>"
+    )
+    return HTMLResponse(content=html)
 
 from courtyard_helpers import ROLE_TOOLING, build_default_subyards, build_planning_checklist, build_role_suggestions
 from db import (
@@ -384,10 +423,10 @@ async def apple_login_callback(request: Request):
             pass
 
     if error_val:
-        return RedirectResponse(url=_append_query_value(state, "apple_error", error_val))
+        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", error_val))
 
     if not id_token_str:
-        return RedirectResponse(url=_append_query_value(state, "apple_error", "no_id_token"))
+        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "no_id_token"))
 
     response = Response()
     try:
@@ -400,14 +439,14 @@ async def apple_login_callback(request: Request):
         }
         auth_payload = await _build_google_auth_response(apple_user, response, provider="apple")
     except Exception:
-        return RedirectResponse(url=_append_query_value(state, "apple_error", "validation_failed"))
+        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "validation_failed"))
 
     redirect_url = _append_query_value(state, "apple_success", "1")
     redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
     if auth_payload.get("user", {}).get("onboarding_completed") is False:
         redirect_url = _append_query_value(redirect_url, "needs_onboarding", "1")
 
-    redirect = RedirectResponse(url=redirect_url)
+    redirect = _mobile_scheme_redirect(redirect_url)
     for header_name, header_value in response.headers.items():
         if header_name.lower() == "set-cookie":
             redirect.headers.append("set-cookie", header_value)
@@ -601,10 +640,10 @@ async def google_login_callback(request: Request, code: str | None = None, state
     app_redirect_uri = _validate_mobile_redirect_uri(state or DEFAULT_MOBILE_GOOGLE_REDIRECT)
 
     if error:
-        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", error))
+        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", error))
 
     if not code:
-        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "no_code"))
+        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "no_code"))
 
     oauth_callback_uri = _external_base_url(request) + "/api/auth/google/callback"
     token_response = requests.post(
@@ -624,12 +663,12 @@ async def google_login_callback(request: Request, code: str | None = None, state
             error_detail = token_response.json().get("error_description", "token_exchange_failed")
         except Exception:
             error_detail = "token_exchange_failed"
-        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", error_detail))
+        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", error_detail))
 
     tokens = token_response.json()
     id_token_value = tokens.get("id_token")
     if not id_token_value:
-        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "missing_id_token"))
+        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "missing_id_token"))
 
     response = Response()
     try:
@@ -647,14 +686,14 @@ async def google_login_callback(request: Request, code: str | None = None, state
             response,
         )
     except Exception:
-        return RedirectResponse(url=_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
+        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
 
     redirect_url = _append_query_value(app_redirect_uri, "google_success", "1")
     redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
     if auth_payload.get("user", {}).get("onboarding_completed") is False:
         redirect_url = _append_query_value(redirect_url, "needs_onboarding", "1")
 
-    redirect = RedirectResponse(url=redirect_url)
+    redirect = _mobile_scheme_redirect(redirect_url)
     for header_name, header_value in response.headers.items():
         if header_name.lower() == "set-cookie":
             redirect.headers.append("set-cookie", header_value)
