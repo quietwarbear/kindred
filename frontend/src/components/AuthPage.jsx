@@ -73,7 +73,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
       // the native Apple Sign In sheet. The response posts back to our backend
       // which redirects to our deep link with the token.
       if (isNative()) {
-        const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app";
         const authUrl = `${backendUrl}/api/auth/apple/start?redirect_uri=${encodeURIComponent("kindred://auth/apple/callback")}`;
         try {
           const { Browser } = await import("@capacitor/browser");

@@ -196,7 +196,7 @@ function App() {
 
   const handleNativeGoogleSignIn = useCallback(async () => {
     if (!isNative()) return;
-    const authUrl = `${process.env.REACT_APP_BACKEND_URL || ""}/api/auth/google/start?redirect_uri=${encodeURIComponent(MOBILE_GOOGLE_CALLBACK_URL)}`;
+    const authUrl = `${process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app"}/api/auth/google/start?redirect_uri=${encodeURIComponent(MOBILE_GOOGLE_CALLBACK_URL)}`;
     try {
       const { Browser } = await import("@capacitor/browser");
       await Browser.open({ url: authUrl, presentationStyle: "popover" });
