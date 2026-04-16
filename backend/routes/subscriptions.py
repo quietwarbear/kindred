@@ -22,6 +22,21 @@ from models import SubscriptionCheckoutRequest
 
 router = APIRouter(prefix="/api")
 
+# Owner/admin emails that always receive top-tier ("redwood") access
+ADMIN_EMAILS = {
+    "hodari@ubuntu-village.org",
+    "shy@ubuntu-village.org",
+    "quiet927@gmail.com",
+}
+
+
+def _is_admin_email(email: str | None) -> bool:
+    """Return True if the email belongs to an admin/owner."""
+    if not email:
+        return False
+    email = email.lower().strip()
+    return email in ADMIN_EMAILS or email.endswith("@ubuntu-village.org")
+
 
 # ---------------------------------------------------------------------------
 # Stripe Customer management
@@ -88,6 +103,34 @@ async def list_subscription_plans():
 
 @router.get("/subscriptions/current")
 async def get_current_subscription(current_user: dict[str, Any] = Depends(get_current_user)):
+    # Admin/owner override — always top tier
+    if _is_admin_email(current_user.get("email")):
+        top_tier = SUBSCRIPTION_TIERS["redwood"]
+        member_count = await users_collection.count_documents({"community_id": current_user["community_id"]})
+        subyard_count = await subyards_collection.count_documents({"community_id": current_user["community_id"]})
+        return {
+            "subscription": {
+                "id": "admin-override",
+                "community_id": current_user["community_id"],
+                "plan_id": "redwood",
+                "plan_name": "Redwood",
+                "status": "active",
+                "billing_cycle": "annual",
+                "provider": "admin_override",
+            },
+            "tier": {
+                "id": top_tier["id"],
+                "name": top_tier["name"],
+                "emoji": top_tier["emoji"],
+                "max_members": top_tier["max_members"],
+                "monthly_price": top_tier["monthly_price"],
+                "annual_price": top_tier["annual_price"],
+                "features": top_tier["features"],
+                "limits": top_tier["limits"],
+            },
+            "usage": {"member_count": member_count, "subyard_count": subyard_count},
+        }
+
     sub = await subscriptions_collection.find_one(
         {"community_id": current_user["community_id"], "status": {"$in": ["active", "past_due", "canceling"]}},
         {"_id": 0},
@@ -383,6 +426,11 @@ async def create_customer_portal(
 
 @router.get("/subscriptions/feature-check/{feature_key}")
 async def check_feature_access(feature_key: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    # Admin/owner override — all features unlocked
+    if _is_admin_email(current_user.get("email")):
+        top_tier = SUBSCRIPTION_TIERS["redwood"]
+        return {"feature_key": feature_key, "allowed": True, "tier_id": top_tier["id"], "tier_name": top_tier["name"]}
+
     sub = await subscriptions_collection.find_one(
         {"community_id": current_user["community_id"], "status": {"$in": ["active", "canceling"]}}, {"_id": 0}
     )
