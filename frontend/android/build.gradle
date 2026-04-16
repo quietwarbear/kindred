@@ -22,6 +22,15 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    // Redirect all build output to ~/Library/Caches so iCloud Drive (which
+    // syncs ~/Desktop) cannot create " 2" conflict-copy files inside the
+    // Capacitor plugin build dirs under node_modules/. Without this, D8/dex
+    // sees duplicate classes like "Keyboard$1 2.class" and fails the merge.
+    buildDir = new File(
+        System.getProperty("user.home"),
+        "Library/Caches/kindred-gradle/${rootProject.name}/${project.name}"
+    )
 }
 
 task clean(type: Delete) {
