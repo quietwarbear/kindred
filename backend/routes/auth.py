@@ -1,11 +1,14 @@
 """Authentication routes."""
 
+import logging
 import os
 import secrets
 import urllib.parse
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import jwt
 import requests
@@ -438,7 +441,8 @@ async def apple_login_callback(request: Request):
             "picture": "",
         }
         auth_payload = await _build_google_auth_response(apple_user, response, provider="apple")
-    except Exception:
+    except Exception as exc:
+        logger.error("Apple OAuth validation failed: %s", exc, exc_info=True)
         return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "validation_failed"))
 
     redirect_url = _append_query_value(state, "apple_success", "1")
@@ -685,7 +689,8 @@ async def google_login_callback(request: Request, code: str | None = None, state
             },
             response,
         )
-    except Exception:
+    except Exception as exc:
+        logger.error("Google OAuth validation failed: %s", exc, exc_info=True)
         return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
 
     redirect_url = _append_query_value(app_redirect_uri, "google_success", "1")
