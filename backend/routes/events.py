@@ -80,6 +80,12 @@ async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
     return events
 
 
+@router.get("/events/{event_id}", response_model=EventPublic)
+async def get_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    event_doc = await get_event_for_user(event_id, current_user)
+    return event_doc
+
+
 @router.put("/events/{event_id}", response_model=EventPublic)
 async def update_event(event_id: str, payload: EventUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")

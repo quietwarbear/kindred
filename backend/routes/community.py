@@ -205,6 +205,27 @@ async def list_subyards(current_user: dict[str, Any] = Depends(get_current_user)
     return {"subyards": subyards}
 
 
+@router.get("/subyards/{subyard_id}")
+async def get_subyard(subyard_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    subyard_doc = await get_subyard_for_user(subyard_id, current_user)
+    community_doc = await get_community_for_user(current_user)
+    community_id = current_user["community_id"]
+    members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    invites = await invites_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    announcements = await announcements_collection.find({"community_id": community_id, "$or": [{"scope": "courtyard"}, {"subyard_id": subyard_id}]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    chat_room = await chat_rooms_collection.find_one({"community_id": community_id, "subyard_id": subyard_id}, {"_id": 0})
+    kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {
+        "subyard": subyard_doc,
+        "courtyard": community_doc,
+        "members": members,
+        "invites": invites,
+        "announcements": announcements,
+        "chat_room": chat_room,
+        "kinships": kinships,
+    }
+
+
 @router.post("/subyards")
 async def create_subyard(payload: SubyardCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")

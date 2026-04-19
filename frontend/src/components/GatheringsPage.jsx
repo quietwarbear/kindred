@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, Link2, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, Link2, Pencil, Trash2, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const initialEventForm = {
 };
 
 export const GatheringsPage = ({ token, user }) => {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [subyards, setSubyards] = useState([]);
   const [members, setMembers] = useState([]);
@@ -332,15 +334,20 @@ export const GatheringsPage = ({ token, user }) => {
                   className={`w-full rounded-[24px] border p-5 text-left transition duration-300 ${eventItem.id === activeEventId ? "border-primary bg-primary/5" : "border-border bg-background/70 hover:border-primary/30"}`}
                   data-testid={`gathering-card-${eventItem.id}`}
                   key={eventItem.id}
-                  onClick={() => setActiveEventId(eventItem.id)}
+                  onClick={() => navigate(`/gatherings/${eventItem.id}`)}
                   type="button"
                 >
-                  <p className="text-lg font-semibold text-foreground">{eventItem.title}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(eventItem.start_at)} · {eventItem.location}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{eventItem.gathering_format} · {eventItem.subyard_name || "whole courtyard"}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`gathering-card-recurrence-${eventItem.id}`}>
-                    {eventItem.recurrence_frequency === "none" ? "one-time" : `${eventItem.recurrence_frequency} recurring`}
-                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-lg font-semibold text-foreground">{eventItem.title}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(eventItem.start_at)} · {eventItem.location}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">{eventItem.gathering_format} · {eventItem.subyard_name || "whole courtyard"}</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`gathering-card-recurrence-${eventItem.id}`}>
+                        {eventItem.recurrence_frequency === "none" ? "one-time" : `${eventItem.recurrence_frequency} recurring`}
+                      </p>
+                    </div>
+                    <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
                 </button>
               ))
             ) : (

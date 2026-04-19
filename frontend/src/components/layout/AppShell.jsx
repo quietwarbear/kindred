@@ -23,6 +23,8 @@ import { SubscriptionPage } from "@/components/SubscriptionPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
 import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
+import { GatheringDetailPage } from "@/components/GatheringDetailPage";
+import { CourtyardDetailPage } from "@/components/CourtyardDetailPage";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-register";
@@ -288,8 +290,10 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<HomePage token={token} />} path="home" />
               <Route element={<ActivityFeedPage token={token} />} path="activity" />
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
+              <Route element={<CourtyardDetailPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards/:id" />
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
+              <Route element={<GatheringDetailPage token={token} user={user} />} path="gatherings/:id" />
               <Route element={<PollsPage token={token} user={user} />} path="polls" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
               <Route element={<SettingsPage onSessionRefresh={onSessionRefresh} token={token} user={user} />} path="settings" />

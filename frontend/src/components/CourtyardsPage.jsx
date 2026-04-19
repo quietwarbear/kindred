@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, Check, GitBranch, MessageSquare, Network, Pencil, Pin, Share2, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
+import { ArrowRight, BellRing, Check, GitBranch, MessageSquare, Network, Pencil, Pin, Share2, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ const initialAnnouncementForm = {
 };
 
 export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
+  const navigate = useNavigate();
   const initialCommunicationLoadRef = useRef(false);
   const [structure, setStructure] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
@@ -457,10 +459,15 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                   />
                 ) : (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-lg font-semibold text-foreground">{subyard.name}</p>
-                      <p className="mt-2 text-sm leading-7 text-muted-foreground">{subyard.description}</p>
-                    </div>
+                    <button className="flex-1 min-w-0 text-left cursor-pointer hover:opacity-80 transition" onClick={() => navigate(`/courtyards/${subyard.id}`)} type="button">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold text-foreground">{subyard.name}</p>
+                          <p className="mt-2 text-sm leading-7 text-muted-foreground">{subyard.description}</p>
+                        </div>
+                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                      </div>
+                    </button>
                     <div className="flex items-center gap-2">
                       <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-subyard-visibility-${subyard.id}`}>
                         {subyard.visibility}
