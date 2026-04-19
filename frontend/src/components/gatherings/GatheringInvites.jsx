@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MailPlus } from "lucide-react";
+import { Check, Copy, MailPlus, Share2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,38 @@ import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
+
+const ShareMessageButton = ({ text, testId }) => {
+  const [copied, setCopied] = useState(false);
+  const handleShare = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ text }); return; } catch { /* cancelled */ }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      className="mt-1 shrink-0 rounded-full border border-border p-1.5 text-muted-foreground hover:bg-muted/60 hover:text-primary transition"
+      data-testid={testId}
+      onClick={handleShare}
+      title="Share invite message"
+      type="button"
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+    </button>
+  );
+};
 
 export const GatheringInvites = ({ event, token, members, onUpdate }) => {
   const [form, setForm] = useState(initialInviteForm);
@@ -74,7 +106,12 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
             <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{invite.invite_source} · {invite.delivery_status}</p>
             {invite.note ? <p className="mt-2 text-sm text-muted-foreground">{invite.note}</p> : null}
             {invite.zoom_link ? <p className="mt-2 text-sm text-primary" data-testid={`gatherings-event-invite-zoom-${invite.id}`}>Zoom: {invite.zoom_link}</p> : null}
-            <p className="mt-2 text-sm leading-7 text-muted-foreground" data-testid={`gatherings-event-invite-message-${invite.id}`}>{invite.share_message}</p>
+            {invite.share_message && (
+              <div className="mt-2 flex items-start gap-2">
+                <p className="flex-1 text-sm leading-7 text-muted-foreground" data-testid={`gatherings-event-invite-message-${invite.id}`}>{invite.share_message}</p>
+                <ShareMessageButton text={invite.share_message} testId={`gatherings-event-invite-share-${invite.id}`} />
+              </div>
+            )}
           </div>
         ))}
       </div>

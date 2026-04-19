@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Mail, Shield, UserPlus } from "lucide-react";
+import { Mail, Share2, Shield, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ShareInviteDialog } from "@/components/ShareInviteDialog";
 import { apiRequest, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
@@ -13,6 +14,7 @@ export const MembersPage = ({ token, user }) => {
   const [invites, setInvites] = useState([]);
   const [inviteForm, setInviteForm] = useState(initialInviteForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(null);
 
   const canManageInvites = useMemo(() => ["host", "organizer"].includes(user?.role), [user?.role]);
 
@@ -123,8 +125,19 @@ export const MembersPage = ({ token, user }) => {
                       <p className="text-lg font-semibold text-foreground">{invite.email}</p>
                       <p className="mt-1 text-sm text-muted-foreground">Role: {invite.role}</p>
                     </div>
-                    <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-primary" data-testid={`invite-code-${invite.id}`}>
-                      {invite.code}
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-sm font-semibold text-primary" data-testid={`invite-code-${invite.id}`}>
+                        {invite.code}
+                      </div>
+                      <button
+                        className="rounded-full border border-border p-2 text-muted-foreground hover:bg-muted/60 hover:text-primary transition"
+                        data-testid={`invite-share-${invite.id}`}
+                        onClick={() => setSharingInvite(invite)}
+                        title="Share invite"
+                        type="button"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">Status: {invite.status} · Created {formatDateTime(invite.created_at)}</p>
@@ -138,6 +151,14 @@ export const MembersPage = ({ token, user }) => {
           </div>
         </article>
       </section>
+
+      {sharingInvite && (
+        <ShareInviteDialog
+          inviteCode={sharingInvite.code}
+          contextLabel={`Invite for ${sharingInvite.email}`}
+          onClose={() => setSharingInvite(null)}
+        />
+      )}
     </div>
   );
 };

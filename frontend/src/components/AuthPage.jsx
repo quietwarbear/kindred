@@ -36,10 +36,20 @@ const initialLoginState = {
   password: "",
 };
 
-export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
+export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCode, onInviteCodeConsumed }) => {
   const navigate = useNavigate();
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
+  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : "launch");
+
+  // Pre-fill invite code from deep link
+  useEffect(() => {
+    if (pendingInviteCode) {
+      setJoinForm((prev) => ({ ...prev, invite_code: pendingInviteCode }));
+      setActiveTab("join");
+      onInviteCodeConsumed?.();
+    }
+  }, [pendingInviteCode, onInviteCodeConsumed]);
   const [loginForm, setLoginForm] = useState(initialLoginState);
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
@@ -329,7 +339,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn }) => {
             </button>
           </div>
           <div className="border-t border-border/50 pt-6" />
-        <Tabs defaultValue="launch">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
             <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
               Launch

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, Check, GitBranch, MessageSquare, Network, Pencil, Pin, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
+import { BellRing, Check, GitBranch, MessageSquare, Network, Pencil, Pin, Share2, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ShareInviteDialog } from "@/components/ShareInviteDialog";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
@@ -53,6 +54,7 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
   const [announcementCommentDrafts, setAnnouncementCommentDrafts] = useState({});
   const [chatCommentDrafts, setChatCommentDrafts] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(null);
 
   const canManage = useMemo(() => ["host", "organizer"].includes(user?.role), [user?.role]);
   const activeRoom = useMemo(() => chatRooms.find((room) => room.id === activeRoomId) || null, [activeRoomId, chatRooms]);
@@ -665,8 +667,19 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                     <p className="text-base font-semibold text-foreground">{invite.email}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{invite.role} · {invite.status}</p>
                   </div>
-                  <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-invite-code-${invite.id}`}>
-                    {invite.code}
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full border border-border bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary" data-testid={`courtyard-invite-code-${invite.id}`}>
+                      {invite.code}
+                    </div>
+                    <button
+                      className="rounded-full border border-border p-2 text-muted-foreground hover:bg-muted/60 hover:text-primary transition"
+                      data-testid={`courtyard-invite-share-${invite.id}`}
+                      onClick={() => setSharingInvite(invite)}
+                      title="Share invite"
+                      type="button"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -906,6 +919,14 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
           )}
         </article>
       </section>
+
+      {sharingInvite && (
+        <ShareInviteDialog
+          inviteCode={sharingInvite.code}
+          contextLabel={structure?.name ? `${structure.name} courtyard` : "Courtyard invite"}
+          onClose={() => setSharingInvite(null)}
+        />
+      )}
     </div>
   );
 };

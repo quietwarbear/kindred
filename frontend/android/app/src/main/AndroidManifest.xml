@@ -40,6 +40,22 @@
                     android:pathPrefix="/google/callback" />
             </intent-filter>
 
+            <!-- Deep link: custom scheme for invite codes -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kindred" android:host="invite" />
+            </intent-filter>
+
+            <!-- App Links: verified HTTPS deep links for invites -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="kindred.ubuntumarket.com" android:pathPrefix="/invite" />
+            </intent-filter>
+
         </activity>
 
         <provider

@@ -17,6 +17,8 @@ import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@
 const APP_STATE_KEY = "gathering-cypher-auth";
 const MOBILE_GOOGLE_CALLBACK_URL = process.env.REACT_APP_MOBILE_GOOGLE_CALLBACK_URL || "kindred://auth/google/callback";
 const MOBILE_APPLE_CALLBACK_URL = "kindred://auth/apple/callback";
+const INVITE_SCHEME_PREFIX = "kindred://invite/";
+const INVITE_HTTPS_PREFIX = "https://kindred.ubuntumarket.com/invite/";
 
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
@@ -67,6 +69,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(Boolean(session?.token));
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
   const [freshLogin, setFreshLogin] = useState(false);
+  const [pendingInviteCode, setPendingInviteCode] = useState(null);
 
   const handleAuthSuccess = useCallback((payload) => {
     const nextSession = {
@@ -130,6 +133,28 @@ function App() {
         handleFreshLogin({ ...payload, token });
       } catch (error) {
         console.error("[Kindred] Native Apple callback failed:", error);
+      }
+      return;
+    }
+
+    // Handle invite deep links:
+    //   kindred://invite/ABC12345
+    //   https://kindred.ubuntumarket.com/invite/ABC12345
+    if (url?.startsWith(INVITE_SCHEME_PREFIX) || url?.startsWith(INVITE_HTTPS_PREFIX)) {
+      try {
+        let code;
+        if (url.startsWith(INVITE_SCHEME_PREFIX)) {
+          code = url.slice(INVITE_SCHEME_PREFIX.length).split(/[?#]/)[0];
+        } else {
+          code = url.slice(INVITE_HTTPS_PREFIX.length).split(/[?#]/)[0];
+        }
+        code = code.toUpperCase().trim();
+        if (code.length === 8) {
+          console.log("[Kindred] Invite deep link received, code:", code);
+          setPendingInviteCode(code);
+        }
+      } catch (error) {
+        console.error("[Kindred] Invite deep link failed:", error);
       }
     }
   }, [handleFreshLogin]);
@@ -206,7 +231,7 @@ function App() {
   }, []);
 
   const publicAuthPage = useMemo(
-    () => <AuthPage onAuthSuccess={handleFreshLogin} onGoogleNativeSignIn={handleNativeGoogleSignIn} session={session} />,
+    () => <AuthPage onAuthSuccess={handleFreshLogin} onGoogleNativeSignIn={handleNativeGoogleSignIn} session={session} pendingInviteCode={pendingInviteCode} onInviteCodeConsumed={() => setPendingInviteCode(null)} />,
     [handleFreshLogin, handleNativeGoogleSignIn, session]
   );
   const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
