@@ -7,8 +7,8 @@ android {
         applicationId "com.ubuntumarket.kindred"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.0.3"
+        versionCode 11
+        versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
@@ -22,13 +22,18 @@ android {
         targetCompatibility JavaVersion.VERSION_21
     }
     signingConfigs {
-    release {
-        storeFile file('../kindred-release.keystore')
-        storePassword 'Wanjiri22@Toure'
-        keyAlias 'kindred'
-        keyPassword 'Wanjiri22@Toure'
+        release {
+            def keystoreProperties = new Properties()
+            def keystorePropertiesFile = rootProject.file('keystore.properties')
+            if (keystorePropertiesFile.exists()) {
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+            }
+            storeFile file(keystoreProperties['storeFile'] ?: '../kindred-release.keystore')
+            storePassword keystoreProperties['storePassword'] ?: ''
+            keyAlias keystoreProperties['keyAlias'] ?: 'kindred'
+            keyPassword keystoreProperties['keyPassword'] ?: ''
+        }
     }
-}
 
 buildTypes {
     release {
