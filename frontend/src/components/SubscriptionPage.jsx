@@ -269,6 +269,7 @@ export const SubscriptionPage = ({ token, user }) => {
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [pollingSessionId, setPollingSessionId] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [rcReady, setRcReady] = useState(!isIOS()); // web is always "ready"
 
   const isHost = user?.role === "host";
 
@@ -298,13 +299,26 @@ export const SubscriptionPage = ({ token, user }) => {
 
     // Initialize and sync user with RevenueCat on iOS
     if (isIOS() && user?.id) {
-      ensureInitialized()
-        .then((ready) => {
-          if (ready) return syncRevenueCatUser(user.id);
-        })
-        .catch((error) => {
-          console.warn("[Kindred] RevenueCat setup failed:", error);
-        });
+      const initRC = async () => {
+        // Try up to 3 times with increasing delays
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const ready = await ensureInitialized();
+          if (ready) {
+            await syncRevenueCatUser(user.id).catch(() => {});
+            setRcReady(true);
+            return;
+          }
+          // Wait before retrying (2s, 4s)
+          if (attempt < 3) {
+            await new Promise((r) => setTimeout(r, attempt * 2000));
+          }
+        }
+        // All retries exhausted — still mark as ready so user can attempt purchase
+        // (makePurchase will show a specific error if init truly failed)
+        setRcReady(true);
+        console.warn("[Kindred] RevenueCat init failed after 3 attempts");
+      };
+      initRC();
     }
   }, [loadPlans, loadCurrentSub, user?.id]);
 
@@ -374,6 +388,14 @@ export const SubscriptionPage = ({ token, user }) => {
         const productId = billingCycle === "annual" ? productIdMap.annual : productIdMap.monthly;
 
         try {
+          // Ensure RevenueCat is initialized before attempting purchase
+          const ready = await ensureInitialized();
+          if (!ready) {
+            toast.error("Unable to connect to the App Store. Please check your connection and try again.");
+            setCheckoutLoading(null);
+            return;
+          }
+
           const result = await makePurchase(productId);
 
           if (result.success) {
@@ -401,7 +423,7 @@ export const SubscriptionPage = ({ token, user }) => {
           } else if (msg.includes("not yet available") || msg.includes("not found in offerings")) {
             toast.error("This plan is not yet available for purchase. Please contact support.");
           } else if (msg.includes("not ready")) {
-            toast.error("The subscription service is still loading. Please wait a moment and try again.");
+            toast.error("Unable to connect to the App Store. Please check your connection and try again.");
           } else {
             toast.error(msg || "Unable to complete purchase. Please try again.");
           }

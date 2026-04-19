@@ -3,6 +3,7 @@
  * Falls back gracefully on web platforms
  */
 import { Capacitor } from "@capacitor/core";
+import { Purchases } from "@revenuecat/purchases-capacitor";
 
 const REVENUECAT_API_KEY = process.env.REACT_APP_REVENUECAT_IOS_KEY;
 
@@ -26,7 +27,9 @@ let revenueCatInitialized = false;
 let initPromise = null;
 
 // How long (ms) to wait for RevenueCat to initialize before giving up
-const RC_INIT_TIMEOUT_MS = 8000;
+// RevenueCat SDK now runs a health report during configure(), which can
+// take 20s+ in sandbox. 30s gives it room without hanging forever.
+const RC_INIT_TIMEOUT_MS = 30000;
 
 /**
  * Initialize RevenueCat SDK (iOS only)
@@ -54,16 +57,34 @@ export const initializeRevenueCat = async () => {
 
     const initCore = (async () => {
           try {
-                  const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
+                  console.log("[Kindred] RevenueCat: configuring with key:", REVENUECAT_API_KEY?.substring(0, 8) + "...");
                   await Purchases.configure({
                             apiKey: REVENUECAT_API_KEY,
                             appUserID: null,
                   });
                   revenueCatInitialized = true;
                   console.log("[Kindred] RevenueCat initialized successfully");
+
+                  // Pre-fetch offerings in background (don't block init on this)
+                  // The SDK caches them so subsequent getOfferings() calls are instant
+                  Purchases.getOfferings().then((offerings) => {
+                    let totalPackages = 0;
+                    if (offerings?.all) {
+                      for (const offering of Object.values(offerings.all)) {
+                        totalPackages += (offering.availablePackages || []).length;
+                      }
+                    }
+                    console.log("[Kindred] RevenueCat offerings pre-fetched:", totalPackages, "packages available across all offerings");
+                    if (totalPackages === 0) {
+                      console.warn("[Kindred] No packages found in any offering — check RevenueCat dashboard");
+                    }
+                  }).catch((offerErr) => {
+                    console.warn("[Kindred] RevenueCat offerings pre-fetch failed:", offerErr);
+                  });
+
                   return true;
           } catch (error) {
-                  console.error("[Kindred] Failed to initialize RevenueCat:", error);
+                  console.error("[Kindred] Failed to initialize RevenueCat:", error?.message || error);
                   initPromise = null; // Allow retry
             return false;
           }
@@ -104,7 +125,6 @@ export const fetchOfferings = async () => {
     if (!ready) return null;
 
     try {
-          const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
           const offerings = await Purchases.getOfferings();
           return offerings;
     } catch (error) {
@@ -127,7 +147,6 @@ export const getPackageByProductId = async (productId) => {
     if (!ready) return null;
 
     try {
-          const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
           const offerings = await Purchases.getOfferings();
 
       if (offerings?.current?.availablePackages) {
@@ -173,8 +192,6 @@ export const makePurchase = async (productId) => {
     }
 
     try {
-          const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
-
       const pkg = await getPackageByProductId(productId);
           if (!pkg) {
                   throw new Error(
@@ -216,7 +233,6 @@ export const syncRevenueCatUser = async (userId) => {
     if (!ready) return;
 
     try {
-          const { Purchases } = await import(/* webpackIgnore: true */ "@revenuecat/purchases-capacitor");
           await Purchases.logIn({ appUserID: userId });
           console.log("[Kindred] RevenueCat user synced:", userId);
     } catch (error) {

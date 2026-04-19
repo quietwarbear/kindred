@@ -49,6 +49,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [canInstall, setCanInstall] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const refreshUnreadSummary = useCallback(async () => {
     try {
@@ -106,10 +107,29 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   };
 
   return (
-    <div className="app-canvas min-h-screen pb-10">
+    <div className="app-canvas min-h-screen pb-10" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
       <div className="page-section pt-6 md:pt-8">
+        {/* Mobile menu toggle — extra top padding so it clears the iOS status bar */}
+        <div className="mb-4 flex items-center justify-between lg:hidden" style={{ paddingTop: "calc(env(safe-area-inset-top, 20px) + 8px)" }}>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <h1 className="font-display text-xl text-foreground">Kindred</h1>
+          </div>
+          <Button
+            className="rounded-full"
+            data-testid="mobile-menu-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            size="sm"
+            variant="outline"
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="archival-card flex h-fit flex-col gap-6 lg:sticky lg:top-6">
+          <aside className={`archival-card flex h-fit flex-col gap-6 lg:sticky lg:top-6 ${sidebarOpen ? "block" : "hidden lg:flex"}`}>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -183,6 +203,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   }
                   data-testid={`nav-link-${item.path.replace(/\//g, "") || "home"}`}
                   key={item.path}
+                  onClick={() => setSidebarOpen(false)}
                   to={item.path}
                 >
                   <span className="flex items-center justify-between gap-3">
