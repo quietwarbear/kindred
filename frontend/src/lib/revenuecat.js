@@ -241,6 +241,39 @@ export const syncRevenueCatUser = async (userId) => {
 };
 
 /**
+ * Restore previously purchased subscriptions (iOS only)
+ * Apple requires a visible "Restore Purchases" button per guideline 3.1.1
+ */
+export const restorePurchases = async () => {
+    const isNative = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+
+    if (!isNative || platform !== "ios") {
+          throw new Error("Restore purchases is only available on iOS.");
+    }
+
+    const ready = await ensureInitialized();
+    if (!ready) {
+          throw new Error("Subscription service is not ready. Please restart the app and try again.");
+    }
+
+    try {
+          const { customerInfo } = await Purchases.restorePurchases();
+          const activeEntitlements = customerInfo?.entitlements?.active || {};
+          const hasActive = Object.keys(activeEntitlements).length > 0;
+
+          return {
+                  success: true,
+                  hasActiveSubscription: hasActive,
+                  customerInfo,
+          };
+    } catch (error) {
+          console.error("[Kindred] Restore purchases error:", error);
+          throw error;
+    }
+};
+
+/**
  * Check if running on iOS
  */
 export const isIOS = () => {

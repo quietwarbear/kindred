@@ -19,6 +19,7 @@ import {
   ensureInitialized,
   isIOS,
   makePurchase,
+  restorePurchases,
   syncRevenueCatUser,
   TIER_TO_PRODUCT_ID,
 } from "@/lib/revenuecat";
@@ -269,6 +270,7 @@ export const SubscriptionPage = ({ token, user }) => {
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [pollingSessionId, setPollingSessionId] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
   const [rcReady, setRcReady] = useState(!isIOS()); // web is always "ready"
 
   const isHost = user?.role === "host";
@@ -460,6 +462,30 @@ export const SubscriptionPage = ({ token, user }) => {
     }
   };
 
+  const handleRestorePurchases = async () => {
+    setRestoreLoading(true);
+    try {
+      const result = await restorePurchases();
+      if (result.hasActiveSubscription) {
+        toast.success("Purchases restored! Refreshing your plan...");
+        await syncRevenueCatUser(user?.id);
+        setTimeout(() => loadCurrentSub(), 2000);
+      } else {
+        toast.info("No previous purchases found to restore.");
+      }
+    } catch (error) {
+      console.error("[Kindred] Restore error:", error);
+      const msg = error?.message || "";
+      if (msg.includes("not ready")) {
+        toast.error("Unable to connect to the App Store. Please try again.");
+      } else {
+        toast.error("Unable to restore purchases. Please try again.");
+      }
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
+
   const currentTierId = currentTier?.id || "seedling";
 
   return (
@@ -496,6 +522,27 @@ export const SubscriptionPage = ({ token, user }) => {
             </span>
           </button>
         </div>
+
+        {/* Restore Purchases — iOS only (Apple guideline 3.1.1) */}
+        {isIOS() && (
+          <div className="mt-4">
+            <button
+              className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+              disabled={restoreLoading}
+              onClick={handleRestorePurchases}
+              data-testid="restore-purchases-button"
+            >
+              {restoreLoading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Restoring...
+                </span>
+              ) : (
+                "Restore Purchases"
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Polling overlay */}
