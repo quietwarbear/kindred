@@ -7,14 +7,16 @@ import { initializeRevenueCat } from "@/lib/revenuecat";
 
 registerServiceWorker();
 
-// Initialize RevenueCat for iOS
-initializeRevenueCat().catch((error) => {
-  console.error("[Kindred] RevenueCat initialization error:", error);
-});
-
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 );
+
+// Initialize RevenueCat AFTER first render so it never blocks the UI
+setTimeout(() => {
+  initializeRevenueCat().catch((error) => {
+    console.error("[Kindred] RevenueCat initialization error:", error);
+  });
+}, 100);

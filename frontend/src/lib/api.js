@@ -3,12 +3,13 @@ import axios from "axios";
 export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://kindred.ubuntumarket.com";
 export const API_URL = `${BACKEND_URL}/api`;
 
-export const apiRequest = async (path, { method = "GET", data, token, params } = {}) => {
+export const apiRequest = async (path, { method = "GET", data, token, params, timeout = 15000 } = {}) => {
   const response = await axios({
     method,
     url: `${API_URL}${path}`,
     data,
     params,
+    timeout,
     withCredentials: true,
     headers: token
       ? {

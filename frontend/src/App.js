@@ -169,10 +169,17 @@ function App() {
       return;
     }
 
+    // No token — nothing to validate, go straight to login
+    if (!session?.token) {
+      setIsLoading(false);
+      setHasCheckedSession(true);
+      return;
+    }
+
     const validateSession = async () => {
       try {
-        const payload = await apiRequest("/auth/me", session?.token ? { token: session.token } : {});
-        handleAuthSuccess({ ...payload, token: payload.token || session?.token });
+        const payload = await apiRequest("/auth/me", { token: session.token });
+        handleAuthSuccess({ ...payload, token: payload.token || session.token });
       } catch {
         localStorage.removeItem(APP_STATE_KEY);
         setSession(null);
