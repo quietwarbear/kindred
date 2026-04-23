@@ -67,8 +67,8 @@ export const TermsOfServicePage = () => (
         <section>
           <h2 className="text-lg font-semibold text-foreground">6. Subscriptions and Payments</h2>
           <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li>Kindred offers free and paid subscription tiers with varying feature access.</li>
-            <li>Payments are processed securely through Stripe (web) and RevenueCat/App Store/Google Play (mobile).</li>
+            <li>Kindred offers multiple subscription tiers with varying feature access.</li>
+            <li>Payments are processed securely through Stripe (web) and the platform's in-app purchase system (mobile).</li>
             <li>Subscription renewals are automatic unless canceled before the renewal date.</li>
             <li>Refunds are handled according to the policies of the respective payment platform (Stripe, Apple, Google).</li>
             <li>We reserve the right to modify pricing with 30 days' notice to existing subscribers.</li>

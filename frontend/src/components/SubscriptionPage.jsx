@@ -58,7 +58,7 @@ const TIER_BTN = {
 
 const formatPrice = (val) =>
   val === 0
-    ? "Free"
+    ? "Included"
     : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
 const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, currentTierId }) => {
@@ -608,23 +608,22 @@ export const SubscriptionPage = ({ token, user }) => {
       <div className="archival-card" data-testid="subscription-faq">
         <h2 className="font-display text-xl text-foreground">Pricing Notes</h2>
         <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-          <p>All plans include a 14-day free trial. Cancel anytime before the trial ends and you won't be charged.</p>
+          <p>All plans include a 14-day trial period. Cancel anytime before the trial ends and you won't be charged.</p>
           <p>Annual billing offers approximately 25% savings compared to monthly billing.</p>
           <p>Downgrading takes effect at the end of your current billing period. Your community data is always preserved.</p>
           <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
         </div>
       </div>
 
-      {/* Auto-Renewal Disclosure (Apple 3.1.2(c) / Google Play compliance) */}
+      {/* Auto-Renewal Disclosure (Apple 3.1.2(c) compliance) */}
       <div className="archival-card space-y-3" data-testid="subscription-legal">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Paid plans are auto-renewable subscriptions. Payment is charged to your Apple ID account (iOS),
-          Google Play account (Android), or payment method on file (web) at confirmation of purchase.
+          Paid plans are auto-renewable subscriptions. Payment is charged to your account
+          or payment method on file at confirmation of purchase.
           Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the
           end of the current billing period. Your account will be charged for renewal within 24 hours prior
-          to the end of the current period. You can manage and cancel subscriptions at any time: on iOS, go
-          to Settings &gt; [Your Name] &gt; Subscriptions; on Android, go to Google Play Store &gt; Menu &gt;
-          Subscriptions; on web, use the Cancel Plan button above.
+          to the end of the current period. You can manage and cancel subscriptions at any time through
+          your device's subscription settings or by using the Cancel Plan button above.
         </p>
         <div className="flex items-center justify-center gap-4 text-xs">
           <a href="/terms" className="text-primary hover:underline">Terms of Service</a>

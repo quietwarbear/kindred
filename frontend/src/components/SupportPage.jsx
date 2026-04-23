@@ -67,7 +67,7 @@ export const SupportPage = () => (
 
             <div data-testid="support-faq-3">
               <p className="font-semibold text-foreground">How do I cancel my subscription?</p>
-              <p className="mt-1">For web subscriptions, go to Settings &gt; Subscription. For mobile subscriptions, manage them through your device's App Store or Google Play settings. Refunds follow the policies of the respective payment platform.</p>
+              <p className="mt-1">For web subscriptions, go to Settings &gt; Subscription. For mobile subscriptions, manage them through your device's subscription settings. Refunds follow the policies of the respective payment platform.</p>
             </div>
 
             <div data-testid="support-faq-4">

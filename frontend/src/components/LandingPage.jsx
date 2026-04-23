@@ -162,9 +162,7 @@ export const LandingPage = ({ isAuthenticated }) => {
             <a href="https://apps.apple.com/app/heykindred/id6760608478" target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
               <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store" style={{ height: '40px' }} />
             </a>
-            <a href="https://play.google.com/store/apps/details?id=com.ubuntumarket.kindred" target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" style={{ height: '40px' }} />
-            </a>
+            {/* Google Play badge removed — Apple Review guideline 2.3.10 prohibits third-party store references in iOS builds */}
           </div>
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between w-full">
             <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} Ubuntu Market LLC. All rights reserved.</p>
