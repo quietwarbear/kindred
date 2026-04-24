@@ -75,15 +75,14 @@ export const LandingPage = ({ isAuthenticated }) => {
             <div className="flex flex-col justify-between gap-10 p-6 sm:p-8 lg:p-10">
               <div className="space-y-6">
                 <p className="eyebrow-text" data-testid="landing-eyebrow">
-                  Closed, invitation-only digital home
+                  For families, churches, and intentional communities
                 </p>
                 <div className="space-y-4">
-                  <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl" data-testid="landing-headline">
-                    A private ecosystem for communities to gather, plan, remember, and build.
+                  <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl font-semibold tracking-tight" data-testid="landing-headline">
+                    A private home for your community.
                   </h1>
-                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="landing-subheadline">
-                    Kindred gives families, churches, and intentional communities ownership over memory,
-                    coordination, and narrative without ads, public profiles, or algorithmic interference.
+                  <p className="max-w-2xl text-lg leading-relaxed text-foreground/75 md:text-xl" data-testid="landing-subheadline">
+                    Kindred is the home you've been Frankensteining out of group texts, spreadsheets, and shared drives — designed for the work of keeping people together, not for the work of selling ads.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -92,16 +91,12 @@ export const LandingPage = ({ isAuthenticated }) => {
                     data-testid="landing-primary-cta"
                     to={isAuthenticated ? "/dashboard" : "/login"}
                   >
-                    {isAuthenticated ? "Open your community" : "Launch your community"}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                  <Link className="pill-button-secondary" data-testid="landing-strategy-cta" to="/strategy">
-                    Explore the strategy deck
-                  </Link>
-                  <Link className="pill-button-secondary" data-testid="landing-pricing-cta" to="/subscription">
-                    View Plans
+                    {isAuthenticated ? "Open your community →" : "See if Kindred fits your circle →"}
                   </Link>
                 </div>
+                <p className="text-sm text-foreground/60" data-testid="landing-tertiary-line">
+                  Free on iOS · Invitation-only · No public profiles
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
