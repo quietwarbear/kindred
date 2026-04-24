@@ -41,21 +41,48 @@ const audience = ["Family reunions", "Church communities", "Greek organizations"
 export const LandingPage = ({ isAuthenticated }) => {
   return (
     <div className="app-canvas min-h-screen">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-md">
+        <nav className="page-section flex items-center justify-between py-4">
+          <span className="font-display text-xl text-primary font-semibold">Kindred</span>
+
+          {/* Center links - hidden on mobile */}
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Features
+            </a>
+            <a href="#communities" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Communities
+            </a>
+            <a href="#plans" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Plans
+            </a>
+          </div>
+
+          {/* Right - Sign in / Dashboard */}
+          <Link
+            to={isAuthenticated ? "/dashboard" : "/login"}
+            className="text-sm font-semibold text-foreground/70 hover:text-foreground transition-colors"
+          >
+            {isAuthenticated ? "Open dashboard" : "Sign in"}
+          </Link>
+        </nav>
+      </header>
+
       <section className="page-section py-6 md:py-8">
         <div className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.05fr_0.95fr]">
             <div className="flex flex-col justify-between gap-10 p-6 sm:p-8 lg:p-10">
               <div className="space-y-6">
                 <p className="eyebrow-text" data-testid="landing-eyebrow">
-                  Closed, invitation-only digital home
+                  For families, churches, and intentional communities
                 </p>
                 <div className="space-y-4">
-                  <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl" data-testid="landing-headline">
-                    A private ecosystem for communities to gather, plan, remember, and build.
+                  <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl lg:text-6xl font-semibold tracking-tight" data-testid="landing-headline">
+                    A private home for your community.
                   </h1>
-                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="landing-subheadline">
-                    Kindred gives families, churches, and intentional communities ownership over memory,
-                    coordination, and narrative without ads, public profiles, or algorithmic interference.
+                  <p className="max-w-2xl text-lg leading-relaxed text-foreground/75 md:text-xl" data-testid="landing-subheadline">
+                    Kindred is the home you've been Frankensteining out of group texts, spreadsheets, and shared drives — designed for the work of keeping people together, not for the work of selling ads.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -64,16 +91,12 @@ export const LandingPage = ({ isAuthenticated }) => {
                     data-testid="landing-primary-cta"
                     to={isAuthenticated ? "/dashboard" : "/login"}
                   >
-                    {isAuthenticated ? "Open your community" : "Launch your community"}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                  <Link className="pill-button-secondary" data-testid="landing-strategy-cta" to="/strategy">
-                    Explore the strategy deck
-                  </Link>
-                  <Link className="pill-button-secondary" data-testid="landing-pricing-cta" to="/subscription">
-                    View Plans
+                    {isAuthenticated ? "Open your community →" : "See if Kindred fits your circle →"}
                   </Link>
                 </div>
+                <p className="text-sm text-foreground/60" data-testid="landing-tertiary-line">
+                  Free on iOS · Invitation-only · No public profiles
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
@@ -117,7 +140,7 @@ export const LandingPage = ({ isAuthenticated }) => {
         </div>
       </section>
 
-      <section className="page-section py-10 md:py-16">
+      <section id="features" className="page-section scroll-mt-20 py-10 md:py-16">
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {pillars.map(({ icon: Icon, title, copy }) => (
             <article className="archival-card" data-testid={`landing-feature-${title.toLowerCase().replace(/\s+/g, "-")}`} key={title}>
@@ -129,7 +152,7 @@ export const LandingPage = ({ isAuthenticated }) => {
         </div>
       </section>
 
-      <section className="page-section pb-16">
+      <section id="communities" className="page-section scroll-mt-20 pb-16">
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <article className="archival-card" data-testid="landing-audience-card">
             <p className="eyebrow-text">Who it is for</p>
@@ -150,9 +173,62 @@ export const LandingPage = ({ isAuthenticated }) => {
               The model supports recurring revenue through paid community tiers while preserving private ownership over memory, logistics, and membership.
             </p>
             <Link className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary" data-testid="landing-read-strategy-link" to="/strategy">
-              Read the full roadmap <ArrowRight className="h-4 w-4" />
+              Explore the strategy deck <ArrowRight className="h-4 w-4" />
             </Link>
           </article>
+        </div>
+      </section>
+
+      <section id="plans" className="page-section scroll-mt-20 pb-16">
+        <div className="archival-card">
+          <p className="eyebrow-text">Plans</p>
+          <h2 className="mt-3 font-display text-3xl text-foreground">Community plans that grow with you.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
+            Every plan includes private gatherings, memory vault, legacy threads, and shared contributions. Pick the one that fits your circle — change any time.
+          </p>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <div className="soft-panel" data-testid="landing-plan-sapling">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sapling</p>
+              <p className="mt-3 font-display text-3xl font-bold text-foreground">
+                $49<span className="text-base font-normal text-muted-foreground">/mo</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Up to 25 members</p>
+              <p className="mt-3 text-sm text-muted-foreground">For growing families and small circles.</p>
+            </div>
+
+            <div className="soft-panel relative ring-2 ring-primary" data-testid="landing-plan-oak">
+              <span className="absolute -top-3 left-4 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm">
+                Most popular
+              </span>
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Oak</p>
+              <p className="mt-3 font-display text-3xl font-bold text-foreground">
+                $79<span className="text-base font-normal text-muted-foreground">/mo</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Up to 50 members</p>
+              <p className="mt-3 text-sm text-muted-foreground">For congregations, reunions, and cultural collectives.</p>
+            </div>
+
+            <div className="soft-panel" data-testid="landing-plan-redwood">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Redwood</p>
+              <p className="mt-3 font-display text-3xl font-bold text-foreground">
+                $129<span className="text-base font-normal text-muted-foreground">/mo</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Up to 100 members</p>
+              <p className="mt-3 text-sm text-muted-foreground">For ministries, chapters, and large organizations.</p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-xs text-muted-foreground">
+            Small circles start at $19/mo with Seedling. Nonprofit Elder Grove tier available by request. Annual billing saves ~25%.
+          </p>
+          <Link
+            className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
+            data-testid="landing-see-all-plans-link"
+            to="/subscription"
+          >
+            See all plans <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </section>
 
