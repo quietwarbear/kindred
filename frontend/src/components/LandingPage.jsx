@@ -41,6 +41,34 @@ const audience = ["Family reunions", "Church communities", "Greek organizations"
 export const LandingPage = ({ isAuthenticated }) => {
   return (
     <div className="app-canvas min-h-screen">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-md">
+        <nav className="page-section flex items-center justify-between py-4">
+          <span className="font-display text-xl text-primary font-semibold">Kindred</span>
+
+          {/* Center links - hidden on mobile */}
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Features
+            </a>
+            <a href="#communities" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Communities
+            </a>
+            <a href="#plans" className="text-sm text-foreground/70 hover:text-foreground transition-colors">
+              Plans
+            </a>
+          </div>
+
+          {/* Right - Sign in / Dashboard */}
+          <Link
+            to={isAuthenticated ? "/dashboard" : "/login"}
+            className="text-sm font-semibold text-foreground/70 hover:text-foreground transition-colors"
+          >
+            {isAuthenticated ? "Open dashboard" : "Sign in"}
+          </Link>
+        </nav>
+      </header>
+
       <section className="page-section py-6 md:py-8">
         <div className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.05fr_0.95fr]">
@@ -117,7 +145,7 @@ export const LandingPage = ({ isAuthenticated }) => {
         </div>
       </section>
 
-      <section className="page-section py-10 md:py-16">
+      <section id="features" className="page-section scroll-mt-20 py-10 md:py-16">
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {pillars.map(({ icon: Icon, title, copy }) => (
             <article className="archival-card" data-testid={`landing-feature-${title.toLowerCase().replace(/\s+/g, "-")}`} key={title}>
@@ -129,7 +157,7 @@ export const LandingPage = ({ isAuthenticated }) => {
         </div>
       </section>
 
-      <section className="page-section pb-16">
+      <section id="communities" className="page-section scroll-mt-20 pb-16">
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <article className="archival-card" data-testid="landing-audience-card">
             <p className="eyebrow-text">Who it is for</p>
@@ -143,14 +171,14 @@ export const LandingPage = ({ isAuthenticated }) => {
             </div>
           </article>
 
-          <article className="archival-card" data-testid="landing-business-card">
+          <article className="archival-card" id="plans" data-testid="landing-business-card">
             <p className="eyebrow-text">Strategic framing</p>
             <h2 className="mt-3 font-display text-3xl text-foreground">Not another app. Community infrastructure.</h2>
             <p className="mt-4 text-sm leading-7 text-muted-foreground">
               The model supports recurring revenue through paid community tiers while preserving private ownership over memory, logistics, and membership.
             </p>
             <Link className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary" data-testid="landing-read-strategy-link" to="/strategy">
-              Read the full roadmap <ArrowRight className="h-4 w-4" />
+              Explore the strategy deck <ArrowRight className="h-4 w-4" />
             </Link>
           </article>
         </div>
