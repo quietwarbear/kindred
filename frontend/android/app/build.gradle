@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+// Read versionCode from version.properties (auto-incremented after each release build)
+def versionPropsFile = file('version.properties')
+def autoVersionCode = 1
+if (versionPropsFile.exists()) {
+    def versionProps = new Properties()
+    versionPropsFile.withInputStream { versionProps.load(it) }
+    autoVersionCode = (versionProps['VERSION_CODE'] ?: '1').toInteger()
+} else {
+    def versionProps = new Properties()
+    versionProps['VERSION_CODE'] = autoVersionCode.toString()
+    versionPropsFile.withWriter { versionProps.store(it, null) }
+}
+
 android {
     namespace "com.ubuntumarket.kindred"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,7 +20,7 @@ android {
         applicationId "com.ubuntumarket.kindred"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11
+        versionCode autoVersionCode
         versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -68,6 +81,22 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// Auto-increment versionCode after a successful release build (bundleRelease or assembleRelease).
+// Debug builds do NOT bump the number, so day-to-day dev work doesn't burn through codes.
+afterEvaluate {
+    tasks.matching { it.name == 'bundleRelease' || it.name == 'assembleRelease' }.configureEach { task ->
+        task.doLast {
+            def props = new Properties()
+            versionPropsFile.withInputStream { props.load(it) }
+            def current = (props['VERSION_CODE'] ?: '1').toInteger()
+            def next = current + 1
+            props['VERSION_CODE'] = next.toString()
+            versionPropsFile.withWriter { props.store(it, null) }
+            println "==> versionCode bumped: ${current} -> ${next} (next release build will use ${next})"
+        }
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')
