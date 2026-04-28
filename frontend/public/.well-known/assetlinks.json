@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ubuntumarket.kindred",
+      "sha256_cert_fingerprints": [
+        "7C:76:27:16:0A:B4:79:9F:A5:3A:2E:CA:56:DF:D6:B4:0B:E6:DC:4D:32:EA:C7:CF:BC:62:8E:D5:F2:AE:4A:12",
+        "BE:F3:3C:3E:C2:DF:E1:F4:34:70:21:07:8C:81:4B:8D:C8:A2:95:56:2C:28:DA:F0:C4:33:B8:0B:63:32:C6:49"
+      ]
+    }
+  }
+]

@@ -3,7 +3,7 @@ import { Check, Copy, Link2, Hash, Share2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-const INVITE_BASE_URL = "https://kindred.ubuntumarket.com/invite/";
+const INVITE_BASE_URL = "https://heykindred.org/invite/";
 
 export const ShareInviteDialog = ({ inviteCode, contextLabel, onClose }) => {
   const [mode, setMode] = useState("link"); // "link" | "code"
