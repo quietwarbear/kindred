@@ -53,7 +53,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="kindred.ubuntumarket.com" android:pathPrefix="/invite" />
+                <data android:scheme="https" android:host="heykindred.org" android:pathPrefix="/invite" />
+                <data android:scheme="https" android:host="www.heykindred.org" android:pathPrefix="/invite" />
             </intent-filter>
 
         </activity>

@@ -6,6 +6,7 @@ import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthPage } from "@/components/AuthPage";
+import { InviteLandingPage } from "@/components/InviteLandingPage";
 import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
@@ -18,7 +19,7 @@ const APP_STATE_KEY = "gathering-cypher-auth";
 const MOBILE_GOOGLE_CALLBACK_URL = process.env.REACT_APP_MOBILE_GOOGLE_CALLBACK_URL || "kindred://auth/google/callback";
 const MOBILE_APPLE_CALLBACK_URL = "kindred://auth/apple/callback";
 const INVITE_SCHEME_PREFIX = "kindred://invite/";
-const INVITE_HTTPS_PREFIX = "https://kindred.ubuntumarket.com/invite/";
+const INVITE_HTTPS_PREFIX = "https://heykindred.org/invite/";
 
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
@@ -265,6 +266,7 @@ function App() {
               element={session?.token ? (needsGoogleOnboarding ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/home" />) : <Navigate replace to="/login" />}
               path="/welcome"
             />
+            <Route element={<InviteLandingPage />} path="/invite/:code" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
             <Route element={<TermsOfServicePage />} path="/terms" />
             <Route element={<SupportPage />} path="/support" />
