@@ -41,6 +41,37 @@ const ShareMessageButton = ({ text, testId }) => {
   );
 };
 
+const CopyRsvpLinkButton = ({ inviteId }) => {
+  const [copied, setCopied] = useState(false);
+  const link = `${typeof window !== "undefined" ? window.location.origin : "https://heykindred.org"}/rsvp/${inviteId}`;
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-muted/60 transition"
+      data-testid={`gatherings-event-invite-rsvp-link-${inviteId}`}
+      onClick={handleCopy}
+      title="Copy a no-app RSVP link to send this person — they can reply without installing Kindred"
+      type="button"
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? "Copied!" : "Copy RSVP link"}
+    </button>
+  );
+};
+
 export const GatheringInvites = ({ event, token, members, onUpdate }) => {
   const [form, setForm] = useState(initialInviteForm);
 
@@ -112,6 +143,7 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
                 <ShareMessageButton text={invite.share_message} testId={`gatherings-event-invite-share-${invite.id}`} />
               </div>
             )}
+            <CopyRsvpLinkButton inviteId={invite.id} />
           </div>
         ))}
       </div>
