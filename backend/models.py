@@ -397,7 +397,9 @@ class BudgetCreateRequest(BaseModel):
 
 class LegacyTableConfigRequest(BaseModel):
     base_url: str = ""
-    auth_type: str = "api-key"
+    auth_type: str = "account"
+    account_email: str = ""
+    account_password: str = ""
     sync_members: bool = True
     sync_stories: bool = True
     sync_events: bool = True

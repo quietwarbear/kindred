@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, MessageSquare, Mic, Plus, Sparkles } from "lucide-react";
+import { BookOpen, Check, MessageSquare, Mic, Plus, Sparkles, Utensils } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +122,48 @@ export const LegacyThreadsPage = ({ token }) => {
     setShowForm(true);
   };
 
+  const [lt, setLt] = useState({ is_connected: false });
+  const [showConnect, setShowConnect] = useState(false);
+  const [ltForm, setLtForm] = useState({ account_email: "", account_password: "" });
+  const [syncingId, setSyncingId] = useState(null);
+
+  const loadLt = useCallback(async () => {
+    try {
+      const status = await apiRequest("/legacy-table/status", { token });
+      setLt(status || { is_connected: false });
+    } catch {
+      /* non-fatal — Legacy Table is optional */
+    }
+  }, [token]);
+
+  useEffect(() => { loadLt(); }, [loadLt]);
+
+  const saveLtConnection = async (e) => {
+    e.preventDefault();
+    try {
+      await apiRequest("/legacy-table/config", { method: "POST", token, data: { ...ltForm, auth_type: "account" } });
+      setShowConnect(false);
+      setLtForm({ account_email: "", account_password: "" });
+      toast.success("Legacy Table connected.");
+      loadLt();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't connect Legacy Table.");
+    }
+  };
+
+  const sendRecipe = async (threadId) => {
+    setSyncingId(threadId);
+    try {
+      const res = await apiRequest(`/legacy-table/sync-recipe/${threadId}`, { method: "POST", token });
+      setThreads((c) => c.map((t) => (t.id === threadId ? { ...t, legacy_table_recipe_id: res.recipe_id, legacy_table_synced_at: res.synced_at } : t)));
+      toast.success("Recipe sent to Legacy Table — where family recipes live forever.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't send to Legacy Table.");
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
   const filtered = filterCategory ? threads.filter((t) => t.category === filterCategory) : threads;
 
   return (
@@ -139,6 +181,32 @@ export const LegacyThreadsPage = ({ token }) => {
             <Plus className="mr-1 h-4 w-4" /> New Thread
           </Button>
         </div>
+      </div>
+
+      <div className="archival-card" data-testid="legacy-lt-connect">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Utensils className="h-4 w-4 text-primary" />
+            <p className="text-sm text-muted-foreground">
+              {lt.is_connected
+                ? "Connected to Legacy Table — send a Recipe / Tradition to where family recipes live forever."
+                : "Connect Legacy Table to send Recipe / Tradition threads there."}
+            </p>
+          </div>
+          <Button className="rounded-full" data-testid="legacy-lt-connect-btn" onClick={() => setShowConnect(!showConnect)} size="sm" variant={lt.is_connected ? "outline" : "secondary"}>
+            {lt.is_connected ? "Reconnect" : "Connect Legacy Table"}
+          </Button>
+        </div>
+        {showConnect && (
+          <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={saveLtConnection}>
+            <Input className="field-input" data-testid="legacy-lt-email" onChange={(e) => setLtForm((c) => ({ ...c, account_email: e.target.value }))} placeholder="Legacy Table account email" required type="email" value={ltForm.account_email} />
+            <Input className="field-input" data-testid="legacy-lt-password" onChange={(e) => setLtForm((c) => ({ ...c, account_password: e.target.value }))} placeholder="Legacy Table password" required type="password" value={ltForm.account_password} />
+            <p className="sm:col-span-2 text-xs text-muted-foreground">Use a dedicated Legacy Table account. Stored only to enable recipe sync; never shown again.</p>
+            <div className="sm:col-span-2">
+              <Button className="rounded-full" data-testid="legacy-lt-save" size="sm" type="submit">Save connection</Button>
+            </div>
+          </form>
+        )}
       </div>
 
       {!showForm && (
@@ -241,6 +309,27 @@ export const LegacyThreadsPage = ({ token }) => {
                 </div>
               </div>
               <p className="mt-3 text-sm leading-7 text-muted-foreground line-clamp-4">{thread.body}</p>
+
+              {thread.category === "recipe-tradition" && (
+                <div className="mt-3">
+                  {thread.legacy_table_recipe_id ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600" data-testid={`legacy-recipe-synced-${thread.id}`}>
+                      <Check className="h-3.5 w-3.5" /> Sent to Legacy Table
+                    </span>
+                  ) : (
+                    <button
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-muted/60 transition disabled:opacity-60"
+                      data-testid={`legacy-send-recipe-${thread.id}`}
+                      disabled={syncingId === thread.id}
+                      onClick={() => sendRecipe(thread.id)}
+                      type="button"
+                    >
+                      <Utensils className="h-3.5 w-3.5" />
+                      {syncingId === thread.id ? "Sending…" : "Send to Legacy Table"}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {thread.voice_note_data_url && (
                 <div className="mt-4 soft-panel">

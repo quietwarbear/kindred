@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Camera, Check, Mic, Pencil, Tags, Trash2, X } from "lucide-react";
+import { Camera, Check, Mic, Pencil, Search, Tags, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,9 @@ export const MemoryVaultPage = ({ token }) => {
   const [deletingMemoryId, setDeletingMemoryId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRetagging, setIsRetagging] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -132,6 +135,21 @@ export const MemoryVaultPage = ({ token }) => {
     }
   };
 
+  const runSearch = async (e) => {
+    e.preventDefault();
+    const q = searchQ.trim();
+    if (!q) { setSearchResults(null); return; }
+    setSearching(true);
+    try {
+      const res = await apiRequest(`/memory/search?q=${encodeURIComponent(q)}`, { token });
+      setSearchResults(res);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Search failed.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="archival-card">
@@ -142,6 +160,42 @@ export const MemoryVaultPage = ({ token }) => {
         <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="memories-page-copy">
           Upload event-linked photos, add voice-note memories, and let AI generate helpful tags for future discovery.
         </p>
+      </section>
+
+      <section className="archival-card" data-testid="memory-search">
+        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={runSearch}>
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="field-input w-full pl-9"
+              data-testid="memory-search-input"
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Search every memory and story…"
+              value={searchQ}
+            />
+          </div>
+          <Button className="rounded-full" data-testid="memory-search-submit" disabled={searching} size="sm" type="submit">
+            {searching ? "Searching…" : "Search the archive"}
+          </Button>
+        </form>
+        {searchResults && (
+          <div className="mt-4 space-y-2" data-testid="memory-search-results">
+            <p className="text-xs text-muted-foreground">{searchResults.total} result{searchResults.total === 1 ? "" : "s"} for “{searchResults.query}”</p>
+            {searchResults.memories?.map((m) => (
+              <div className="soft-panel" data-testid={`memory-search-memory-${m.id}`} key={m.id}>
+                <p className="text-sm font-semibold text-foreground">{m.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Memory · {m.ai_summary || m.description}</p>
+              </div>
+            ))}
+            {searchResults.threads?.map((t) => (
+              <div className="soft-panel" data-testid={`memory-search-thread-${t.id}`} key={t.id}>
+                <p className="text-sm font-semibold text-foreground">{t.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Story · {t.category}</p>
+              </div>
+            ))}
+            {searchResults.total === 0 && <p className="text-sm text-muted-foreground">Nothing matched yet — try another word.</p>}
+          </div>
+        )}
       </section>
 
       <section className="archival-card" data-testid="memories-create-section">

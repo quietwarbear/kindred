@@ -1,6 +1,7 @@
 """Timeline, memories, and threads routes."""
 
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -113,6 +114,27 @@ async def timeline_export(
         )
 
     return {"items": rows, "total": len(rows)}
+
+
+@router.get("/memory/search")
+async def memory_search(q: str = "", current_user: dict[str, Any] = Depends(get_current_user)):
+    """Search the living archive — memories and stories — by text or tag."""
+    community_id = current_user["community_id"]
+    query = (q or "").strip()
+    if not query:
+        return {"query": "", "memories": [], "threads": [], "total": 0}
+
+    rx = {"$regex": re.escape(query), "$options": "i"}
+    memories = await memories_collection.find(
+        {"community_id": community_id, "$or": [{"title": rx}, {"description": rx}, {"ai_summary": rx}, {"tags": rx}]},
+        {"_id": 0, "id": 1, "title": 1, "ai_summary": 1, "description": 1, "created_at": 1, "tags": 1},
+    ).sort("created_at", -1).to_list(40)
+    threads = await threads_collection.find(
+        {"community_id": community_id, "$or": [{"title": rx}, {"body": rx}, {"category": rx}, {"elder_name": rx}]},
+        {"_id": 0, "id": 1, "title": 1, "category": 1, "body": 1, "created_at": 1, "elder_name": 1},
+    ).sort("created_at", -1).to_list(40)
+
+    return {"query": query, "memories": memories, "threads": threads, "total": len(memories) + len(threads)}
 
 
 @router.get("/memories", response_model=list[MemoryPublic])
