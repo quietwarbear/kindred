@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BellRing, CalendarDays, Coins, Network, Sparkles, Upload, Wallet } from "lucide-react";
+import { ArrowRight, BellRing, CalendarDays, Coins, Network, Sparkles, Upload, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { apiRequest, formatCountdown, formatDateTime, shortCurrency } from "@/lib/api";
@@ -98,7 +98,11 @@ export const HomePage = ({ token }) => {
               ))
             ) : (
               <div className="soft-panel" data-testid="home-gatherings-empty-state">
-                <p className="text-sm text-muted-foreground">No gatherings yet. Start with a reunion, birthday, wedding, holiday, or custom moment.</p>
+                <p className="text-sm text-muted-foreground">No gatherings yet. Every community starts with a first time together — a reunion, birthday, wedding, holiday, or custom moment.</p>
+                <Link className="mt-3 inline-flex items-center text-sm font-semibold text-primary" data-testid="home-gatherings-empty-cta" to="/gatherings">
+                  Plan your first gathering
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
               </div>
             )}
           </div>
