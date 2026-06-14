@@ -152,3 +152,77 @@ async def send_subscription_upgraded(email: str, old_plan: str, new_plan: str, a
     <p style="font-size:14px;line-height:1.6;color:#5a4a3a;">Your new features are available immediately.</p>
     """
     await _send_email(email, f"Upgraded to Kindred {new_plan}", _base_template("Plan updated", body))
+
+
+def build_digest_body(digest: dict) -> str:
+    """Render the weekly community digest body HTML from a digest dict.
+
+    digest = {community_name, member_count, upcoming_events:[{title,when,location}],
+              recent_memories:[{title}], recent_threads:[{title,category}],
+              funds_raised, new_members}
+    """
+    def _section(title, rows_html):
+        return (
+            f'<div style="margin:22px 0;">'
+            f'<p style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a8865c;margin:0 0 8px;">{title}</p>'
+            f'{rows_html}</div>'
+        )
+
+    events = digest.get("upcoming_events") or []
+    if events:
+        rows = "".join(
+            f'<div style="background:#f9f5f0;border-radius:8px;padding:12px 16px;margin-bottom:8px;">'
+            f'<p style="margin:0;font-size:15px;font-weight:600;color:#2d1810;">{e.get("title","")}</p>'
+            f'<p style="margin:4px 0 0;font-size:13px;color:#8b7355;">{e.get("when","")}{(" · " + e["location"]) if e.get("location") else ""}</p>'
+            f'</div>'
+            for e in events[:5]
+        )
+        events_html = _section("Coming up", rows)
+    else:
+        events_html = _section(
+            "Coming up",
+            f'<p style="margin:0;font-size:14px;color:#5a4a3a;">No gatherings on the calendar yet. '
+            f'<a href="{APP_URL}/events" style="color:#9A3412;font-weight:600;">Plan one →</a></p>',
+        )
+
+    mems = digest.get("recent_memories") or []
+    threads = digest.get("recent_threads") or []
+    archive_rows = ""
+    if mems:
+        archive_rows += "".join(
+            f'<p style="margin:0 0 6px;font-size:14px;color:#5a4a3a;">📷 {m.get("title","A new memory")}</p>' for m in mems[:4]
+        )
+    if threads:
+        archive_rows += "".join(
+            f'<p style="margin:0 0 6px;font-size:14px;color:#5a4a3a;">📖 {t.get("title","A new story")}</p>' for t in threads[:4]
+        )
+    archive_html = _section("Newly remembered", archive_rows) if archive_rows else ""
+
+    pulse = (
+        f'<div style="display:block;background:#f9f5f0;border-radius:8px;padding:16px 20px;margin:8px 0 0;">'
+        f'<p style="margin:0;font-size:14px;color:#5a4a3a;">'
+        f'<strong>{digest.get("member_count", 0)}</strong> members'
+        + (f' · <strong>{digest["new_members"]}</strong> new this week' if digest.get("new_members") else "")
+        + (f' · <strong>${digest.get("funds_raised", 0):.0f}</strong> contributed' if digest.get("funds_raised") else "")
+        + "</p></div>"
+    )
+
+    return (
+        f'<p style="font-size:16px;line-height:1.6;color:#2d1810;">Here is what is happening in '
+        f'<strong>{digest.get("community_name","your community")}</strong> this week.</p>'
+        f"{pulse}{events_html}{archive_html}"
+        f'<div style="text-align:center;margin:28px 0;">'
+        f'<a href="{APP_URL}" style="background:#9A3412;color:#ffffff;padding:12px 32px;border-radius:999px;text-decoration:none;font-weight:600;font-size:15px;">Open {digest.get("community_name","Kindred")}</a>'
+        f"</div>"
+    )
+
+
+async def send_community_digest(email: str, digest: dict) -> bool:
+    """Send one weekly digest email to a single member."""
+    community_name = digest.get("community_name", "your community")
+    body = build_digest_body(digest)
+    return await _send_email(
+        email,
+        f"This week in {community_name}",
+        _base_template(f"This week in {community_name}", body),
+    )

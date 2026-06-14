@@ -90,7 +90,11 @@ export const DashboardPage = ({ token, community }) => {
               ))
             ) : (
               <div className="soft-panel" data-testid="dashboard-events-empty">
-                <p className="text-sm text-muted-foreground">No gatherings scheduled yet. Start with your first event in the Events Hub.</p>
+                <p className="text-sm text-muted-foreground">No gatherings scheduled yet. Every community starts with a first time together.</p>
+                <Link className="mt-3 inline-flex items-center text-sm font-semibold text-primary" data-testid="dashboard-events-empty-cta" to="/events">
+                  Plan your first gathering
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
               </div>
             )}
           </div>
@@ -119,6 +123,10 @@ export const DashboardPage = ({ token, community }) => {
               ) : (
                 <div className="soft-panel" data-testid="dashboard-memories-empty">
                   <p className="text-sm text-muted-foreground">Your archive starts with one memory. Upload a photo or voice note to begin.</p>
+                  <Link className="mt-3 inline-flex items-center text-sm font-semibold text-primary" data-testid="dashboard-memories-empty-cta" to="/memories">
+                    Add the first memory
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </Link>
                 </div>
               )}
             </div>
@@ -146,6 +154,10 @@ export const DashboardPage = ({ token, community }) => {
               ) : (
                 <div className="soft-panel" data-testid="dashboard-threads-empty">
                   <p className="text-sm text-muted-foreground">Create the first oral history or reflection thread to anchor the archive.</p>
+                  <Link className="mt-3 inline-flex items-center text-sm font-semibold text-primary" data-testid="dashboard-threads-empty-cta" to="/threads">
+                    Start a legacy thread
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </Link>
                 </div>
               )}
             </div>

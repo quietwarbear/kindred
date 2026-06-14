@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, MessageSquare, Mic, Plus } from "lucide-react";
+import { BookOpen, MessageSquare, Mic, Plus, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,30 @@ const CATEGORY_COLORS = {
   "migration-story": "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
   "recipe-tradition": "bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300",
 };
+
+// Prompts that give the archive a starting point so it never sits empty.
+// Kept here (static v1) — an Ubuntu Intelligence layer can generate these later.
+const ELDER_PROMPTS = [
+  { category: "oral-history", text: "What is your earliest happy memory of this family?" },
+  { category: "oral-history", text: "Who do you most want the young ones to remember, and why?" },
+  { category: "family-lore", text: "Where does our family name come from, and what story travels with it?" },
+  { category: "family-lore", text: "What is a tradition we keep that no one remembers the origin of?" },
+  { category: "migration-story", text: "Tell the story of how our family came to live where we are now." },
+  { category: "migration-story", text: "Who was the first to leave home, and what did they carry with them?" },
+  { category: "recipe-tradition", text: "Whose recipe do we make on special days, and what is the secret to it?" },
+  { category: "recipe-tradition", text: "Describe a meal that means “home” — who made it, and where?" },
+  { category: "sermon", text: "Record a word, scripture, or blessing you want this community to hold onto." },
+  { category: "youth-reflection", text: "What is one question you have always wanted to ask an elder?" },
+  { category: "community-dialogue", text: "When did this community show up for one of its own?" },
+];
+
+// Deterministic per day: everyone sees the same three prompts on a given date.
+const promptsForToday = (() => {
+  const dayIndex = Math.floor(Date.now() / 86400000);
+  const count = Math.min(3, ELDER_PROMPTS.length);
+  const start = dayIndex % ELDER_PROMPTS.length;
+  return Array.from({ length: count }, (_, i) => ELDER_PROMPTS[(start + i) % ELDER_PROMPTS.length]);
+})();
 
 const initialForm = { title: "", category: "oral-history", body: "", elder_name: "" };
 
@@ -91,6 +115,13 @@ export const LegacyThreadsPage = ({ token }) => {
     }
   };
 
+  const startFromPrompt = (prompt) => {
+    setForm({ ...initialForm, title: prompt.text, category: prompt.category });
+    setAudioFile(null);
+    setAudioRecording(null);
+    setShowForm(true);
+  };
+
   const filtered = filterCategory ? threads.filter((t) => t.category === filterCategory) : threads;
 
   return (
@@ -109,6 +140,32 @@ export const LegacyThreadsPage = ({ token }) => {
           </Button>
         </div>
       </div>
+
+      {!showForm && (
+        <div className="archival-card" data-testid="legacy-prompts">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <p className="eyebrow-text">A prompt to get you started</p>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {promptsForToday.map((prompt) => (
+              <button
+                className="soft-panel text-left transition-all hover:border-primary/40"
+                data-testid="legacy-prompt-card"
+                key={prompt.text}
+                onClick={() => startFromPrompt(prompt)}
+                type="button"
+              >
+                <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${CATEGORY_COLORS[prompt.category] || "bg-muted text-muted-foreground"}`}>
+                  {CATEGORIES.find((c) => c.value === prompt.category)?.label || prompt.category}
+                </span>
+                <p className="mt-2 text-sm leading-6 text-foreground">{prompt.text}</p>
+                <span className="mt-2 inline-flex items-center text-xs font-semibold text-primary">Start this thread →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="archival-card" data-testid="legacy-form">
