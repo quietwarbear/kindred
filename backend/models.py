@@ -358,6 +358,8 @@ class KinshipCreateRequest(BaseModel):
     related_to_name: str = ""
     relationship_scope: str = ""
     linked_user_id: str = ""
+    person_user_id: str = ""
+    related_to_user_id: str = ""
     birth_date: str = ""
     anniversary_date: str = ""
     last_seen_at: str = ""

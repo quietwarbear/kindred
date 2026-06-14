@@ -289,30 +289,43 @@ async def kinship_graph(current_user: dict[str, Any] = Depends(get_current_user)
 
     members = await users_collection.find(
         {"community_id": community_id},
-        {"_id": 0, "id": 1, "full_name": 1, "role": 1},
+        {"_id": 0, "id": 1, "full_name": 1, "role": 1, "profile_image_url": 1},
     ).to_list(500)
 
-    # Build nodes from unique names in relationships + registered members
+    by_id = {m["id"]: m for m in members}
+    by_name = {m["full_name"]: m for m in members}
+
+    # Member nodes are keyed by user_id (so they're navigable); non-member
+    # people fall back to a name-keyed node so legacy relationships still render.
     node_map = {}
     for m in members:
-        node_map[m["full_name"]] = {"id": m["full_name"], "group": "member", "role": m.get("role", "member")}
-    for rel in relationships:
-        for name in [rel["person_name"], rel["related_to_name"]]:
-            if name not in node_map:
-                node_map[name] = {"id": name, "group": "kinship", "role": "kinship"}
+        node_map[m["id"]] = {
+            "id": m["id"], "name": m["full_name"], "group": "member",
+            "role": m.get("role", "member"), "user_id": m["id"],
+        }
 
-    # Build links
+    def resolve(name, user_id):
+        if user_id and user_id in by_id:
+            return user_id
+        if name and name in by_name:
+            return by_name[name]["id"]
+        key = (name or "Unknown").strip() or "Unknown"
+        if key not in node_map:
+            node_map[key] = {"id": key, "name": key, "group": "kinship", "role": "kinship", "user_id": None}
+        return key
+
     links = []
     for rel in relationships:
+        source = resolve(rel.get("person_name", ""), rel.get("person_user_id", ""))
+        target = resolve(rel.get("related_to_name", ""), rel.get("related_to_user_id", ""))
         links.append({
-            "source": rel["person_name"],
-            "target": rel["related_to_name"],
-            "label": rel["relationship_type"],
+            "source": source,
+            "target": target,
+            "label": rel.get("relationship_type", ""),
             "kinship_id": rel["id"],
         })
 
-    # Get relationship types for legend
-    rel_types = sorted({rel["relationship_type"] for rel in relationships})
+    rel_types = sorted({rel["relationship_type"] for rel in relationships if rel.get("relationship_type")})
 
     return {
         "nodes": list(node_map.values()),
@@ -330,6 +343,8 @@ async def create_kinship(payload: KinshipCreateRequest, current_user: dict[str, 
         "community_id": current_user["community_id"],
         "person_name": payload.person_name.strip(),
         "related_to_name": payload.related_to_name.strip(),
+        "person_user_id": (payload.person_user_id or "").strip(),
+        "related_to_user_id": (payload.related_to_user_id or "").strip(),
         "relationship_type": payload.relationship_type.strip(),
         "relationship_scope": payload.relationship_scope,
         "notes": (payload.notes or "").strip(),
@@ -339,6 +354,57 @@ async def create_kinship(payload: KinshipCreateRequest, current_user: dict[str, 
     }
     await kinships_collection.insert_one(relationship_doc.copy())
     return relationship_doc
+
+
+@router.get("/kinship/person/{user_id}")
+async def kinship_person(user_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    """A person's place in the community: their relationships, gatherings, memories, stories.
+
+    Community-scoped and read-only. Powers tapping a node in the kinship graph.
+    """
+    community_id = current_user["community_id"]
+    person = await users_collection.find_one(
+        {"id": user_id, "community_id": community_id},
+        {"_id": 0, "id": 1, "full_name": 1, "role": 1, "profile_image_url": 1, "created_at": 1},
+    )
+    if not person:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found in this community.")
+
+    relationships = await kinships_collection.find(
+        {
+            "community_id": community_id,
+            "$or": [
+                {"person_user_id": user_id},
+                {"related_to_user_id": user_id},
+                {"person_name": person["full_name"]},
+                {"related_to_name": person["full_name"]},
+            ],
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+
+    gatherings = await events_collection.find(
+        {"community_id": community_id, "rsvp_records.user_id": user_id},
+        {"_id": 0, "id": 1, "title": 1, "start_at": 1, "location": 1},
+    ).sort("start_at", -1).to_list(20)
+
+    memories = await memories_collection.find(
+        {"community_id": community_id, "created_by": user_id},
+        {"_id": 0, "id": 1, "title": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(20)
+
+    threads = await threads_collection.find(
+        {"community_id": community_id, "created_by": user_id},
+        {"_id": 0, "id": 1, "title": 1, "category": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(20)
+
+    return {
+        "person": person,
+        "relationships": relationships,
+        "gatherings": gatherings,
+        "memories": memories,
+        "threads": threads,
+    }
 
 
 @router.delete("/kinship/{kinship_id}")
