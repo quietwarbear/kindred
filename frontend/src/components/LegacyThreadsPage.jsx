@@ -122,34 +122,19 @@ export const LegacyThreadsPage = ({ token }) => {
     setShowForm(true);
   };
 
-  const [lt, setLt] = useState({ is_connected: false });
-  const [showConnect, setShowConnect] = useState(false);
-  const [ltForm, setLtForm] = useState({ account_email: "", account_password: "" });
+  const [lt, setLt] = useState({ sso_enabled: false });
   const [syncingId, setSyncingId] = useState(null);
 
   const loadLt = useCallback(async () => {
     try {
       const status = await apiRequest("/legacy-table/status", { token });
-      setLt(status || { is_connected: false });
+      setLt(status || { sso_enabled: false });
     } catch {
       /* non-fatal — Legacy Table is optional */
     }
   }, [token]);
 
   useEffect(() => { loadLt(); }, [loadLt]);
-
-  const saveLtConnection = async (e) => {
-    e.preventDefault();
-    try {
-      await apiRequest("/legacy-table/config", { method: "POST", token, data: { ...ltForm, auth_type: "account" } });
-      setShowConnect(false);
-      setLtForm({ account_email: "", account_password: "" });
-      toast.success("Legacy Table connected.");
-      loadLt();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Couldn't connect Legacy Table.");
-    }
-  };
 
   const sendRecipe = async (threadId) => {
     setSyncingId(threadId);
@@ -184,29 +169,14 @@ export const LegacyThreadsPage = ({ token }) => {
       </div>
 
       <div className="archival-card" data-testid="legacy-lt-connect">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Utensils className="h-4 w-4 text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {lt.is_connected
-                ? "Connected to Legacy Table — send a Recipe / Tradition to where family recipes live forever."
-                : "Connect Legacy Table to send Recipe / Tradition threads there."}
-            </p>
-          </div>
-          <Button className="rounded-full" data-testid="legacy-lt-connect-btn" onClick={() => setShowConnect(!showConnect)} size="sm" variant={lt.is_connected ? "outline" : "secondary"}>
-            {lt.is_connected ? "Reconnect" : "Connect Legacy Table"}
-          </Button>
+        <div className="flex items-center gap-2">
+          <Utensils className="h-4 w-4 text-primary" />
+          <p className="text-sm text-muted-foreground">
+            {lt.sso_enabled
+              ? "Your Kindred sign-in carries into Legacy Table. Send a Recipe / Tradition and it's saved there as you — where family recipes live forever."
+              : "Recipe sync to Legacy Table switches on once the shared connection is configured. No extra login — your Kindred identity carries over."}
+          </p>
         </div>
-        {showConnect && (
-          <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={saveLtConnection}>
-            <Input className="field-input" data-testid="legacy-lt-email" onChange={(e) => setLtForm((c) => ({ ...c, account_email: e.target.value }))} placeholder="Legacy Table account email" required type="email" value={ltForm.account_email} />
-            <Input className="field-input" data-testid="legacy-lt-password" onChange={(e) => setLtForm((c) => ({ ...c, account_password: e.target.value }))} placeholder="Legacy Table password" required type="password" value={ltForm.account_password} />
-            <p className="sm:col-span-2 text-xs text-muted-foreground">Use a dedicated Legacy Table account. Stored only to enable recipe sync; never shown again.</p>
-            <div className="sm:col-span-2">
-              <Button className="rounded-full" data-testid="legacy-lt-save" size="sm" type="submit">Save connection</Button>
-            </div>
-          </form>
-        )}
       </div>
 
       {!showForm && (

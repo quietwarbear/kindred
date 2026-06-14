@@ -397,9 +397,7 @@ class BudgetCreateRequest(BaseModel):
 
 class LegacyTableConfigRequest(BaseModel):
     base_url: str = ""
-    auth_type: str = "account"
-    account_email: str = ""
-    account_password: str = ""
+    auth_type: str = "ubuntu-sso"
     sync_members: bool = True
     sync_stories: bool = True
     sync_events: bool = True

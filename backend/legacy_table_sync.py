@@ -1,25 +1,37 @@
-"""Kindred → Legacy Table recipe sync.
+"""Kindred → Legacy Table recipe sync via Ubuntu Markets single-identity SSO.
 
-Legacy Table ("Where family recipes live forever") exposes JWT-only auth — there is
-no API key / service account. So Kindred authenticates as a real Legacy Table account
-(the community's connected account) via POST /auth/login, then POST /recipes.
+No passwords are stored or exchanged. Because the signed-in Kindred user is already
+trusted, Kindred presents that user's email + a shared server-side secret
+(UBUNTU_SSO_SECRET, set identically in both products' environments) to Legacy Table's
+POST /auth/exchange, which find-or-creates the same-email user and returns a normal
+Legacy Table session. Kindred then POSTs the recipe — authored by the user in Legacy
+Table automatically.
 
-SECURITY NOTE: the connected account's password is stored in the community's
-legacy_table config to allow auto-login per sync. Use a DEDICATED Legacy Table
-account for this, not a personal one. The clean long-term fix is an API-key/service
-account on Legacy Table's side (it doesn't have one yet) — until then this is the
-only path. The password is never logged or returned to clients.
+The shared secret is powerful (it mints a Legacy Table session for any email), so it
+lives ONLY in server environments and Legacy Table must trust only products you control.
 """
+
+import os
 
 import httpx
 
 DEFAULT_BASE_URL = "https://api.legacytable.app/api"
 
 
-async def _login(base_url: str, email: str, password: str) -> str | None:
+def sso_secret() -> str:
+    return os.environ.get("UBUNTU_SSO_SECRET", "")
+
+
+async def _exchange_token(base_url: str, email: str, name: str = "") -> str | None:
+    secret = sso_secret()
+    if not secret:
+        return None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(f"{base_url}/auth/login", json={"email": email, "password": password})
+            resp = await client.post(
+                f"{base_url}/auth/exchange",
+                json={"email": email, "secret": secret, "name": name},
+            )
         if resp.status_code == 200:
             return resp.json().get("token")
     except Exception:
@@ -27,20 +39,20 @@ async def _login(base_url: str, email: str, password: str) -> str | None:
     return None
 
 
-async def push_recipe(config: dict, recipe: dict) -> dict:
-    """Log into the community's Legacy Table account and create one recipe.
+async def push_recipe(base_url: str, email: str, recipe: dict, name: str = "") -> dict:
+    """Sideways-sign-in to Legacy Table as `email` and create one recipe.
 
     Returns {"ok": True, "recipe_id": ...} or {"ok": False, "error": ...}.
     """
-    base_url = (config.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
-    email = (config.get("account_email") or "").strip()
-    password = config.get("account_password") or ""
-    if not email or not password:
-        return {"ok": False, "error": "No Legacy Table account is connected for this community."}
+    base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+    if not sso_secret():
+        return {"ok": False, "error": "Cross-product sign-in isn't configured yet (UBUNTU_SSO_SECRET is not set)."}
+    if not email:
+        return {"ok": False, "error": "Your Kindred account has no email to carry into Legacy Table."}
 
-    token = await _login(base_url, email, password)
+    token = await _exchange_token(base_url, email, name)
     if not token:
-        return {"ok": False, "error": "Could not sign in to Legacy Table — check the connected account's email and password."}
+        return {"ok": False, "error": "Couldn't establish your Legacy Table session — check the shared SSO secret on both apps."}
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:

@@ -15,7 +15,7 @@ from db import (
     users_collection,
 )
 from dependencies import ensure_minimum_role, get_current_user, get_thread_for_user, now_iso
-from legacy_table_sync import DEFAULT_BASE_URL, push_recipe
+from legacy_table_sync import DEFAULT_BASE_URL, push_recipe, sso_secret
 from models import LegacyTableConfigRequest
 
 router = APIRouter(prefix="/api")
@@ -24,41 +24,31 @@ router = APIRouter(prefix="/api")
 @router.get("/legacy-table/status")
 async def legacy_table_status(current_user: dict[str, Any] = Depends(get_current_user)):
     config = await legacy_table_collection.find_one({"community_id": current_user["community_id"]}, {"_id": 0})
+    enabled = bool(sso_secret())
     if not config:
         return {
-            "connection_status": "connection-ready",
-            "is_connected": False,
+            "connection_status": "ready" if enabled else "pending-setup",
+            "is_connected": enabled,
+            "sso_enabled": enabled,
             "base_url": "",
-            "auth_type": "api-key",
-            "message": "Legacy Table integration is architected and awaiting API docs or credentials.",
-            "sync_preferences": {
-                "members": True,
-                "stories": True,
-                "events": True,
-                "relationships": True,
-            },
-            "capabilities": ["member import", "kinship sync", "story export", "gathering export"],
+            "message": "Your Kindred identity carries into Legacy Table." if enabled else "Legacy Table sync switches on once the shared SSO secret is set on both apps.",
+            "capabilities": ["recipe sync", "story export", "gathering export"],
         }
-    # Never expose the stored account password to clients.
-    safe = {k: v for k, v in config.items() if k != "account_password"}
-    safe["is_connected"] = bool(config.get("account_email") and config.get("account_password"))
+    # Never expose stored credentials (legacy fields) to clients.
+    safe = {k: v for k, v in config.items() if k not in ("account_password", "account_email")}
+    safe["sso_enabled"] = enabled
+    safe["is_connected"] = enabled
     return safe
 
 
 @router.post("/legacy-table/config")
 async def save_legacy_table_config(payload: LegacyTableConfigRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
-    connected = bool(payload.account_email and payload.account_password)
     config_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
-        "connection_status": "connected" if connected else "configured",
-        "is_connected": connected,
         "base_url": (payload.base_url or DEFAULT_BASE_URL).strip(),
-        "auth_type": payload.auth_type,
-        "account_email": (payload.account_email or "").strip(),
-        "account_password": payload.account_password or "",
-        "message": "Legacy Table account connected." if connected else "Connection saved. Add an account email and password to enable recipe sync.",
+        "auth_type": "ubuntu-sso",
         "sync_preferences": {
             "members": payload.sync_members,
             "stories": payload.sync_stories,
@@ -66,8 +56,6 @@ async def save_legacy_table_config(payload: LegacyTableConfigRequest, current_us
             "relationships": payload.sync_relationships,
         },
         "capabilities": ["recipe sync", "story export", "gathering export"],
-        "last_sync_at": None,
-        "last_sync_result": "Not yet attempted",
         "updated_at": now_iso(),
     }
     await legacy_table_collection.update_one(
@@ -75,8 +63,8 @@ async def save_legacy_table_config(payload: LegacyTableConfigRequest, current_us
         {"$set": config_doc},
         upsert=True,
     )
-    # Never echo the password back to the client.
-    return {k: v for k, v in config_doc.items() if k != "account_password"}
+    config_doc["sso_enabled"] = bool(sso_secret())
+    return config_doc
 
 
 @router.post("/legacy-table/sync-recipe/{thread_id}")
@@ -87,12 +75,8 @@ async def sync_recipe_to_legacy_table(thread_id: str, current_user: dict[str, An
 
     config = await legacy_table_collection.find_one(
         {"community_id": current_user["community_id"]}, {"_id": 0}
-    )
-    if not config or not config.get("account_email") or not config.get("account_password"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Connect a Legacy Table account first (Legacy Threads → Connect Legacy Table).",
-        )
+    ) or {}
+    base_url = config.get("base_url") or DEFAULT_BASE_URL
 
     community = await communities_collection.find_one(
         {"id": current_user["community_id"]}, {"_id": 0, "name": 1}
@@ -117,7 +101,7 @@ async def sync_recipe_to_legacy_table(thread_id: str, current_user: dict[str, An
         "difficulty": "easy",
     }
 
-    result = await push_recipe(config, recipe)
+    result = await push_recipe(base_url, current_user.get("email", ""), recipe, current_user.get("full_name", ""))
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=result.get("error", "Recipe sync failed."))
 
