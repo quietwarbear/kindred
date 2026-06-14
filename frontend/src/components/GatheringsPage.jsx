@@ -33,6 +33,7 @@ const initialEventForm = {
   travel_coordination_notes: "",
   recurrence_frequency: "none",
   zoom_link: "",
+  hidden_from_member_ids: [],
 };
 
 export const GatheringsPage = ({ token, user }) => {
@@ -45,6 +46,7 @@ export const GatheringsPage = ({ token, user }) => {
   const [travelPlans, setTravelPlans] = useState([]);
   const [activeEventId, setActiveEventId] = useState("");
   const [eventForm, setEventForm] = useState(initialEventForm);
+  const [surpriseOn, setSurpriseOn] = useState(false);
   const [zoomLinkDraft, setZoomLinkDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sendingReminderEventId, setSendingReminderEventId] = useState("");
@@ -103,8 +105,9 @@ export const GatheringsPage = ({ token, user }) => {
       });
       setActiveEventId(payload.id);
       setEventForm(initialEventForm);
+      setSurpriseOn(false);
       await loadData();
-      toast.success("Gathering created with a smart checklist.");
+      toast.success(eventForm.hidden_from_member_ids.length ? "Surprise gathering created — hidden from the guest(s) of honor." : "Gathering created with a smart checklist.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to create gathering.");
     } finally {
@@ -307,6 +310,46 @@ export const GatheringsPage = ({ token, user }) => {
                 <Input className="field-input" data-testid="gatherings-zoom-link-input" onChange={(e) => setEventForm((c) => ({ ...c, zoom_link: e.target.value }))} placeholder="https://zoom.us/j/..." value={eventForm.zoom_link} />
               </label>
             )}
+            <div className="xl:col-span-2 rounded-2xl border border-border/60 bg-muted/30 p-4" data-testid="gatherings-surprise-block">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground">
+                <input
+                  type="checkbox"
+                  data-testid="gatherings-surprise-toggle"
+                  checked={surpriseOn}
+                  onChange={(e) => {
+                    setSurpriseOn(e.target.checked);
+                    if (!e.target.checked) setEventForm((c) => ({ ...c, hidden_from_member_ids: [] }));
+                  }}
+                />
+                🎉 Surprise gathering — hide it from the guest(s) of honor
+              </label>
+              {surpriseOn && (
+                <div className="mt-3" data-testid="gatherings-surprise-members">
+                  <p className="text-xs text-muted-foreground">Pick who it should stay hidden from. They won't see it anywhere — gatherings list, dashboard, the weekly digest email, or notifications — until you're ready.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {members.map((m) => {
+                      const picked = eventForm.hidden_from_member_ids.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          data-testid={`gatherings-surprise-member-${m.id}`}
+                          onClick={() => setEventForm((c) => ({
+                            ...c,
+                            hidden_from_member_ids: picked
+                              ? c.hidden_from_member_ids.filter((id) => id !== m.id)
+                              : [...c.hidden_from_member_ids, m.id],
+                          }))}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${picked ? "bg-primary text-primary-foreground" : "border border-border bg-background/80 text-foreground"}`}
+                        >
+                          {m.full_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
             <label className="xl:col-span-2">
               <span className="field-label">Description</span>
               <Textarea className="field-textarea" data-testid="gatherings-description-input" onChange={(e) => setEventForm((c) => ({ ...c, description: e.target.value }))} required value={eventForm.description} />

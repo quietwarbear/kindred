@@ -545,6 +545,9 @@ async def get_event_for_user(event_id: str, user: dict[str, Any]) -> dict[str, A
     event_doc = await events_collection.find_one({"id": event_id, "community_id": user["community_id"]}, {"_id": 0})
     if not event_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    # Surprise gatherings: invisible to the guest(s) of honor on every single-event path.
+    if user["id"] in (event_doc.get("hidden_from_user_ids") or []):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     return event_doc
 
 

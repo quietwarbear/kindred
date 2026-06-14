@@ -76,7 +76,10 @@ async def gatherings_reminders(current_user: dict[str, Any] = Depends(get_curren
 
 @router.get("/events", response_model=list[EventPublic])
 async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
-    events = await events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("start_at", 1).to_list(200)
+    events = await events_collection.find(
+        {"community_id": current_user["community_id"], "hidden_from_user_ids": {"$ne": current_user["id"]}},
+        {"_id": 0},
+    ).sort("start_at", 1).to_list(200)
     return events
 
 
@@ -157,6 +160,7 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "is_recurring_instance": False,
         "parent_event_id": "",
         "zoom_link": (payload.zoom_link or "").strip(),
+        "hidden_from_user_ids": payload.hidden_from_member_ids or [],
         "event_invites": [],
         "event_role_assignments": [
             {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
@@ -196,15 +200,18 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
                 }
             )
         await events_collection.insert_many([item.copy() for item in recurring_docs])
-    await log_notification_event(
-        community_id=current_user["community_id"],
-        actor_name=current_user["full_name"],
-        event_type="event-create",
-        title=f"New gathering: {event_doc['title']}",
-        description=f"{current_user['full_name']} created a {payload.gathering_format} gathering at {event_doc['location']}.",
-        related_id=event_doc["id"],
-        audience_scope="community",
-    )
+    # Surprise gatherings stay silent — no community-wide notification or activity entry,
+    # so the guest(s) of honor never get a hint.
+    if not (payload.hidden_from_member_ids or []):
+        await log_notification_event(
+            community_id=current_user["community_id"],
+            actor_name=current_user["full_name"],
+            event_type="event-create",
+            title=f"New gathering: {event_doc['title']}",
+            description=f"{current_user['full_name']} created a {payload.gathering_format} gathering at {event_doc['location']}.",
+            related_id=event_doc["id"],
+            audience_scope="community",
+        )
     return event_doc
 
 

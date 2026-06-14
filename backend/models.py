@@ -185,6 +185,7 @@ class EventCreateRequest(BaseModel):
     travel_coordination_notes: str = ""
     suggested_contribution: float = 0.0
     zoom_link: str = ""
+    hidden_from_member_ids: list[str] = Field(default_factory=list)
 
 
 class ChecklistItemRequest(BaseModel):

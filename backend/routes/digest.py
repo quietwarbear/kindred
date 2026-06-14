@@ -68,10 +68,18 @@ async def _build_digest(community_id: str) -> dict:
     )
 
     upcoming = await events_collection.find(
-        {"community_id": community_id}, {"_id": 0, "title": 1, "start_at": 1, "location": 1}
-    ).sort("start_at", 1).to_list(5)
+        {"community_id": community_id},
+        {"_id": 0, "title": 1, "start_at": 1, "location": 1, "hidden_from_user_ids": 1},
+    ).sort("start_at", 1).to_list(15)
+    # Keep each event's hidden-from list internally so we can drop surprise gatherings
+    # per-recipient in _send_to_members (the digest is built once, sent to many).
     upcoming_events = [
-        {"title": e.get("title", ""), "when": _fmt_when(e.get("start_at", "")), "location": e.get("location", "")}
+        {
+            "title": e.get("title", ""),
+            "when": _fmt_when(e.get("start_at", "")),
+            "location": e.get("location", ""),
+            "_hidden_from": e.get("hidden_from_user_ids") or [],
+        }
         for e in upcoming
     ]
 
@@ -152,8 +160,16 @@ async def _send_to_members(community_id: str, force: bool = False) -> dict:
                 {"id": member["id"]}, {"$set": {"digest_unsubscribe_token": token}}
             )
 
+        # Drop surprise gatherings this member is the guest of honor for, then strip
+        # the internal hidden-from marker before rendering.
+        visible_events = [
+            {k: v for k, v in e.items() if k != "_hidden_from"}
+            for e in digest.get("upcoming_events", [])
+            if member.get("id") not in (e.get("_hidden_from") or [])
+        ][:5]
         member_digest = {
             **digest,
+            "upcoming_events": visible_events,
             "unsubscribe_url": f"{BACKEND_PUBLIC_URL}/api/public/digest/unsubscribe/{token}",
         }
         ok = await send_community_digest(email, member_digest)

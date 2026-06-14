@@ -69,7 +69,7 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
     ]).to_list(1)
     funds_raised = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
-    upcoming_events = await events_collection.find({"community_id": community_id}, {"_id": 0}).sort("start_at", 1).to_list(5)
+    upcoming_events = await events_collection.find({"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0}).sort("start_at", 1).to_list(5)
     recent_memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     recent_threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
 
@@ -96,7 +96,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
     community_id = current_user["community_id"]
     members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).to_list(500)
     subyards = await subyards_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1).to_list(50)
-    upcoming_events = await events_collection.find({"community_id": community_id}, {"_id": 0}).sort("start_at", 1).to_list(5)
+    upcoming_events = await events_collection.find({"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0}).sort("start_at", 1).to_list(5)
     memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
