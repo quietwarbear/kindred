@@ -103,7 +103,13 @@ async def sync_recipe_to_legacy_table(thread_id: str, current_user: dict[str, An
         "difficulty": "easy",
     }
 
-    result = await push_recipe(base_url, current_user.get("email", ""), recipe, current_user.get("full_name", ""))
+    result = await push_recipe(
+        base_url,
+        current_user.get("email", ""),
+        recipe,
+        current_user.get("full_name", ""),
+        community_name,
+    )
     if not result.get("ok"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=result.get("error", "Recipe sync failed."))
 
@@ -112,11 +118,18 @@ async def sync_recipe_to_legacy_table(thread_id: str, current_user: dict[str, An
         {"id": thread_id, "community_id": current_user["community_id"]},
         {"$set": {"legacy_table_recipe_id": result.get("recipe_id", ""), "legacy_table_synced_at": synced_at}},
     )
+    family_note = f" Created the '{community_name}' family." if result.get("family_created") else ""
     await legacy_table_collection.update_one(
         {"community_id": current_user["community_id"]},
-        {"$set": {"last_sync_at": synced_at, "last_sync_result": f"Recipe '{recipe['title']}' sent to Legacy Table."}},
+        {"$set": {"last_sync_at": synced_at, "last_sync_result": f"Recipe '{recipe['title']}' sent to Legacy Table.{family_note}"}},
     )
-    return {"ok": True, "recipe_id": result.get("recipe_id", ""), "synced_at": synced_at}
+    return {
+        "ok": True,
+        "recipe_id": result.get("recipe_id", ""),
+        "family_id": result.get("family_id"),
+        "family_created": result.get("family_created", False),
+        "synced_at": synced_at,
+    }
 
 
 @router.post("/legacy-table/sync-preview")
