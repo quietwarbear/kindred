@@ -247,6 +247,31 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
     return event_doc
 
 
+@router.post("/events/{event_id}/reveal", response_model=EventPublic)
+async def reveal_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Lift the surprise: un-hide a gathering from its guest(s) of honor, and announce it."""
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    was_hidden = bool(event_doc.get("hidden_from_user_ids"))
+    # Reveal this event and any recurring instances in its series.
+    await events_collection.update_many(
+        {"community_id": current_user["community_id"], "$or": [{"id": event_id}, {"parent_event_id": event_id}]},
+        {"$set": {"hidden_from_user_ids": []}},
+    )
+    if was_hidden:
+        await log_notification_event(
+            community_id=current_user["community_id"],
+            actor_name=current_user["full_name"],
+            event_type="event-create",
+            title=f"New gathering: {event_doc['title']}",
+            description=f"{current_user['full_name']} revealed a gathering at {event_doc.get('location', '')}.",
+            related_id=event_id,
+            audience_scope="community",
+        )
+    event_doc["hidden_from_user_ids"] = []
+    return event_doc
+
+
 @router.post("/events/{event_id}/meeting-link", response_model=EventPublic)
 async def save_meeting_link(event_id: str, payload: EventMeetingLinkRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")

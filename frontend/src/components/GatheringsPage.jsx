@@ -147,6 +147,16 @@ export const GatheringsPage = ({ token, user }) => {
     }
   };
 
+  const revealEvent = async () => {
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}/reveal`, { method: "POST", token });
+      mergeEvent(payload);
+      toast.success("Revealed — the gathering is now visible to everyone.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to reveal the gathering.");
+    }
+  };
+
   const handleDeleteEvent = async (eventId) => {
     try {
       await apiRequest(`/events/${eventId}`, { method: "DELETE", token });
@@ -472,6 +482,16 @@ export const GatheringsPage = ({ token, user }) => {
                     <h3 className="mt-2 font-display text-3xl text-foreground" data-testid="gatherings-active-title">{activeEvent.title}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(activeEvent.start_at)} · {activeEvent.location}</p>
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">{activeEvent.description}</p>
+                    {activeEvent.hidden_from_user_ids?.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 dark:bg-amber-900/20" data-testid="gatherings-surprise-banner">
+                        <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          🎉 Surprise — hidden from {activeEvent.hidden_from_user_ids.length} {activeEvent.hidden_from_user_ids.length === 1 ? "person" : "people"}
+                        </span>
+                        <Button className="rounded-full h-8" data-testid="gatherings-reveal-btn" onClick={revealEvent} size="sm">
+                          Reveal to everyone
+                        </Button>
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
