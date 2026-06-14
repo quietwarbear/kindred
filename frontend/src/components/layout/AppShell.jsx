@@ -18,6 +18,7 @@ import { MemoryVaultPage } from "@/components/MemoryVaultPage";
 import { MembersPage } from "@/components/MembersPage";
 import { PollsPage } from "@/components/PollsPage";
 import { SettingsPage } from "@/components/SettingsPage";
+import { StewardPage } from "@/components/StewardPage";
 import { StrategyPage } from "@/components/StrategyPage";
 import { SubscriptionPage } from "@/components/SubscriptionPage";
 import { ThreadsPage } from "@/components/ThreadsPage";
@@ -31,6 +32,7 @@ import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-regis
 
 const navItems = [
   { label: "Home", path: "/home" },
+  { label: "Ubuntu Guide", path: "/steward" },
   { label: "Activity", path: "/activity" },
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline" },
@@ -288,6 +290,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             <Routes>
               <Route element={<HomePage token={token} />} path="dashboard" />
               <Route element={<HomePage token={token} />} path="home" />
+              <Route element={<StewardPage token={token} />} path="steward" />
               <Route element={<ActivityFeedPage token={token} />} path="activity" />
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<CourtyardDetailPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards/:id" />
