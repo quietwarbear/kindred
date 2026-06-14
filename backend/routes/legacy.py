@@ -23,22 +23,24 @@ router = APIRouter(prefix="/api")
 
 @router.get("/legacy-table/status")
 async def legacy_table_status(current_user: dict[str, Any] = Depends(get_current_user)):
-    config = await legacy_table_collection.find_one({"community_id": current_user["community_id"]}, {"_id": 0})
+    community_id = current_user["community_id"]
+    config = await legacy_table_collection.find_one({"community_id": community_id}, {"_id": 0}) or {}
     enabled = bool(sso_secret())
-    if not config:
-        return {
-            "connection_status": "ready" if enabled else "pending-setup",
-            "is_connected": enabled,
-            "sso_enabled": enabled,
-            "base_url": "",
-            "message": "Your Kindred identity carries into Legacy Table." if enabled else "Legacy Table sync switches on once the shared SSO secret is set on both apps.",
-            "capabilities": ["recipe sync", "story export", "gathering export"],
-        }
-    # Never expose stored credentials (legacy fields) to clients.
-    safe = {k: v for k, v in config.items() if k not in ("account_password", "account_email")}
-    safe["sso_enabled"] = enabled
-    safe["is_connected"] = enabled
-    return safe
+    recipes_synced = await threads_collection.count_documents(
+        {"community_id": community_id, "legacy_table_recipe_id": {"$nin": [None, ""]}}
+    )
+    return {
+        "connection_status": "connected" if enabled else "pending-setup",
+        "is_connected": enabled,
+        "sso_enabled": enabled,
+        "base_url": config.get("base_url", ""),
+        "connected_as": current_user.get("full_name") or current_user.get("email", ""),
+        "recipes_synced": recipes_synced,
+        "last_sync_at": config.get("last_sync_at"),
+        "last_sync_result": config.get("last_sync_result"),
+        "message": "Your Kindred identity carries into Legacy Table." if enabled else "Legacy Table sync switches on once the shared SSO secret is set on both apps.",
+        "capabilities": ["recipe sync", "story export", "gathering export"],
+    }
 
 
 @router.post("/legacy-table/config")

@@ -169,14 +169,37 @@ export const LegacyThreadsPage = ({ token }) => {
       </div>
 
       <div className="archival-card" data-testid="legacy-lt-connect">
-        <div className="flex items-center gap-2">
-          <Utensils className="h-4 w-4 text-primary" />
-          <p className="text-sm text-muted-foreground">
-            {lt.sso_enabled
-              ? "Your Kindred sign-in carries into Legacy Table. Send a Recipe / Tradition and it's saved there as you — where family recipes live forever."
-              : "Recipe sync to Legacy Table switches on once the shared connection is configured. No extra login — your Kindred identity carries over."}
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+              <Utensils className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-foreground">Legacy Table</p>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${lt.sso_enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`} data-testid="legacy-lt-status">
+                  {lt.sso_enabled ? (<><Check className="h-3 w-3" /> Connected</>) : "Not connected"}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lt.sso_enabled
+                  ? (<>Recipes you send are saved to Legacy Table as <span className="font-medium text-foreground/80">{lt.connected_as || "you"}</span> — where family recipes live forever. No second login.</>)
+                  : "Recipe sync switches on once the shared connection is configured. No extra login — your Kindred identity carries over."}
+              </p>
+            </div>
+          </div>
+          {lt.sso_enabled && (
+            <div className="shrink-0 text-right">
+              <p className="font-display text-2xl text-foreground" data-testid="legacy-lt-synced-count">{lt.recipes_synced || 0}</p>
+              <p className="text-xs text-muted-foreground">recipe{(lt.recipes_synced || 0) === 1 ? "" : "s"} sent</p>
+            </div>
+          )}
         </div>
+        {lt.sso_enabled && lt.last_sync_at && (
+          <p className="mt-3 text-xs text-muted-foreground" data-testid="legacy-lt-last-sync">
+            Last sync: {formatDateTime(lt.last_sync_at)}{lt.last_sync_result ? ` · ${lt.last_sync_result}` : ""}
+          </p>
+        )}
       </div>
 
       {!showForm && (
@@ -218,6 +241,11 @@ export const LegacyThreadsPage = ({ token }) => {
                 {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </label>
+            {form.category === "recipe-tradition" && (
+              <p className="sm:col-span-2 -mt-1 flex items-center gap-1.5 text-xs text-primary" data-testid="legacy-recipe-hint">
+                <Utensils className="h-3.5 w-3.5" /> This can travel to Legacy Table once you save it — where family recipes live forever.
+              </p>
+            )}
             <label className="block">
               <span className="text-xs font-semibold text-muted-foreground">Speaker / Elder</span>
               <Input className="field-input mt-1" data-testid="legacy-elder" onChange={(e) => setForm((c) => ({ ...c, elder_name: e.target.value }))} value={form.elder_name} />
