@@ -50,9 +50,26 @@ async def push_recipe(base_url: str, email: str, recipe: dict, name: str = "") -
     if not email:
         return {"ok": False, "error": "Your Kindred account has no email to carry into Legacy Table."}
 
-    token = await _exchange_token(base_url, email, name)
+    # Exchange step — surface the precise reason so failures are diagnosable.
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            ex = await client.post(
+                f"{base_url}/auth/exchange",
+                json={"email": email, "secret": sso_secret(), "name": name},
+            )
+    except Exception as exc:
+        return {"ok": False, "error": f"Couldn't reach Legacy Table at {base_url} ({exc}). The backend URL may be wrong."}
+
+    if ex.status_code == 403:
+        return {"ok": False, "error": "Legacy Table rejected the shared secret (403) — UBUNTU_SSO_SECRET doesn't match on both apps."}
+    if ex.status_code == 404:
+        return {"ok": False, "error": f"No /auth/exchange at {base_url} (404) — deploy the Legacy Table change, or the backend URL is wrong."}
+    if ex.status_code != 200:
+        return {"ok": False, "error": f"Legacy Table exchange failed (HTTP {ex.status_code}): {ex.text[:200]}"}
+
+    token = ex.json().get("token")
     if not token:
-        return {"ok": False, "error": "Couldn't establish your Legacy Table session — check the shared SSO secret on both apps."}
+        return {"ok": False, "error": "Legacy Table exchange returned no token."}
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
