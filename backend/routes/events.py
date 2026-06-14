@@ -256,6 +256,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
     existing_invites = event_doc.get("event_invites", [])
     existing_emails = {invite.get("email", "").lower() for invite in existing_invites}
     invite_records = existing_invites[:]
+    app_url = os.environ.get("APP_URL", "https://www.heykindred.org").rstrip("/")
 
     if payload.member_ids:
         members = await users_collection.find(
@@ -266,9 +267,11 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
             email = member["email"].lower()
             if email in existing_emails:
                 continue
+            invite_id = str(uuid.uuid4())
+            rsvp_link = f"{app_url}/rsvp/{invite_id}"
             invite_records.append(
                 {
-                    "id": str(uuid.uuid4()),
+                    "id": invite_id,
                     "invitee_name": member["full_name"],
                     "email": member["email"],
                     "invite_source": "member",
@@ -276,7 +279,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                     "rsvp_status": "pending",
                     "note": (payload.note or "").strip(),
                     "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
-                    "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
+                    "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else "") + f" RSVP without the app: {rsvp_link}",
                     "delivery_status": "ready-for-email",
                     "created_at": now_iso(),
                 }
@@ -287,9 +290,11 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         email = normalize_email(guest_email)
         if not email or email in existing_emails:
             continue
+        invite_id = str(uuid.uuid4())
+        rsvp_link = f"{app_url}/rsvp/{invite_id}"
         invite_records.append(
             {
-                "id": str(uuid.uuid4()),
+                "id": invite_id,
                 "invitee_name": email.split("@")[0],
                 "email": email,
                 "invite_source": "guest",
@@ -297,7 +302,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                 "rsvp_status": "pending",
                 "note": (payload.note or "").strip(),
                 "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
-                "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else ""),
+                "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else "") + f" RSVP without the app: {rsvp_link}",
                 "delivery_status": "ready-for-email",
                 "created_at": now_iso(),
             }

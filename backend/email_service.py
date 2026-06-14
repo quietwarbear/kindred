@@ -207,6 +207,13 @@ def build_digest_body(digest: dict) -> str:
         + "</p></div>"
     )
 
+    unsub_url = digest.get("unsubscribe_url")
+    unsub_html = (
+        f'<p style="text-align:center;font-size:12px;color:#a89880;margin:18px 0 0;">'
+        f'Don&#39;t want these weekly notes? '
+        f'<a href="{unsub_url}" style="color:#a89880;text-decoration:underline;">Unsubscribe</a>.</p>'
+    ) if unsub_url else ""
+
     return (
         f'<p style="font-size:16px;line-height:1.6;color:#2d1810;">Here is what is happening in '
         f'<strong>{digest.get("community_name","your community")}</strong> this week.</p>'
@@ -214,6 +221,7 @@ def build_digest_body(digest: dict) -> str:
         f'<div style="text-align:center;margin:28px 0;">'
         f'<a href="{APP_URL}" style="background:#9A3412;color:#ffffff;padding:12px 32px;border-radius:999px;text-decoration:none;font-weight:600;font-size:15px;">Open {digest.get("community_name","Kindred")}</a>'
         f"</div>"
+        f"{unsub_html}"
     )
 
 

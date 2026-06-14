@@ -4,21 +4,24 @@ Reuses the community-overview aggregation and the Resend email pipeline
 (email_service) to send each member a warm weekly summary of their community.
 
 Endpoints
-- POST /api/digest/preview   (any member)      -> digest data + rendered HTML, no send
-- POST /api/digest/send      (organizer+)       -> send to every member of the caller's community
-- POST /api/digest/run-all   (platform admin)   -> send to every community; this is what a
-                                                    scheduler should hit weekly (see SCHEDULING note)
+- POST /api/digest/preview   (any member)    -> digest data + rendered HTML, no send
+- POST /api/digest/send      (organizer+)    -> send NOW to the caller's community (force)
+- POST /api/digest/run-all   (platform admin)-> send to every community (idempotent)
+- POST /api/digest/cron      (header secret) -> same as run-all; for an external scheduler
 
-SCHEDULING: there is intentionally no in-process cron here. Trigger /api/digest/run-all
-weekly from an external scheduler (Railway cron, GitHub Actions, or an uptime pinger)
-authenticated as the platform admin. Keeping the trigger external avoids a background
-loop competing with the request workers and keeps sends idempotent per call.
+SCHEDULING: no in-process cron. Point a weekly external trigger (Railway cron, GitHub
+Actions, or a free pinger like cron-job.org) at POST /api/digest/cron with the header
+`X-Digest-Cron-Key: <DIGEST_CRON_KEY>`. Sends are made idempotent by a per-community
+`last_digest_sent_at` guard (DIGEST_MIN_INTERVAL_DAYS), so an over-eager trigger never
+double-sends. Members who unsubscribed (`digest_opt_out`) are skipped.
 """
 
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from db import (
     communities_collection,
@@ -28,10 +31,16 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import ensure_minimum_role, get_current_user
+from dependencies import ensure_minimum_role, get_current_user, now_iso
 from email_service import build_digest_body, send_community_digest
 
 router = APIRouter(prefix="/api")
+
+DIGEST_MIN_INTERVAL_DAYS = 6
+DIGEST_CRON_KEY = os.environ.get("DIGEST_CRON_KEY", "")
+BACKEND_PUBLIC_URL = os.environ.get(
+    "PUBLIC_BACKEND_URL", "https://kindred-production-badd.up.railway.app"
+).rstrip("/")
 
 
 def _fmt_when(start_at: str) -> str:
@@ -91,33 +100,88 @@ async def _build_digest(community_id: str) -> dict:
     }
 
 
-async def _send_to_members(community_id: str) -> dict:
-    """Build the digest and send it to every member with an email address."""
+async def _recently_sent(community_id: str) -> bool:
+    community = await communities_collection.find_one(
+        {"id": community_id}, {"_id": 0, "last_digest_sent_at": 1}
+    )
+    last = (community or {}).get("last_digest_sent_at")
+    if not last:
+        return False
+    try:
+        last_dt = datetime.fromisoformat(last)
+        return datetime.now(timezone.utc) - last_dt < timedelta(days=DIGEST_MIN_INTERVAL_DAYS)
+    except (ValueError, TypeError):
+        return False
+
+
+async def _send_to_members(community_id: str, force: bool = False) -> dict:
+    """Build the digest and send it to every opted-in member with an email address."""
     digest = await _build_digest(community_id)
     if not digest:
         return {"community_id": community_id, "sent": 0, "skipped": 0, "found": False}
 
+    if not force and await _recently_sent(community_id):
+        return {
+            "community_id": community_id,
+            "community_name": digest["community_name"],
+            "sent": 0, "skipped": 0, "opted_out": 0,
+            "found": True, "throttled": True,
+        }
+
     members = await users_collection.find(
-        {"community_id": community_id}, {"_id": 0, "email": 1}
+        {"community_id": community_id},
+        {"_id": 0, "id": 1, "email": 1, "digest_opt_out": 1, "digest_unsubscribe_token": 1},
     ).to_list(2000)
 
     sent = 0
     skipped = 0
+    opted_out = 0
     for member in members:
         email = (member.get("email") or "").strip()
         if not email:
             skipped += 1
             continue
-        ok = await send_community_digest(email, digest)
+        if member.get("digest_opt_out"):
+            opted_out += 1
+            continue
+
+        token = member.get("digest_unsubscribe_token")
+        if not token:
+            token = uuid.uuid4().hex
+            await users_collection.update_one(
+                {"id": member["id"]}, {"$set": {"digest_unsubscribe_token": token}}
+            )
+
+        member_digest = {
+            **digest,
+            "unsubscribe_url": f"{BACKEND_PUBLIC_URL}/api/public/digest/unsubscribe/{token}",
+        }
+        ok = await send_community_digest(email, member_digest)
         sent += 1 if ok else 0
         skipped += 0 if ok else 1
+
+    await communities_collection.update_one(
+        {"id": community_id}, {"$set": {"last_digest_sent_at": now_iso()}}
+    )
 
     return {
         "community_id": community_id,
         "community_name": digest["community_name"],
         "sent": sent,
         "skipped": skipped,
+        "opted_out": opted_out,
         "found": True,
+    }
+
+
+async def _run_all(force: bool = False) -> dict:
+    communities = await communities_collection.find({}, {"_id": 0, "id": 1}).to_list(5000)
+    results = [await _send_to_members(c["id"], force=force) for c in communities if c.get("id")]
+    return {
+        "communities": len(results),
+        "total_sent": sum(r.get("sent", 0) for r in results),
+        "total_skipped": sum(r.get("skipped", 0) for r in results),
+        "results": results,
     }
 
 
@@ -132,22 +196,22 @@ async def digest_preview(current_user: dict[str, Any] = Depends(get_current_user
 
 @router.post("/digest/send")
 async def digest_send(current_user: dict[str, Any] = Depends(get_current_user)):
-    """Send this week's digest to every member of the caller's community (organizer+)."""
+    """Send this week's digest NOW to every member of the caller's community (organizer+)."""
     ensure_minimum_role(current_user, "organizer")
-    return await _send_to_members(current_user["community_id"])
+    return await _send_to_members(current_user["community_id"], force=True)
 
 
 @router.post("/digest/run-all")
 async def digest_run_all(current_user: dict[str, Any] = Depends(get_current_user)):
-    """Send the weekly digest to every community. Platform-admin only; called by a scheduler."""
+    """Send the weekly digest to every community (idempotent). Platform-admin only."""
     if not current_user.get("is_platform_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only.")
+    return await _run_all(force=False)
 
-    communities = await communities_collection.find({}, {"_id": 0, "id": 1}).to_list(5000)
-    results = [await _send_to_members(c["id"]) for c in communities if c.get("id")]
-    return {
-        "communities": len(results),
-        "total_sent": sum(r["sent"] for r in results),
-        "total_skipped": sum(r["skipped"] for r in results),
-        "results": results,
-    }
+
+@router.post("/digest/cron")
+async def digest_cron(x_digest_cron_key: str = Header(default="")):
+    """Weekly scheduler hook. Auth via the X-Digest-Cron-Key header, not a user token."""
+    if not DIGEST_CRON_KEY or x_digest_cron_key != DIGEST_CRON_KEY:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid cron key.")
+    return await _run_all(force=False)

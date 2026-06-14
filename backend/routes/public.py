@@ -19,9 +19,10 @@ SECURITY (do not relax without review):
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from db import communities_collection, events_collection
+from db import communities_collection, events_collection, users_collection
 from dependencies import now_iso
 
 router = APIRouter(prefix="/api/public")
@@ -106,3 +107,61 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     view["community_name"] = community.get("name", "") if community else ""
     view["saved"] = True
     return view
+
+
+# ---------------------------------------------------------------------------
+# Weekly digest one-click unsubscribe / resubscribe (no auth; token-based).
+# Linked from the digest email footer. The token is a per-user opaque value.
+# ---------------------------------------------------------------------------
+
+def _digest_pref_page(title: str, message: str, action_label: str, action_href: str) -> str:
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} — Kindred</title></head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9f5f0;">
+<div style="max-width:480px;margin:64px auto;background:#fff;border:1px solid #e8e0d8;border-radius:16px;padding:40px 32px;text-align:center;">
+<p style="font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#9A3412;margin:0 0 12px;">Kindred</p>
+<h1 style="font-size:24px;color:#2d1810;margin:0 0 12px;">{title}</h1>
+<p style="font-size:16px;line-height:1.6;color:#5a4a3a;margin:0 0 24px;">{message}</p>
+<a href="{action_href}" style="display:inline-block;font-size:14px;color:#9A3412;text-decoration:underline;">{action_label}</a>
+</div></body></html>"""
+
+
+@router.get("/digest/unsubscribe/{token}", response_class=HTMLResponse)
+async def digest_unsubscribe(token: str):
+    """Opt this user out of weekly digests. One click, no login."""
+    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
+    if not user:
+        return HTMLResponse(_digest_pref_page(
+            "Link not recognized",
+            "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
+            "Open Kindred", "https://www.heykindred.org",
+        ), status_code=404)
+    await users_collection.update_one(
+        {"id": user["id"]}, {"$set": {"digest_opt_out": True, "digest_opt_out_at": now_iso()}}
+    )
+    return HTMLResponse(_digest_pref_page(
+        "You're unsubscribed",
+        "You won't receive the weekly community digest anymore. Changed your mind?",
+        "Re-subscribe", f"/api/public/digest/resubscribe/{token}",
+    ))
+
+
+@router.get("/digest/resubscribe/{token}", response_class=HTMLResponse)
+async def digest_resubscribe(token: str):
+    """Re-enable weekly digests for this user."""
+    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
+    if not user:
+        return HTMLResponse(_digest_pref_page(
+            "Link not recognized",
+            "This link is no longer valid. You can manage notifications inside the app.",
+            "Open Kindred", "https://www.heykindred.org",
+        ), status_code=404)
+    await users_collection.update_one(
+        {"id": user["id"]}, {"$set": {"digest_opt_out": False}, "$unset": {"digest_opt_out_at": ""}}
+    )
+    return HTMLResponse(_digest_pref_page(
+        "Welcome back",
+        "You're subscribed to the weekly community digest again.",
+        "Open Kindred", "https://www.heykindred.org",
+    ))
