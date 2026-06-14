@@ -84,10 +84,15 @@ becomes a community operating system.*
    never acts. Reuses `OPENAI_API_KEY`/`GEMINI_MODEL`; degrades gracefully with no key.
    NEXT: an organizer "send welcome" action, a richer quiet signal from RSVP/activity,
    and weaving the steward card into the home feed.
-4. **Community Health Dashboard.** Real metrics that matter more than likes: participation
-   breadth, intergenerational interaction, contribution/volunteer engagement, leadership
-   development, belonging signals. Share `_compute_dashboard()`-style internals across
-   community + courtyard scopes (reuse ile_ubuntu's pattern).
+4. **Community Health Dashboard.** ✅ v1 SHIPPED 2026-06-14. `GET /api/community/health`
+   (`routes/health.py`) + `HealthDashboardPage.jsx` at `/health` ("Community Health" nav).
+   Computes from existing data: participation rate (members active in 90d via content +
+   RSVPs, public-link RSVPs excluded), contribution (funds raised, content contributors,
+   volunteers from `volunteer_slots.assigned_members`), leadership (members with a role
+   beyond member), an honest intergenerational proxy (elder voices = threads w/ elder_name;
+   youth reflections), and the living-record counts. Read-only, no new tracking.
+   NEXT: courtyard-scoped view, trend-over-time, belonging/resilience composites, and a
+   richer intergenerational signal once ages/generations exist (ties to Kinship Graph).
 5. **Finish the Legacy Table integration.** 🟡 RECIPE SYNC SHIPPED via Ubuntu Markets SSO
    (2026-06-13). The first real cross-product link: a Recipe/Tradition Legacy Thread can be
    sent to Legacy Table ("where family recipes live forever"), authored by the signed-in
@@ -98,13 +103,26 @@ becomes a community operating system.*
    flow). Kindred's `legacy_table_sync.py` calls it with the current user's email + secret,
    then POSTs `/api/recipes`. `POST /api/legacy-table/sync-recipe/{thread_id}` maps the
    thread (title→title, body→instructions, elder+community→story) and records the LT recipe
-   id on the thread. `LegacyThreadsPage` shows a "your Kindred identity carries over" banner
-   + per-recipe "Send to Legacy Table" button (no login form).
-   **OPS:** set the SAME `UBUNTU_SSO_SECRET` (long random) in BOTH Railway projects (Kindred
-   backend + Legacy Table backend). The secret is server-side only; it can mint an LT
-   session for any email, so guard it and have LT trust only products you own.
-   **NEXT:** recipe photos (base64), structured ingredients, extend SSO to Ile Ubuntu, and
-   sync stories/gatherings the same way.
+   id on the thread. `LegacyThreadsPage` shows a first-class **Legacy Table status card**
+   (Connected badge, "saved as <you>", recipes-sent count, last-sync) + per-recipe "Send to
+   Legacy Table" button + a recipe-form hint (no login form).
+   **FAMILY MAPPING (2026-06-14):** Legacy Table is family-scoped — a recipe with no family
+   has no visible home (this caused a "sent but invisible" bug: the first synced recipe
+   landed family-less and never appeared in the family-centric UI). Fixed in
+   `legacy_table_sync.py`: on send, read the user's LT `family_id` from the exchange
+   response; if absent, auto-create a family named after the **Kindred community** via
+   `POST /api/families`, then post the recipe so it lands in that Family Cookbook. Resilient
+   (skips if a family exists; still posts if family-create hiccups). The community → LT
+   family is the intended mapping.
+   **VERIFIED:** SSO exchange + recipe create confirmed live (recipe row created in LT).
+   Pending re-verify: a fresh send now lands in the auto-created family cookbook.
+   **OPS:** set the SAME `UBUNTU_SSO_SECRET` (long random) on BOTH backends' services
+   (Kindred backend + Legacy Table backend — the *backend* service, not the umbrella). The
+   secret is server-side only; it can mint an LT session for any email, so guard it and have
+   LT trust only products you own. **Note:** SSO unifies by EMAIL — the user's Kindred and
+   Legacy Table accounts must share an email or a parallel LT account is created.
+   **NEXT:** recipe photos (base64), structured ingredients, extend SSO to Ile Ubuntu, sync
+   stories/gatherings the same way, and clean up the one orphaned family-less test recipe.
 6. **Pricing & packaging revisit.** Validate the tree tiers against willingness-to-pay for
    non-commercial groups (the white space Mighty/Circle abandon). Consider a
    reunion/seasonal one-time plan and a church-org tier.
@@ -113,6 +131,14 @@ becomes a community operating system.*
 
 *Transformational. Position Kindred as the leading home for belonging, family continuity,
 and cultural preservation.*
+
+*Phase 3 STARTED 2026-06-14: Federation v1 (item 5) — `/api/auth/exchange` now in all
+three products (one identity across Kindred + Legacy Table + Ile Ubuntu; set the shared
+secret on Ile Ubuntu's backend to finish). And a first Care-infrastructure slice (item 4):
+**Surprise Gathering mode + Reveal** — a gathering hidden from the guest(s) of honor on
+every surface (list, detail, dashboard, home, per-recipient digest, steward, notifications),
+revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, `steward.py`,
+`digest.py`, `models.py`, `GatheringsPage.jsx`; Ile Ubuntu `routes/auth.py`.*
 
 1. **Kindred as a Community Operating System.** A configurable home where families,
    churches, fraternities, cultural orgs, and intentional communities each get a tuned

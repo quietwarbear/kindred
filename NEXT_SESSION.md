@@ -18,23 +18,42 @@ blueprint), `QUICK_WINS_BACKLOG.md` (the 30–60 day list, now mostly done).*
   + tappable nodes / person panel in `KinshipMapPage`.
 - **Phase 2 — Living Memory:** `GET /api/memory/search` + Memory Vault search box
   (export already existed at `/api/timeline/export`).
-- **Cross-product SSO + recipe sync:** Legacy Table gained `POST /api/auth/exchange`
-  (shared-secret single identity); Kindred sends Recipe/Tradition threads to Legacy Table
-  authored as the signed-in user — no passwords. First-class **Legacy Table status card**
-  + recipe-form hint on `LegacyThreadsPage`.
+- **Phase 2 — Community Health Dashboard:** `GET /api/community/health` +
+  `HealthDashboardPage.jsx` ("Community Health" nav). Participation, contribution/
+  volunteers, leadership, intergenerational proxy, living-record counts. **This completes
+  every net-new Phase 2 feature; only #6 pricing remains, and that's a decision, not a build.**
+- **Cross-product SSO + recipe sync (debugged + hardened):** Legacy Table gained
+  `POST /api/auth/exchange` (shared-secret single identity); Kindred sends Recipe/Tradition
+  threads to Legacy Table authored as the signed-in user — no passwords. First-class
+  **Legacy Table status card** + recipe-form hint on `LegacyThreadsPage`. **Family mapping
+  fix:** LT is family-scoped, so a family-less recipe was invisible; sync now auto-creates a
+  LT family named after the Kindred community (`/api/families`) so recipes land in the
+  Family Cookbook.
+- **Phase 3 — Federation (SSO → Ile Ubuntu):** Ile Ubuntu gained `POST /api/auth/exchange`
+  (`ile_ubuntu/backend/routes/auth.py`, same shared-secret pattern, sync PyMongo) — pushed
+  to origin. One identity now spans Kindred + Legacy Table + Ile Ubuntu. ⏳ Needs
+  `UBUNTU_SSO_SECRET` set on Ile Ubuntu's **backend** service to activate.
+- **Phase 3 — Surprise Gathering mode + Reveal:** create a gathering hidden from the
+  guest(s) of honor; it's suppressed on EVERY surface (events list, single-event fetch,
+  dashboard, home, weekly digest per-recipient, steward briefing) and sends no create
+  notification. One-tap **Reveal** (`POST /api/events/{id}/reveal`) un-hides + announces it.
+  Surprise toggle + guest picker + reveal banner in `GatheringsPage`.
 
-## STEP 1 — Verify the SSO secret reaches the BACKEND (do this first)
+## STEP 1 — Status of SSO / recipe sync (mostly verified)
 
-As of session end the Legacy Threads card reads **"Not connected"**, which means the
-Kindred backend isn't seeing `UBUNTU_SSO_SECRET` at runtime even though it was set.
-- Confirm `UBUNTU_SSO_SECRET` is on the **`backend`** service (the
-  `kindred-production-badd…` one), NOT the umbrella/frontend/analytics service.
-- Confirm the **same** value is on Legacy Table's **backend** service.
-- Redeploy/restart the Kindred backend so it picks up the var.
-- Reload Legacy Threads → the card should flip to **Connected**.
-- Also set `DIGEST_CRON_KEY` on the Kindred backend (for the weekly digest).
+- ✅ `UBUNTU_SSO_SECRET` is on both backends; Legacy Threads card reads **Connected**.
+- ✅ SSO exchange + recipe create confirmed live (a recipe row was created in LT).
+- 🐛→✅ Found & fixed the "sent but invisible" bug: LT is **family-scoped**, the first
+  synced recipe was family-less so it never showed. Fix deployed — sync now auto-creates a
+  LT family named after the Kindred community.
+- ⏳ **RE-VERIFY (do first):** send a **new** Recipe/Tradition thread (not the orphaned
+  gumbo one) → it should auto-create the "Toure Honor" family and the recipe should appear
+  in **Family Cookbook / My Recipes** in Legacy Table. Then the bridge is fully proven.
+- Still set `DIGEST_CRON_KEY` on the Kindred backend (for the weekly digest) if not done.
+- Cleanup: delete the one orphaned family-less test recipe in LT once verified.
 - Reminder: frontend services expose env publicly — keep all secrets (SSO, Stripe `sk_`,
-  `whsec_`, Google secret, JWT) on backend services only.
+  `whsec_`, Google secret, JWT) on backend services only. SSO unifies by EMAIL — Kindred &
+  LT accounts must share an email.
 
 ## STEP 2 — End-to-end smoke test on heykindred.org
 
@@ -42,10 +61,10 @@ Kindred backend isn't seeing `UBUNTU_SSO_SECRET` at runtime even though it was s
 2. **Kinship Map** → add a relationship between two members, tap one, person panel shows
    their gatherings/memories/stories.
 3. **Memory Vault** → run a search, results return.
-4. **Recipe sync (the headline):** create a Recipe/Tradition thread → **Send to Legacy
-   Table** → card count ticks up, "Sent to Legacy Table" shows, recipe appears in Legacy
-   Table under your account.
-5. **Digest:** point a weekly trigger (cron-job.org / Railway cron) at
+4. **Recipe sync (the headline):** see STEP 1 — send a new recipe, confirm it appears in
+   the auto-created Family Cookbook in Legacy Table.
+5. **Community Health** → open it, confirm the metric cards render.
+6. **Digest:** point a weekly trigger (cron-job.org / Railway cron) at
    `POST /api/digest/cron` with header `X-Digest-Cron-Key: <key>`. Test once with
    `POST /api/digest/send` (organizer) before enabling.
 
@@ -58,12 +77,29 @@ Kindred backend isn't seeing `UBUNTU_SSO_SECRET` at runtime even though it was s
 - Kinship polish: generation layout + member **avatars** on nodes; reciprocal/auto-inferred
   relationships (parent↔child).
 
-## STEP 4 — Pick the next big rock
+## STEP 4 — Phase 2 DONE; Phase 3 STARTED
 
-- **Extend SSO to Ile Ubuntu** — add the same `/api/auth/exchange` so one identity spans
-  all three Ubuntu Markets products.
-- **Community Health Dashboard** — the last Phase 2 feature (belonging/participation/
-  intergenerational/leadership metrics from existing data).
+Phase 2 complete (Living Memory, Kinship Graph, Ubuntu AI Guide, Community Health Dashboard,
+Legacy Table recipe sync over SSO). Item #6 (pricing) is a business decision, not a build.
+
+Phase 3 already underway this session:
+- ✅ **Federation v1** — `/api/auth/exchange` now in all three products (Kindred, Legacy
+  Table, Ile Ubuntu). ⏳ Set `UBUNTU_SSO_SECRET` on Ile Ubuntu's backend to finish.
+- ✅ **Care infrastructure (first slice)** — Surprise Gathering mode + Reveal.
+
+Remaining Phase 3 rocks (see KINDRED_VISION_PLAN.md Phase 3):
+- **Community Operating System** — per-type configurable templates (extends default subyards).
+- **Gathering Intelligence Layer** — AI plans events end-to-end + generates histories
+  (extends the Ubuntu AI Guide).
+- **Living oral-history at scale** — guided interviews + transcription/translation
+  (extends Living Memory + Legacy Threads).
+- **Care infrastructure (more)** — meal trains, check-in routing, milestones.
+- **Federation (more)** — a user-facing "open in Ile Ubuntu / Legacy Table" cross-product
+  jump that uses the exchange; multi-community identity.
+
+Surprise Gathering follow-ups: post-hoc "add a guest of honor" to an existing gathering
+(currently set at create only); Reveal exists. Federation follow-up: a Kindred→sibling
+"jump" link that calls the exchange so the user lands signed-in.
 
 ## Hygiene / open loops (don't lose)
 
