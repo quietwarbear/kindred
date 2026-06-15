@@ -133,8 +133,10 @@ becomes a community operating system.*
 and cultural preservation.*
 
 *Phase 3 STARTED 2026-06-14: Federation v1 (item 5) — `/api/auth/exchange` now in all
-three products (one identity across Kindred + Legacy Table + Ile Ubuntu; set the shared
-secret on Ile Ubuntu's backend to finish). And a first Care-infrastructure slice (item 4):
+three products INCLUDING Kindred (2026-06-15), so federation is **bi-directional**: any
+product can sign a user into any other. New federated users with no Kindred community land
+in onboarding. Set the shared secret on Ile Ubuntu's backend to finish that leg; Kindred &
+Legacy Table already have it. NEXT: user-facing cross-product "jump" links that use the exchange. And a first Care-infrastructure slice (item 4):
 **Surprise Gathering mode + Reveal** — a gathering hidden from the guest(s) of honor on
 every surface (list, detail, dashboard, home, per-recipient digest, steward, notifications),
 revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, `steward.py`,

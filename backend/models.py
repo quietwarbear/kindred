@@ -27,6 +27,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SSOExchangeRequest(BaseModel):
+    email: str
+    secret: str
+    name: str = ""
+
+
 class GoogleSessionRequest(BaseModel):
     credential: str
 

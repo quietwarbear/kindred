@@ -29,10 +29,13 @@ blueprint), `QUICK_WINS_BACKLOG.md` (the 30–60 day list, now mostly done).*
   fix:** LT is family-scoped, so a family-less recipe was invisible; sync now auto-creates a
   LT family named after the Kindred community (`/api/families`) so recipes land in the
   Family Cookbook.
-- **Phase 3 — Federation (SSO → Ile Ubuntu):** Ile Ubuntu gained `POST /api/auth/exchange`
-  (`ile_ubuntu/backend/routes/auth.py`, same shared-secret pattern, sync PyMongo) — pushed
-  to origin. One identity now spans Kindred + Legacy Table + Ile Ubuntu. ⏳ Needs
-  `UBUNTU_SSO_SECRET` set on Ile Ubuntu's **backend** service to activate.
+- **Phase 3 — Federation (bi-directional, all three):** `POST /api/auth/exchange` now exists
+  in Legacy Table, Ile Ubuntu, AND Kindred (`kindred/backend/routes/auth.py` — find-or-create
+  by email, mint Kindred session via `build_auth_response`; new federated user has no
+  community → lands in onboarding). The fabric is symmetric: any product can sign a user
+  into any other. Kindred's backend already has `UBUNTU_SSO_SECRET`. ⏳ Still set it on Ile
+  Ubuntu's **backend** to finish that leg. NEXT: the user-facing "jump" links that USE the
+  exchange (e.g., "Open in Legacy Table / Ile Ubuntu / Kindred" lands you signed in).
 - **Phase 3 — Surprise Gathering mode + Reveal:** create a gathering hidden from the
   guest(s) of honor; it's suppressed on EVERY surface (events list, single-event fetch,
   dashboard, home, weekly digest per-recipient, steward briefing) and sends no create

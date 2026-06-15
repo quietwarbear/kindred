@@ -103,6 +103,7 @@ from models import (
     PasswordRecoveryRequest,
     PasswordRecoveryVerifyRequest,
     ProfileUpdateRequest,
+    SSOExchangeRequest,
     UserPublic,
 )
 from security import hash_password, verify_password
@@ -568,6 +569,46 @@ async def login(payload: LoginRequest):
     if not user_doc or not verify_password(payload.password, user_doc["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
     community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
+    return build_auth_response(user_doc, community_doc)
+
+
+@router.post("/auth/exchange", response_model=AuthResponse)
+async def auth_exchange(payload: SSOExchangeRequest):
+    """Ubuntu Markets single-identity exchange — INBOUND federation into Kindred.
+
+    A trusted sibling product (Legacy Table, Ile Ubuntu) presents a verified user's email
+    plus the shared UBUNTU_SSO_SECRET; we find-or-create the Kindred user and open a
+    session, completing the bi-directional fabric. A brand-new federated user has no
+    community yet (community_id ""), so the client routes them into onboarding. No password
+    is exchanged. The secret is server-side only — trust only products you control.
+    """
+    expected = os.environ.get("UBUNTU_SSO_SECRET", "")
+    if not expected or payload.secret != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret")
+
+    email = normalize_email(payload.email)
+    if not email or "@" not in email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+
+    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    if not user_doc:
+        user_doc = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "full_name": (payload.name or "").strip() or email.split("@")[0],
+            "password_hash": None,
+            "community_id": "",
+            "community_ids": [],
+            "role": "member",
+            "auth_provider": "ubuntu-sso",
+            "onboarding_completed": False,
+            "created_at": now_iso(),
+        }
+        await users_collection.insert_one(user_doc.copy())
+
+    community_doc = None
+    if user_doc.get("community_id"):
+        community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
     return build_auth_response(user_doc, community_doc)
 
 
