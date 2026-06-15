@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from courtyard_helpers import ROLE_TOOLING, countdown_days
+from courtyard_helpers import ALL_MODULE_KEYS, MODULE_CATALOG, ROLE_TOOLING, countdown_days, resolve_modules
 from db import (
     announcements_collection,
     budget_plans_collection,
@@ -40,10 +40,29 @@ from models import (
     InviteCreateRequest,
     InvitePublic,
     KinshipCreateRequest,
+    ModulesUpdateRequest,
     SubyardCreateRequest,
 )
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/community/modules")
+async def get_community_modules(current_user: dict[str, Any] = Depends(get_current_user)):
+    """The community's enabled modules (its saved config, else the type default) + catalog."""
+    community = await get_community_for_user(current_user)
+    return {"enabled": resolve_modules(community), "catalog": MODULE_CATALOG, "community_type": community.get("community_type", "")}
+
+
+@router.put("/community/modules")
+async def set_community_modules(payload: ModulesUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Steward-set which modules this community runs. Validates against the catalog."""
+    ensure_minimum_role(current_user, "organizer")
+    enabled = [m for m in payload.modules if m in ALL_MODULE_KEYS]
+    await communities_collection.update_one(
+        {"id": current_user["community_id"]}, {"$set": {"modules": enabled}}
+    )
+    return {"enabled": enabled, "catalog": MODULE_CATALOG}
 
 
 @router.get("/community/members")

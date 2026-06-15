@@ -12,6 +12,7 @@ import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
 import { GatheringsPage } from "@/components/GatheringsPage";
 import { CarePage } from "@/components/CarePage";
+import { CommunitySetupPage } from "@/components/CommunitySetupPage";
 import { HealthDashboardPage } from "@/components/HealthDashboardPage";
 import { HomePage } from "@/components/HomePage";
 import { KinshipMapPage } from "@/components/KinshipMapPage";
@@ -32,19 +33,21 @@ import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-register";
 
+// `module` ties a nav item to a Community OS module; items without one are always-on (the spine).
 const navItems = [
   { label: "Home", path: "/home" },
-  { label: "Ubuntu Guide", path: "/steward" },
-  { label: "Community Health", path: "/health" },
+  { label: "Ubuntu Guide", path: "/steward", module: "steward" },
+  { label: "Community Health", path: "/health", module: "health" },
   { label: "Activity", path: "/activity" },
   { label: "Courtyards", path: "/courtyards" },
-  { label: "Timeline", path: "/timeline" },
-  { label: "Gatherings", path: "/gatherings" },
-  { label: "Circle of Care", path: "/care" },
-  { label: "Legacy Threads", path: "/legacy-threads" },
-  { label: "Kinship Map", path: "/kinship-map" },
-  { label: "Polls", path: "/polls" },
-  { label: "Funds & Travel", path: "/funds-travel" },
+  { label: "Timeline", path: "/timeline", module: "memory" },
+  { label: "Gatherings", path: "/gatherings", module: "gatherings" },
+  { label: "Circle of Care", path: "/care", module: "care" },
+  { label: "Legacy Threads", path: "/legacy-threads", module: "legacy_threads" },
+  { label: "Kinship Map", path: "/kinship-map", module: "kinship" },
+  { label: "Polls", path: "/polls", module: "polls" },
+  { label: "Funds & Travel", path: "/funds-travel", module: "funds" },
+  { label: "Community Setup", path: "/setup" },
   { label: "Subscription", path: "/subscription" },
   { label: "Settings", path: "/settings" },
 ];
@@ -58,6 +61,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   const [joinCode, setJoinCode] = useState("");
   const [canInstall, setCanInstall] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [enabledModules, setEnabledModules] = useState(null);
 
   const refreshUnreadSummary = useCallback(async () => {
     try {
@@ -79,6 +83,17 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
 
   useEffect(() => { refreshUnreadSummary(); }, [location.pathname, refreshUnreadSummary]);
   useEffect(() => { loadMyCommunities(); }, [loadMyCommunities]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const payload = await apiRequest("/community/modules", { token });
+        if (active) setEnabledModules(payload.enabled || []);
+      } catch { /* on failure, leave all modules visible */ }
+    })();
+    return () => { active = false; };
+  }, [token, community?.id]);
 
   useEffect(() => {
     if (!isStandalone()) setupInstallPrompt(() => setCanInstall(true));
@@ -200,7 +215,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             </div>
 
             <nav className="grid gap-2" data-testid="shell-navigation">
-              {navItems.map((item) => (
+              {navItems.filter((item) => !item.module || !enabledModules || enabledModules.includes(item.module)).map((item) => (
                 <NavLink
                   className={({ isActive }) =>
                     `rounded-2xl px-4 py-3 text-sm font-semibold transition duration-300 ${
@@ -297,6 +312,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<StewardPage token={token} />} path="steward" />
               <Route element={<HealthDashboardPage token={token} />} path="health" />
               <Route element={<CarePage token={token} user={user} />} path="care" />
+              <Route element={<CommunitySetupPage token={token} user={user} />} path="setup" />
               <Route element={<ActivityFeedPage token={token} />} path="activity" />
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<CourtyardDetailPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards/:id" />

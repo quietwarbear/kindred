@@ -145,10 +145,15 @@ every surface (list, detail, dashboard, home, per-recipient digest, steward, not
 revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, `steward.py`,
 `digest.py`, `models.py`, `GatheringsPage.jsx`; Ile Ubuntu `routes/auth.py`.*
 
-1. **Kindred as a Community Operating System.** A configurable home where families,
-   churches, fraternities, cultural orgs, and intentional communities each get a tuned
-   template (the default-subyard idea, taken all the way) — gathering, memory, kinship,
-   care, and contribution as composable modules.
+1. **Kindred as a Community Operating System.** 🟡 v1 SHIPPED 2026-06-15 — module
+   configuration. `courtyard_helpers.py` defines a MODULE_CATALOG (gatherings, care,
+   legacy_threads, kinship, memory, polls, funds, health, steward) + per-type defaults
+   (`default_modules_for_type`); `resolve_modules` returns a community's saved config or its
+   type default. `GET/PUT /community/modules` (PUT steward-gated). The **sidebar filters by
+   enabled modules**, and a **Community Setup page** (`CommunitySetupPage`, "/setup") lets a
+   steward toggle them — seeded by community type. The spine (Home, Activity, Courtyards,
+   Members, Subscription, Settings, Setup) is always on. NEXT: per-type blueprint seeding
+   (subyards/roles/terminology — the "wizard" framing), and per-module terminology overrides.
 2. **Gathering Intelligence Layer.** 🟡 v1 SHIPPED 2026-06-15. `ai_gathering.py` (litellm +
    heuristic fallbacks). **Planner:** `POST /api/gatherings/ai-plan` turns a one-sentence ask
    into a structured plan (title, description, focus, agenda, volunteer slots, potluck); the

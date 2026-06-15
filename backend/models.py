@@ -65,6 +65,10 @@ class CareClaimRequest(BaseModel):
     slot_id: str
 
 
+class ModulesUpdateRequest(BaseModel):
+    modules: list[str] = Field(default_factory=list)
+
+
 class GoogleSessionRequest(BaseModel):
     credential: str
 

@@ -13,6 +13,51 @@ ROLE_TOOLING = {
 }
 
 
+# ── Community Operating System: composable modules ──────────────────────────
+# Each community type gets a tuned default shape. Stewards can toggle from there.
+# Home, Activity, Courtyards, Members, Subscription, Settings, and Community Setup
+# are always on (the spine) and are NOT in this catalog.
+MODULE_CATALOG = [
+    {"key": "gatherings", "label": "Gatherings", "blurb": "Plan events with agendas, volunteers, potluck, travel."},
+    {"key": "care", "label": "Circle of Care", "blurb": "Meal trains, check-ins, milestones."},
+    {"key": "legacy_threads", "label": "Legacy Threads", "blurb": "Oral histories, sermons, family lore."},
+    {"key": "kinship", "label": "Kinship Map", "blurb": "Map relationships across generations."},
+    {"key": "memory", "label": "Timeline & Memory", "blurb": "The living archive of photos and stories."},
+    {"key": "polls", "label": "Polls", "blurb": "Gather the community's voice."},
+    {"key": "funds", "label": "Funds & Travel", "blurb": "Dues, contributions, travel coordination."},
+    {"key": "health", "label": "Community Health", "blurb": "Belonging and participation signals."},
+    {"key": "steward", "label": "Ubuntu Guide", "blurb": "The AI community steward."},
+]
+ALL_MODULE_KEYS = [m["key"] for m in MODULE_CATALOG]
+
+_DEFAULT_MODULES_BY_TYPE = {
+    "family": ["gatherings", "care", "legacy_threads", "kinship", "memory", "funds", "polls", "steward", "health"],
+    "reunion": ["gatherings", "care", "legacy_threads", "kinship", "memory", "funds", "polls", "steward", "health"],
+    "church": ["gatherings", "care", "legacy_threads", "memory", "polls", "funds", "steward", "health"],
+    "ministry": ["gatherings", "care", "legacy_threads", "memory", "polls", "funds", "steward", "health"],
+    "greek": ["gatherings", "funds", "polls", "kinship", "memory", "steward", "health", "care"],
+    "fraternity": ["gatherings", "funds", "polls", "kinship", "memory", "steward", "health", "care"],
+    "sorority": ["gatherings", "funds", "polls", "kinship", "memory", "steward", "health", "care"],
+}
+
+
+def default_modules_for_type(community_type: str) -> list[str]:
+    """The recommended module shape for a community type. Unknown types → everything on."""
+    t = (community_type or "").lower()
+    for key, mods in _DEFAULT_MODULES_BY_TYPE.items():
+        if key in t:
+            return list(mods)
+    return list(ALL_MODULE_KEYS)
+
+
+def resolve_modules(community: dict) -> list[str]:
+    """A community's enabled modules: its saved config, else the type default."""
+    mods = community.get("modules")
+    if isinstance(mods, list) and mods:
+        return [m for m in mods if m in ALL_MODULE_KEYS]
+    return default_modules_for_type(community.get("community_type", ""))
+
+
 def build_default_subyards(community_type: str) -> list[dict]:
     normalized = (community_type or "").lower()
     if "church" in normalized:
