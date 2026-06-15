@@ -34,3 +34,4 @@ notification_preferences_collection = db.notification_preferences
 polls_collection = db.polls
 subscriptions_collection = db.subscriptions
 sso_codes_collection = db.sso_codes
+care_circles_collection = db.care_circles

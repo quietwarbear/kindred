@@ -41,6 +41,30 @@ class GatheringPlanRequest(BaseModel):
     prompt: str = ""
 
 
+class CareSlotInput(BaseModel):
+    label: str = ""
+    item: str = ""
+
+
+class CareCircleCreateRequest(BaseModel):
+    kind: Literal["meal-train", "check-in", "milestone", "support"] = "support"
+    title: str = Field(min_length=1)
+    note: str = ""
+    for_member_id: str = ""
+    for_name: str = ""
+    milestone_type: str = ""
+    slots: list[CareSlotInput] = Field(default_factory=list)
+
+
+class CareSlotAddRequest(BaseModel):
+    label: str = ""
+    item: str = Field(min_length=1)
+
+
+class CareClaimRequest(BaseModel):
+    slot_id: str
+
+
 class GoogleSessionRequest(BaseModel):
     credential: str
 

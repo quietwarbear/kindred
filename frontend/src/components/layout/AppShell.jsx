@@ -11,6 +11,8 @@ import { ContributionsPage } from "@/components/ContributionsPage";
 import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
 import { GatheringsPage } from "@/components/GatheringsPage";
+import { CarePage } from "@/components/CarePage";
+import { HealthDashboardPage } from "@/components/HealthDashboardPage";
 import { HomePage } from "@/components/HomePage";
 import { KinshipMapPage } from "@/components/KinshipMapPage";
 import { LegacyThreadsPage } from "@/components/LegacyThreadsPage";
@@ -33,10 +35,12 @@ import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-regis
 const navItems = [
   { label: "Home", path: "/home" },
   { label: "Ubuntu Guide", path: "/steward" },
+  { label: "Community Health", path: "/health" },
   { label: "Activity", path: "/activity" },
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline" },
   { label: "Gatherings", path: "/gatherings" },
+  { label: "Circle of Care", path: "/care" },
   { label: "Legacy Threads", path: "/legacy-threads" },
   { label: "Kinship Map", path: "/kinship-map" },
   { label: "Polls", path: "/polls" },
@@ -291,6 +295,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<HomePage token={token} />} path="dashboard" />
               <Route element={<HomePage token={token} />} path="home" />
               <Route element={<StewardPage token={token} />} path="steward" />
+              <Route element={<HealthDashboardPage token={token} />} path="health" />
+              <Route element={<CarePage token={token} user={user} />} path="care" />
               <Route element={<ActivityFeedPage token={token} />} path="activity" />
               <Route element={<CourtyardsPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards" />
               <Route element={<CourtyardDetailPage onCommunicationsViewed={refreshUnreadSummary} token={token} user={user} />} path="courtyards/:id" />

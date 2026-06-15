@@ -161,9 +161,13 @@ revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, 
 3. **Living oral-history at scale.** Guided multi-generational interview flows, automatic
    transcription/translation (en/es/yo and beyond), and AI-assembled "family chronicles"
    that turn scattered voice notes into a narrated legacy.
-4. **Care infrastructure.** Move from coordination to *collective care*: meal trains,
-   check-in routing to the right elder/mentor, bereavement and milestone support — the
-   "are we cared for?" question, fully answered.
+4. **Care infrastructure.** 🟡 v1 SHIPPED 2026-06-15 — **Circle of Care**. `care.py` +
+   `care_circles` collection + `CarePage` ("Circle of Care" nav). Open a circle for a member
+   (or the whole community): meal trains with claimable day/slot signups (potluck-style
+   toggle claim), check-ins, milestones (new baby, loss, recovery), and general support.
+   Opening a circle notifies the community to rally. Any member can start one; creator/
+   organizer can close. (Earlier slice: Surprise Gatherings.) NEXT: check-in *routing* to the
+   right elder/mentor (tie to Kinship + roles), reminders, and a care card on the home feed.
 5. **Federation across communities.** Let a fraternity chapter, a family, and a church a
    member belongs to coexist without bleeding data — multi-community identity with
    member-owned boundaries (build on the existing multi-courtyard switcher).
