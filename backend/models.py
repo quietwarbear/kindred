@@ -33,6 +33,10 @@ class SSOExchangeRequest(BaseModel):
     name: str = ""
 
 
+class SSORedeemRequest(BaseModel):
+    code: str
+
+
 class GoogleSessionRequest(BaseModel):
     credential: str
 

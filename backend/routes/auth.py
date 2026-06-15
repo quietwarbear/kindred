@@ -67,6 +67,7 @@ from db import (
     notification_preferences_collection,
     password_resets_collection,
     polls_collection,
+    sso_codes_collection,
     announcements_collection,
     budget_plans_collection,
     chat_rooms_collection,
@@ -104,6 +105,7 @@ from models import (
     PasswordRecoveryVerifyRequest,
     ProfileUpdateRequest,
     SSOExchangeRequest,
+    SSORedeemRequest,
     UserPublic,
 )
 from security import hash_password, verify_password
@@ -606,6 +608,72 @@ async def auth_exchange(payload: SSOExchangeRequest):
         }
         await users_collection.insert_one(user_doc.copy())
 
+    community_doc = None
+    if user_doc.get("community_id"):
+        community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
+    return build_auth_response(user_doc, community_doc)
+
+
+async def _find_or_create_sso_user(email: str, name: str) -> dict[str, Any]:
+    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    if user_doc:
+        return user_doc
+    user_doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "full_name": (name or "").strip() or email.split("@")[0],
+        "password_hash": None,
+        "community_id": "",
+        "community_ids": [],
+        "role": "member",
+        "auth_provider": "ubuntu-sso",
+        "onboarding_completed": False,
+        "created_at": now_iso(),
+    }
+    await users_collection.insert_one(user_doc.copy())
+    return user_doc
+
+
+@router.post("/auth/sso-code")
+async def sso_mint_code(payload: SSOExchangeRequest):
+    """Mint a short-lived, single-use SSO handoff code (server-to-server, secret-gated).
+
+    A trusted sibling product (Ile Ubuntu) calls this to start an 'Open in Kindred' jump.
+    The code — not a session — goes in the jump URL and is redeemed once via /auth/sso-redeem.
+    """
+    expected = os.environ.get("UBUNTU_SSO_SECRET", "")
+    if not expected or payload.secret != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret")
+    email = normalize_email(payload.email)
+    if not email or "@" not in email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+
+    user_doc = await _find_or_create_sso_user(email, payload.name)
+    code = uuid.uuid4().hex
+    await sso_codes_collection.insert_one({
+        "code": code,
+        "user_id": user_doc["id"],
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+        "used": False,
+        "created_at": now_iso(),
+    })
+    return {"code": code, "expires_in": 300}
+
+
+@router.post("/auth/sso-redeem", response_model=AuthResponse)
+async def sso_redeem_code(payload: SSORedeemRequest):
+    """Redeem a single-use SSO code for a Kindred session. No secret — the code is the
+    one-time credential. New federated users with no community land in onboarding."""
+    rec = await sso_codes_collection.find_one({"code": payload.code}, {"_id": 0})
+    if not rec or rec.get("used"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link is invalid or already used.")
+    if (rec.get("expires_at") or "") < now_iso():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link has expired.")
+    await sso_codes_collection.update_one({"code": payload.code}, {"$set": {"used": True, "used_at": now_iso()}})
+
+    user_doc = await users_collection.find_one({"id": rec["user_id"]}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     community_doc = None
     if user_doc.get("community_id"):
         community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})

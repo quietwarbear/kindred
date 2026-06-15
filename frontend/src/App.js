@@ -11,6 +11,7 @@ import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
+import { SSOHandoffPage } from "@/components/SSOHandoffPage";
 import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
@@ -269,6 +270,7 @@ function App() {
             />
             <Route element={<InviteLandingPage />} path="/invite/:code" />
             <Route element={<PublicRSVPPage />} path="/rsvp/:token" />
+            <Route element={<SSOHandoffPage onAuthSuccess={handleFreshLogin} />} path="/sso" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
             <Route element={<TermsOfServicePage />} path="/terms" />
             <Route element={<SupportPage />} path="/support" />
