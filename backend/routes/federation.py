@@ -24,6 +24,11 @@ TARGETS = {
         "web": os.environ.get("LEGACY_TABLE_WEB_URL", "https://legacytable.app").rstrip("/"),
         "label": "Legacy Table",
     },
+    "ile_ubuntu": {
+        "api": os.environ.get("ILE_UBUNTU_API_URL", "https://ileubuntu-production.up.railway.app/api").rstrip("/"),
+        "web": os.environ.get("ILE_UBUNTU_WEB_URL", "https://www.ile-ubuntu.org").rstrip("/"),
+        "label": "Ile Ubuntu",
+    },
 }
 
 

@@ -29,13 +29,22 @@ blueprint), `QUICK_WINS_BACKLOG.md` (the 30–60 day list, now mostly done).*
   fix:** LT is family-scoped, so a family-less recipe was invisible; sync now auto-creates a
   LT family named after the Kindred community (`/api/families`) so recipes land in the
   Family Cookbook.
-- **Phase 3 — Federation (bi-directional, all three):** `POST /api/auth/exchange` now exists
-  in Legacy Table, Ile Ubuntu, AND Kindred (`kindred/backend/routes/auth.py` — find-or-create
-  by email, mint Kindred session via `build_auth_response`; new federated user has no
-  community → lands in onboarding). The fabric is symmetric: any product can sign a user
-  into any other. Kindred's backend already has `UBUNTU_SSO_SECRET`. ⏳ Still set it on Ile
-  Ubuntu's **backend** to finish that leg. NEXT: the user-facing "jump" links that USE the
-  exchange (e.g., "Open in Legacy Table / Ile Ubuntu / Kindred" lands you signed in).
+- **Phase 3 — Federation (COMPLETE, all three):** `/auth/exchange` + secure one-time-code
+  `/auth/sso-code` (mint) + `/auth/sso-redeem` (redeem) + a `/sso` handoff page now exist in
+  Legacy Table, Ile Ubuntu, AND Kindred. User-facing **jump links wired both ways for every
+  Kindred pair**:
+  - Kindred → Legacy Table: "Open Legacy Table" on the Legacy Table card (LegacyThreadsPage).
+  - Legacy Table → Kindred: "Open your family circle in Kindred" on LT's Family page.
+  - Ile Ubuntu → Kindred: "Open your circle in Kindred" in Ile's Community section.
+  - Kindred → Ile Ubuntu: "Open Ile Ubuntu" in the Kindred dashboard Quick Actions.
+  Handoff is secure: only a single-use 5-min code rides in the URL, redeemed once for a
+  session. New federated users with no Kindred community land in onboarding.
+  ⏳ Requires the SAME `UBUNTU_SSO_SECRET` on all three **backend** services (Doc confirms
+  set on all three). Optional env if hosts differ: `LEGACY_TABLE_API/WEB_URL`,
+  `ILE_UBUNTU_API/WEB_URL`, `KINDRED_API/WEB_URL`. (Legacy Table ↔ Ile Ubuntu direct jumps
+  not built — not requested; both connect via Kindred.)
+  Follow-up: TTL index on each `sso_codes` collection (codes are single-use + expiry-checked,
+  so functionally fine; index just prevents row buildup).
 - **Phase 3 — Surprise Gathering mode + Reveal:** create a gathering hidden from the
   guest(s) of honor; it's suppressed on EVERY surface (events list, single-event fetch,
   dashboard, home, weekly digest per-recipient, steward briefing) and sends no create

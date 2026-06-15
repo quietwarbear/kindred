@@ -27,6 +27,15 @@ export const HomePage = ({ token }) => {
     loadHome();
   }, [token]);
 
+  const openIleUbuntu = async () => {
+    try {
+      const res = await apiRequest("/federation/jump", { method: "POST", token, data: { target: "ile_ubuntu" } });
+      window.open(res.url, "_blank", "noopener");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't open Ile Ubuntu.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="archival-card">
@@ -153,6 +162,9 @@ export const HomePage = ({ token }) => {
                 );
               })}
             </div>
+            <button onClick={openIleUbuntu} data-testid="home-open-ile" type="button" className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
+              Open Ile Ubuntu (your learning village) →
+            </button>
           </article>
         </div>
       </section>
