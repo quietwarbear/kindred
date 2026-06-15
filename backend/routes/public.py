@@ -114,7 +114,19 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
 # Linked from the digest email footer. The token is a per-user opaque value.
 # ---------------------------------------------------------------------------
 
-def _digest_pref_page(title: str, message: str, action_label: str, action_href: str) -> str:
+def _digest_pref_page(title: str, message: str, action_label: str, action_href: str, *, post_action: str = "") -> str:
+    # If post_action is set, render a real POST form button (the action MUTATES state and
+    # must not run on a bare GET — email clients and security scanners prefetch GET links).
+    # Otherwise render a plain link (navigation only, safe to prefetch).
+    if post_action:
+        action_html = (
+            f'<form method="post" action="{post_action}" style="margin:0;">'
+            f'<button type="submit" style="cursor:pointer;border:0;border-radius:999px;'
+            f'background:#9A3412;color:#fff;font-size:15px;font-weight:600;padding:12px 28px;">'
+            f'{action_label}</button></form>'
+        )
+    else:
+        action_html = f'<a href="{action_href}" style="display:inline-block;font-size:14px;color:#9A3412;text-decoration:underline;">{action_label}</a>'
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} — Kindred</title></head>
@@ -123,13 +135,31 @@ def _digest_pref_page(title: str, message: str, action_label: str, action_href: 
 <p style="font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#9A3412;margin:0 0 12px;">Kindred</p>
 <h1 style="font-size:24px;color:#2d1810;margin:0 0 12px;">{title}</h1>
 <p style="font-size:16px;line-height:1.6;color:#5a4a3a;margin:0 0 24px;">{message}</p>
-<a href="{action_href}" style="display:inline-block;font-size:14px;color:#9A3412;text-decoration:underline;">{action_label}</a>
+{action_html}
 </div></body></html>"""
 
 
 @router.get("/digest/unsubscribe/{token}", response_class=HTMLResponse)
+async def digest_unsubscribe_confirm(token: str):
+    """Show a confirmation page. Does NOT change anything — a bare GET (prefetched by mail
+    clients and link scanners) must never silently unsubscribe someone."""
+    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
+    if not user:
+        return HTMLResponse(_digest_pref_page(
+            "Link not recognized",
+            "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
+            "Open Kindred", "https://www.heykindred.org",
+        ), status_code=404)
+    return HTMLResponse(_digest_pref_page(
+        "Unsubscribe from the weekly digest?",
+        "Confirm below and you'll stop receiving the weekly community digest.",
+        "Unsubscribe me", "", post_action=f"/api/public/digest/unsubscribe/{token}",
+    ))
+
+
+@router.post("/digest/unsubscribe/{token}", response_class=HTMLResponse)
 async def digest_unsubscribe(token: str):
-    """Opt this user out of weekly digests. One click, no login."""
+    """Opt this user out of weekly digests. Triggered by the confirm-page button (POST)."""
     user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
     if not user:
         return HTMLResponse(_digest_pref_page(
@@ -143,13 +173,13 @@ async def digest_unsubscribe(token: str):
     return HTMLResponse(_digest_pref_page(
         "You're unsubscribed",
         "You won't receive the weekly community digest anymore. Changed your mind?",
-        "Re-subscribe", f"/api/public/digest/resubscribe/{token}",
+        "Re-subscribe", "", post_action=f"/api/public/digest/resubscribe/{token}",
     ))
 
 
-@router.get("/digest/resubscribe/{token}", response_class=HTMLResponse)
+@router.post("/digest/resubscribe/{token}", response_class=HTMLResponse)
 async def digest_resubscribe(token: str):
-    """Re-enable weekly digests for this user."""
+    """Re-enable weekly digests for this user (POST from the unsubscribe-success page)."""
     user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
     if not user:
         return HTMLResponse(_digest_pref_page(

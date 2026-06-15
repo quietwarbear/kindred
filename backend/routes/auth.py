@@ -656,6 +656,8 @@ async def sso_mint_code(payload: SSOExchangeRequest):
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
         "used": False,
         "created_at": now_iso(),
+        # Real BSON datetime so a TTL index can auto-purge spent codes (see server.py startup).
+        "created_at_dt": datetime.now(timezone.utc),
     })
     return {"code": code, "expires_in": 300}
 

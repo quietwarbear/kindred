@@ -6,7 +6,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse, JSONResponse
 
-from db import client, communities_collection, invites_collection
+from db import client, communities_collection, invites_collection, sso_codes_collection
 from routes.activity import router as activity_router
 from routes.auth import router as auth_router
 from routes.communications import router as communications_router
@@ -211,6 +211,17 @@ async def android_asset_links():
             }
         }
     ])
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    """Auto-purge one-time SSO handoff codes. They're valid for 5 minutes; the TTL index
+    deletes them ~10 minutes after creation so the collection never grows unbounded.
+    (TTL needs a BSON date field — codes carry `created_at_dt`.) Idempotent."""
+    try:
+        await sso_codes_collection.create_index("created_at_dt", expireAfterSeconds=600)
+    except Exception as exc:  # never block boot on an index build
+        logging.warning("Could not create sso_codes TTL index: %s", exc)
 
 
 @app.on_event("shutdown")
