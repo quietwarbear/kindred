@@ -367,6 +367,9 @@ class ThreadPublic(BaseModel):
     created_by_name: str = ""
     created_by_id: str = ""
     comments: list[dict[str, Any]] = Field(default_factory=list)
+    transcript: str = ""
+    translations: dict[str, str] = Field(default_factory=dict)
+    legacy_table_recipe_id: str = ""
     created_at: str = ""
 
 

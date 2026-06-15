@@ -163,9 +163,19 @@ revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, 
    into a narrated chronicle; "Tell our story" on StewardPage. Reuses
    `OPENAI_API_KEY`/`GEMINI_MODEL`; degrades gracefully. NEXT: AI date suggestion from member
    availability, per-person engagement recommendations, richer history (dates/photos).
-3. **Living oral-history at scale.** Guided multi-generational interview flows, automatic
-   transcription/translation (en/es/yo and beyond), and AI-assembled "family chronicles"
-   that turn scattered voice notes into a narrated legacy.
+3. **Living oral-history at scale.** 🟡 v1 SHIPPED 2026-06-15 — transcription + translation.
+   `ai_oralhistory.py` (litellm; graceful "" fallbacks): `transcribe_audio` decodes a voice
+   note's base64 data URL and runs Whisper (`litellm.atranscription(model="whisper-1")`,
+   25MB cap); `translate_text` renders any story into Spanish + Yoruba as compact JSON.
+   `POST /api/threads/{id}/transcribe` (voice note → `transcript`) and
+   `POST /api/threads/{id}/translate` (transcript-or-body → `translations{es,yo}`) on
+   `timeline.py`; `ThreadPublic` now carries `transcript`/`translations`/`legacy_table_recipe_id`
+   (the last was being stripped on reload — latent badge bug fixed). On LegacyThreadsPage:
+   "Transcribe this voice note" under the player, a "Preserved words" panel with an
+   Original/Español/Yorùbá toggle, and "Translate to Español + Yorùbá" (works on voice or
+   text-only stories). Reuses `OPENAI_API_KEY`/`GEMINI_MODEL`. NEXT: guided multi-generational
+   interview flows, more languages, and AI-assembled "family chronicles" that weave scattered
+   voice notes into a narrated legacy (the steward chronicle is the seed).
 4. **Care infrastructure.** 🟡 v1 SHIPPED 2026-06-15 — **Circle of Care**. `care.py` +
    `care_circles` collection + `CarePage` ("Circle of Care" nav). Open a circle for a member
    (or the whole community): meal trains with claimable day/slot signups (potluck-style

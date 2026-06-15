@@ -12,6 +12,7 @@ from db import communities_collection, events_collection, memories_collection, t
 from dependencies import get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
 from models import CommentRequest, MemoryCreateRequest, MemoryPublic, MemoryUpdateRequest, ThreadCreateRequest, ThreadPublic
 from ai_tagging import generate_memory_tags
+from ai_oralhistory import transcribe_audio, translate_text
 
 router = APIRouter(prefix="/api")
 
@@ -255,6 +256,42 @@ async def create_thread(payload: ThreadCreateRequest, current_user: dict[str, An
         "created_at": now_iso(),
     }
     await threads_collection.insert_one(thread_doc.copy())
+    return thread_doc
+
+
+@router.post("/threads/{thread_id}/transcribe", response_model=ThreadPublic)
+async def transcribe_thread(thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Transcribe a thread's voice note into searchable, preservable text (best-effort)."""
+    thread_doc = await get_thread_for_user(thread_id, current_user)
+    if not thread_doc.get("voice_note_data_url"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This story has no voice note to transcribe.")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    transcript = await transcribe_audio(api_key, thread_doc["voice_note_data_url"])
+    if not transcript:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't transcribe the voice note. You can type the transcript into the story body instead.")
+    await threads_collection.update_one(
+        {"id": thread_id, "community_id": current_user["community_id"]}, {"$set": {"transcript": transcript}}
+    )
+    thread_doc["transcript"] = transcript
+    return thread_doc
+
+
+@router.post("/threads/{thread_id}/translate", response_model=ThreadPublic)
+async def translate_thread(thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Translate a story into Spanish + Yoruba so it reaches the whole family."""
+    thread_doc = await get_thread_for_user(thread_id, current_user)
+    source = (thread_doc.get("transcript") or thread_doc.get("body") or "").strip()
+    if not source:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Add a story body or transcribe the voice note first.")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
+    translations = await translate_text(api_key, model, source)
+    if not (translations.get("es") or translations.get("yo")):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't translate right now. Try again shortly.")
+    await threads_collection.update_one(
+        {"id": thread_id, "community_id": current_user["community_id"]}, {"$set": {"translations": translations}}
+    )
+    thread_doc["translations"] = translations
     return thread_doc
 
 

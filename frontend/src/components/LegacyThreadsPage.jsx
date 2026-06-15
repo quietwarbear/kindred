@@ -158,6 +158,35 @@ export const LegacyThreadsPage = ({ token }) => {
     }
   };
 
+  const [oralBusy, setOralBusy] = useState({}); // { [threadId]: "transcribe" | "translate" }
+  const [langView, setLangView] = useState({}); // { [threadId]: "en" | "es" | "yo" }
+
+  const transcribeThread = async (threadId) => {
+    setOralBusy((c) => ({ ...c, [threadId]: "transcribe" }));
+    try {
+      const payload = await apiRequest(`/threads/${threadId}/transcribe`, { method: "POST", token });
+      setThreads((c) => c.map((t) => (t.id === payload.id ? payload : t)));
+      toast.success("Voice note transcribed — the words are preserved.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't transcribe right now.");
+    } finally {
+      setOralBusy((c) => ({ ...c, [threadId]: null }));
+    }
+  };
+
+  const translateThread = async (threadId) => {
+    setOralBusy((c) => ({ ...c, [threadId]: "translate" }));
+    try {
+      const payload = await apiRequest(`/threads/${threadId}/translate`, { method: "POST", token });
+      setThreads((c) => c.map((t) => (t.id === payload.id ? payload : t)));
+      toast.success("Story translated — it reaches the whole family now.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't translate right now.");
+    } finally {
+      setOralBusy((c) => ({ ...c, [threadId]: null }));
+    }
+  };
+
   const filtered = filterCategory ? threads.filter((t) => t.category === filterCategory) : threads;
 
   return (
@@ -355,6 +384,83 @@ export const LegacyThreadsPage = ({ token }) => {
                     <span className="text-sm font-semibold">Voice reflection</span>
                   </div>
                   <audio className="w-full" controls src={thread.voice_note_data_url} />
+                  {!thread.transcript && (
+                    <button
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-muted/60 disabled:opacity-60"
+                      data-testid={`legacy-transcribe-${thread.id}`}
+                      disabled={oralBusy[thread.id] === "transcribe"}
+                      onClick={() => transcribeThread(thread.id)}
+                      type="button"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {oralBusy[thread.id] === "transcribe" ? "Transcribing…" : "Transcribe this voice note"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {(thread.transcript || (thread.translations && (thread.translations.es || thread.translations.yo))) && (
+                <div className="mt-4 soft-panel" data-testid={`legacy-oral-${thread.id}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-primary">
+                      <BookOpen className="h-4 w-4" />
+                      <span className="text-sm font-semibold">Preserved words</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { key: "en", label: "Original" },
+                        { key: "es", label: "Español" },
+                        { key: "yo", label: "Yorùbá" },
+                      ].map((opt) => {
+                        const available = opt.key === "en" ? !!thread.transcript : !!(thread.translations && thread.translations[opt.key]);
+                        if (!available) return null;
+                        const active = (langView[thread.id] || "en") === opt.key;
+                        return (
+                          <button
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:opacity-80"}`}
+                            data-testid={`legacy-lang-${opt.key}-${thread.id}`}
+                            key={opt.key}
+                            onClick={() => setLangView((c) => ({ ...c, [thread.id]: opt.key }))}
+                            type="button"
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-7 text-foreground/90" data-testid={`legacy-transcript-${thread.id}`}>
+                    {(langView[thread.id] || "en") === "en"
+                      ? thread.transcript
+                      : (thread.translations && thread.translations[langView[thread.id]]) || thread.transcript}
+                  </p>
+                  {(thread.transcript || thread.body) && !(thread.translations && (thread.translations.es || thread.translations.yo)) && (
+                    <button
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-muted/60 disabled:opacity-60"
+                      data-testid={`legacy-translate-${thread.id}`}
+                      disabled={oralBusy[thread.id] === "translate"}
+                      onClick={() => translateThread(thread.id)}
+                      type="button"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {oralBusy[thread.id] === "translate" ? "Translating…" : "Translate to Español + Yorùbá"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!thread.voice_note_data_url && !thread.transcript && thread.body && !(thread.translations && (thread.translations.es || thread.translations.yo)) && (
+                <div className="mt-3">
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-muted/60 disabled:opacity-60"
+                    data-testid={`legacy-translate-body-${thread.id}`}
+                    disabled={oralBusy[thread.id] === "translate"}
+                    onClick={() => translateThread(thread.id)}
+                    type="button"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {oralBusy[thread.id] === "translate" ? "Translating…" : "Translate to Español + Yorùbá"}
+                  </button>
                 </div>
               )}
 
