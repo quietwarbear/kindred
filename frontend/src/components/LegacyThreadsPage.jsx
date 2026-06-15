@@ -136,6 +136,15 @@ export const LegacyThreadsPage = ({ token }) => {
 
   useEffect(() => { loadLt(); }, [loadLt]);
 
+  const openLegacyTable = async () => {
+    try {
+      const res = await apiRequest("/federation/jump", { method: "POST", token, data: { target: "legacy_table" } });
+      window.open(res.url, "_blank", "noopener");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't open Legacy Table.");
+    }
+  };
+
   const sendRecipe = async (threadId) => {
     setSyncingId(threadId);
     try {
@@ -199,6 +208,16 @@ export const LegacyThreadsPage = ({ token }) => {
           <p className="mt-3 text-xs text-muted-foreground" data-testid="legacy-lt-last-sync">
             Last sync: {formatDateTime(lt.last_sync_at)}{lt.last_sync_result ? ` · ${lt.last_sync_result}` : ""}
           </p>
+        )}
+        {lt.sso_enabled && (
+          <button
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-muted/60"
+            data-testid="legacy-open-lt"
+            onClick={openLegacyTable}
+            type="button"
+          >
+            <Utensils className="h-3.5 w-3.5" /> Open Legacy Table →
+          </button>
         )}
       </div>
 
