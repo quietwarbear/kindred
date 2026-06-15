@@ -40,6 +40,20 @@ const CopyButton = ({ text, testId }) => {
 export const StewardPage = ({ token }) => {
   const [briefing, setBriefing] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [chronicle, setChronicle] = useState("");
+  const [writing, setWriting] = useState(false);
+
+  const writeChronicle = async () => {
+    setWriting(true);
+    try {
+      const res = await apiRequest("/steward/history", { method: "POST", token });
+      setChronicle(res.history || "");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't write the chronicle.");
+    } finally {
+      setWriting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -93,6 +107,36 @@ export const StewardPage = ({ token }) => {
           <p className="mt-4 rounded-xl bg-muted/50 px-4 py-2 text-xs text-muted-foreground" data-testid="steward-simple-mode">
             Running in simple mode — set an AI key to let the steward speak in your community's voice.
           </p>
+        )}
+      </section>
+
+      <section className="archival-card" data-testid="steward-chronicle">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2">
+            <BookOpen className="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <p className="eyebrow-text">Our chronicle</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Let the steward weave your gatherings, memories, and stories into a chronicle to read aloud.
+              </p>
+            </div>
+          </div>
+          <button
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-muted/60 transition disabled:opacity-60"
+            data-testid="steward-write-chronicle"
+            disabled={writing}
+            onClick={writeChronicle}
+            type="button"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {writing ? "Writing…" : chronicle ? "Rewrite" : "Tell our story"}
+          </button>
+        </div>
+        {chronicle && (
+          <div className="mt-4 flex items-start gap-2">
+            <p className="flex-1 whitespace-pre-line font-display text-lg leading-8 text-foreground" data-testid="steward-chronicle-text">{chronicle}</p>
+            <CopyButton text={chronicle} testId="steward-chronicle-copy" />
+          </div>
         )}
       </section>
 

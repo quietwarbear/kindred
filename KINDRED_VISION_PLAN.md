@@ -149,9 +149,15 @@ revealed in one tap. See files: `events.py`, `dependencies.py`, `community.py`, 
    churches, fraternities, cultural orgs, and intentional communities each get a tuned
    template (the default-subyard idea, taken all the way) — gathering, memory, kinship,
    care, and contribution as composable modules.
-2. **Gathering Intelligence Layer.** AI that plans events end-to-end (volunteers, potluck,
-   travel, agenda), generates family/community histories from the accumulated archive,
-   and recommends the right engagement to the right person at the right time.
+2. **Gathering Intelligence Layer.** 🟡 v1 SHIPPED 2026-06-15. `ai_gathering.py` (litellm +
+   heuristic fallbacks). **Planner:** `POST /api/gatherings/ai-plan` turns a one-sentence ask
+   into a structured plan (title, description, focus, agenda, volunteer slots, potluck); the
+   "Plan with AI" box on GatheringsPage fills the form AND the plan's agenda/volunteers/
+   potluck persist on create (create_event + EventCreateRequest extended) — truly
+   end-to-end. **History:** `POST /api/steward/history` weaves gatherings+memories+stories
+   into a narrated chronicle; "Tell our story" on StewardPage. Reuses
+   `OPENAI_API_KEY`/`GEMINI_MODEL`; degrades gracefully. NEXT: AI date suggestion from member
+   availability, per-person engagement recommendations, richer history (dates/photos).
 3. **Living oral-history at scale.** Guided multi-generational interview flows, automatic
    transcription/translation (en/es/yo and beyond), and AI-assembled "family chronicles"
    that turn scattered voice notes into a narrated legacy.

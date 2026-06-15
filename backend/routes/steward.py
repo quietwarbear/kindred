@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from ai_steward import generate_steward_notes
+from ai_gathering import generate_community_history
 from db import events_collection, memories_collection, threads_collection, users_collection
 from dependencies import get_community_for_user, get_current_user, now_iso
 
@@ -111,3 +112,30 @@ async def steward_briefing(current_user: dict[str, Any] = Depends(get_current_us
         "suggested_gathering": notes["gathering_idea"],
         "reflection": notes["reflection"],
     }
+
+
+@router.post("/steward/history")
+async def steward_history(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Weave the community's archive into a narrated chronicle."""
+    community = await get_community_for_user(current_user)
+    community_id = current_user["community_id"]
+    gatherings = await events_collection.find(
+        {"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0, "title": 1}
+    ).sort("start_at", -1).to_list(20)
+    memories = await memories_collection.find(
+        {"community_id": community_id}, {"_id": 0, "title": 1}
+    ).sort("created_at", -1).to_list(30)
+    threads = await threads_collection.find(
+        {"community_id": community_id}, {"_id": 0, "title": 1}
+    ).sort("created_at", -1).to_list(30)
+
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
+    history = await generate_community_history(api_key, model, {
+        "community_name": community.get("name", ""),
+        "community_type": community.get("community_type", "community"),
+        "gatherings": [g.get("title", "") for g in gatherings if g.get("title")],
+        "memories": [m.get("title", "") for m in memories if m.get("title")],
+        "stories": [t.get("title", "") for t in threads if t.get("title")],
+    })
+    return {"history": history, "ai_enabled": bool(api_key)}

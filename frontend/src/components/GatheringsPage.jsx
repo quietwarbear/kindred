@@ -34,6 +34,9 @@ const initialEventForm = {
   recurrence_frequency: "none",
   zoom_link: "",
   hidden_from_member_ids: [],
+  agenda: [],
+  volunteer_slots: [],
+  potluck_items: [],
 };
 
 export const GatheringsPage = ({ token, user }) => {
@@ -47,6 +50,33 @@ export const GatheringsPage = ({ token, user }) => {
   const [activeEventId, setActiveEventId] = useState("");
   const [eventForm, setEventForm] = useState(initialEventForm);
   const [surpriseOn, setSurpriseOn] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [planning, setPlanning] = useState(false);
+  const [planPreview, setPlanPreview] = useState(null);
+
+  const planWithAI = async () => {
+    if (!aiPrompt.trim()) { toast.error("Tell the steward what you're planning."); return; }
+    setPlanning(true);
+    try {
+      const res = await apiRequest("/gatherings/ai-plan", { method: "POST", token, data: { prompt: aiPrompt.trim() } });
+      const plan = res.plan || {};
+      setEventForm((c) => ({
+        ...c,
+        title: plan.title || c.title,
+        description: plan.description || c.description,
+        special_focus: plan.special_focus || c.special_focus,
+        agenda: plan.agenda || [],
+        volunteer_slots: plan.volunteer_slots || [],
+        potluck_items: plan.potluck_items || [],
+      }));
+      setPlanPreview(plan);
+      toast.success("The steward drafted a plan — review and create.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Couldn't draft a plan.");
+    } finally {
+      setPlanning(false);
+    }
+  };
   const [zoomLinkDraft, setZoomLinkDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sendingReminderEventId, setSendingReminderEventId] = useState("");
@@ -106,6 +136,8 @@ export const GatheringsPage = ({ token, user }) => {
       setActiveEventId(payload.id);
       setEventForm(initialEventForm);
       setSurpriseOn(false);
+      setPlanPreview(null);
+      setAiPrompt("");
       await loadData();
       toast.success(eventForm.hidden_from_member_ids.length ? "Surprise gathering created — hidden from the guest(s) of honor." : "Gathering created with a smart checklist.");
     } catch (error) {
@@ -239,6 +271,34 @@ export const GatheringsPage = ({ token, user }) => {
           <div className="flex items-center gap-3">
             <CalendarDays className="h-5 w-5 text-primary" />
             <h3 className="font-display text-3xl text-foreground">Create Gathering Flow</h3>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid="gatherings-ai-plan">
+            <p className="eyebrow-text">✨ Plan with the Ubuntu Steward</p>
+            <p className="mt-1 text-sm text-muted-foreground">Describe it in a sentence — the steward drafts the whole gathering (agenda, volunteers, potluck), and it all saves when you create.</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input className="field-input flex-1" data-testid="gatherings-ai-prompt" onChange={(e) => setAiPrompt(e.target.value)} placeholder="e.g. Our August family reunion in Oakland, about 40 people" value={aiPrompt} />
+              <Button className="rounded-full" data-testid="gatherings-ai-plan-btn" disabled={planning} onClick={planWithAI} type="button">
+                {planning ? "Planning…" : "Draft it"}
+              </Button>
+            </div>
+            {planPreview && (
+              <div className="mt-3 grid gap-3 text-xs sm:grid-cols-3" data-testid="gatherings-ai-preview">
+                <div className="soft-panel">
+                  <p className="font-semibold text-foreground">Agenda ({planPreview.agenda?.length || 0})</p>
+                  {(planPreview.agenda || []).slice(0, 5).map((a, i) => <p className="mt-1 text-muted-foreground" key={i}>{a.time_label ? `${a.time_label}: ` : ""}{a.title}</p>)}
+                </div>
+                <div className="soft-panel">
+                  <p className="font-semibold text-foreground">Volunteers ({planPreview.volunteer_slots?.length || 0})</p>
+                  {(planPreview.volunteer_slots || []).slice(0, 5).map((s, i) => <p className="mt-1 text-muted-foreground" key={i}>{s.title} ×{s.needed_count}</p>)}
+                </div>
+                <div className="soft-panel">
+                  <p className="font-semibold text-foreground">Potluck ({planPreview.potluck_items?.length || 0})</p>
+                  {(planPreview.potluck_items || []).slice(0, 6).map((p, i) => <p className="mt-1 text-muted-foreground" key={i}>{p}</p>)}
+                </div>
+                <p className="text-muted-foreground sm:col-span-3">Title, description, and focus are filled in below — these items save with the gathering when you create it.</p>
+              </div>
+            )}
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-5">
             {templates.map((template) => (

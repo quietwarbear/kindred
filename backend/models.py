@@ -37,6 +37,10 @@ class SSORedeemRequest(BaseModel):
     code: str
 
 
+class GatheringPlanRequest(BaseModel):
+    prompt: str = ""
+
+
 class GoogleSessionRequest(BaseModel):
     credential: str
 
@@ -196,6 +200,9 @@ class EventCreateRequest(BaseModel):
     suggested_contribution: float = 0.0
     zoom_link: str = ""
     hidden_from_member_ids: list[str] = Field(default_factory=list)
+    agenda: list[dict] = Field(default_factory=list)
+    volunteer_slots: list[dict] = Field(default_factory=list)
+    potluck_items: list[str] = Field(default_factory=list)
 
 
 class ChecklistItemRequest(BaseModel):

@@ -11,6 +11,7 @@ from db import events_collection, users_collection
 from dependencies import (
     build_invite_reminders_for_user,
     ensure_minimum_role,
+    get_community_for_user,
     get_current_user,
     get_event_for_user,
     get_subyard_for_user,
@@ -19,12 +20,14 @@ from dependencies import (
     now_iso,
     GATHERING_TEMPLATES,
 )
+from ai_gathering import generate_gathering_plan
 from models import (
     AgendaItemRequest,
     ChecklistItemRequest,
     ChecklistToggleRequest,
     EventCreateRequest,
     EventInviteCreateRequest,
+    GatheringPlanRequest,
     EventMeetingLinkRequest,
     EventPublic,
     EventRoleAssignmentRequest,
@@ -126,6 +129,25 @@ async def delete_event(event_id: str, current_user: dict[str, Any] = Depends(get
     return {"ok": True}
 
 
+@router.post("/gatherings/ai-plan")
+async def ai_plan_gathering(payload: GatheringPlanRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    """Turn a one-sentence ask into a structured, ready-to-create gathering plan (draft)."""
+    ensure_minimum_role(current_user, "organizer")
+    community = await get_community_for_user(current_user)
+    recent = await events_collection.find(
+        {"community_id": current_user["community_id"]}, {"_id": 0, "title": 1}
+    ).sort("start_at", -1).to_list(5)
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
+    plan = await generate_gathering_plan(api_key, model, {
+        "prompt": (payload.prompt or "").strip(),
+        "community_name": community.get("name", ""),
+        "community_type": community.get("community_type", "community"),
+        "recent_gatherings": [e.get("title", "") for e in recent if e.get("title")],
+    })
+    return {"plan": plan, "ai_enabled": bool(api_key)}
+
+
 @router.post("/events", response_model=EventPublic)
 async def create_event(payload: EventCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
@@ -166,9 +188,18 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
             for role in assigned_roles
         ],
-        "agenda": [],
-        "volunteer_slots": [],
-        "potluck_items": [],
+        "agenda": [
+            {"id": str(uuid.uuid4()), "time_label": a.get("time_label", ""), "title": a.get("title", ""), "notes": a.get("notes", "")}
+            for a in (payload.agenda or []) if isinstance(a, dict) and a.get("title")
+        ],
+        "volunteer_slots": [
+            {"id": str(uuid.uuid4()), "title": s.get("title", ""), "needed_count": int(s.get("needed_count", 1) or 1), "assigned_members": []}
+            for s in (payload.volunteer_slots or []) if isinstance(s, dict) and s.get("title")
+        ],
+        "potluck_items": [
+            {"id": str(uuid.uuid4()), "item_name": str(p).strip(), "assigned_to": ""}
+            for p in (payload.potluck_items or []) if str(p).strip()
+        ],
         "rsvp_records": [],
         "created_at": now_iso(),
     }
