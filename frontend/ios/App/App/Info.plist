@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Kindred uses your camera to capture and share photos with your community.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Kindred uses your microphone for video recording within your community.</string>
+	<string>Kindred uses your microphone to record voice notes and oral-history reflections you choose to share with your community.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
