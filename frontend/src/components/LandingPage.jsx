@@ -43,7 +43,7 @@ export const LandingPage = ({ isAuthenticated }) => {
     <div className="app-canvas min-h-screen">
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-md">
-        <nav className="page-section flex items-center justify-between py-4">
+        <nav className="page-section flex items-center justify-between pb-4 pt-4" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}>
           <span className="font-display text-xl text-primary font-semibold">Kindred</span>
 
           {/* Center links - hidden on mobile */}
