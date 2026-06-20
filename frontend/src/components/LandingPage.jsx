@@ -9,9 +9,12 @@ import {
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { isNative } from "@/lib/native-bridge";
 
 const heroImage =
   "https://images.unsplash.com/photo-1768244016470-271b210a8407?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwzfHxtdWx0aWdlbmVyYXRpb25hbCUyMGJsYWNrJTIwZmFtaWx5JTIwcmV1bmlvbiUyMGpveSUyMG91dGRvb3J8ZW58MHx8fHwxNzcyODQxMzI0fDA&ixlib=rb-4.1.0&q=85";
+const APP_STORE_URL = "https://apps.apple.com/app/heykindred/id6760608478";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.ubuntumarket.kindred";
 
 const pillars = [
   {
@@ -39,6 +42,8 @@ const pillars = [
 const audience = ["Family reunions", "Church communities", "Greek organizations", "Cultural collectives"];
 
 export const LandingPage = ({ isAuthenticated }) => {
+  const showStoreBadges = !isNative();
+
   return (
     <div className="app-canvas min-h-screen">
       {/* Top Navigation */}
@@ -234,12 +239,16 @@ export const LandingPage = ({ isAuthenticated }) => {
 
       <footer className="page-section border-t border-border/40 py-8" data-testid="landing-footer">
         <div className="flex flex-col items-center gap-6">
-          <div className="flex items-center gap-3 flex-wrap justify-center">
-            <a href="https://apps.apple.com/app/heykindred/id6760608478" target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
-              <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store" style={{ height: '40px' }} />
-            </a>
-            {/* Google Play badge removed — Apple Review guideline 2.3.10 prohibits third-party store references in iOS builds */}
-          </div>
+          {showStoreBadges && (
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
+                <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store" style={{ height: "40px" }} />
+              </a>
+              <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" className="inline-block transition-opacity hover:opacity-80">
+                <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" style={{ height: "58px" }} />
+              </a>
+            </div>
+          )}
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between w-full">
             <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} Ubuntu Market LLC. All rights reserved.</p>
             <nav className="flex gap-6">
