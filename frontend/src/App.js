@@ -15,6 +15,7 @@ import { SSOHandoffPage } from "@/components/SSOHandoffPage";
 import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
+import { identifyUser, resetAnalytics } from "@/lib/analytics";
 import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
 
 const APP_STATE_KEY = "gathering-cypher-auth";
@@ -71,6 +72,16 @@ function App() {
   });
   const [isLoading, setIsLoading] = useState(Boolean(session?.token));
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
+
+  // Analytics identity follows the session: identify on login/restore,
+  // reset on logout so the next login isn't merged into the old person.
+  useEffect(() => {
+    if (session?.user?.id) {
+      identifyUser(session.user);
+    } else {
+      resetAnalytics();
+    }
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [freshLogin, setFreshLogin] = useState(false);
   const [pendingInviteCode, setPendingInviteCode] = useState(null);
 
