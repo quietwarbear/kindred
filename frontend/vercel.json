@@ -1,4 +1,5 @@
 {
+  "buildCommand": "yarn build",
   "rewrites": [
     {
       "source": "/((?!\\.well-known/).*)",
