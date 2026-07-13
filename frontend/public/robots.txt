@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /sso
+Disallow: /rsvp/
+Disallow: /invite/
+
+Sitemap: https://www.heykindred.org/sitemap.xml
