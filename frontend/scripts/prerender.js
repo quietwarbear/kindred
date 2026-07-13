@@ -42,7 +42,9 @@ function serveBuild() {
 // Local builds use the system Chrome via puppeteer-core's channel option.
 async function launchBrowser(puppeteer) {
   if (process.env.VERCEL || process.env.AWS_REGION) {
-    const chromium = require('@sparticuz/chromium');
+    // ESM-first package: under CommonJS require() the API sits on .default
+    const sparticuz = require('@sparticuz/chromium');
+    const chromium = sparticuz.default || sparticuz;
     return puppeteer.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),
