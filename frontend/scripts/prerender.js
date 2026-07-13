@@ -37,22 +37,38 @@ function serveBuild() {
   });
 }
 
+// Vercel's build image lacks Chrome's shared system libs (libnspr4.so —
+// launch fails with code 127), so serverless builds use @sparticuz/chromium.
+// Local builds use the system Chrome via puppeteer-core's channel option.
+async function launchBrowser(puppeteer) {
+  if (process.env.VERCEL || process.env.AWS_REGION) {
+    const chromium = require('@sparticuz/chromium');
+    return puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+  return puppeteer.launch({
+    channel: 'chrome',
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  });
+}
+
 (async () => {
   let puppeteer;
   try {
-    puppeteer = require('puppeteer');
+    puppeteer = require('puppeteer-core');
   } catch (e) {
-    console.warn('[prerender] puppeteer not installed — skipping (build stays CSR)');
+    console.warn('[prerender] puppeteer-core not installed — skipping (build stays CSR)');
     process.exit(0);
   }
 
   const server = await serveBuild();
   let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    browser = await launchBrowser(puppeteer);
     const page = await browser.newPage();
     // A recognizable UA so analytics can filter the build machine out.
     await page.setUserAgent('kindred-prerender');
