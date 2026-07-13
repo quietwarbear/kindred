@@ -4,8 +4,10 @@ import "@/index.css";
 import App from "@/App";
 import { registerServiceWorker } from "@/lib/sw-register";
 import { initializeRevenueCat } from "@/lib/revenuecat";
+import { initAnalytics } from "@/lib/analytics";
 
 registerServiceWorker();
+initAnalytics();
 
 const rootEl = document.getElementById("root");
 const app = (
