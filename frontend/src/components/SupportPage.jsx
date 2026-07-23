@@ -18,8 +18,8 @@ export const SupportPage = () => (
           <p className="mt-2 text-sm leading-7 text-muted-foreground">
             For general questions, feature requests, or account help, email us directly.
           </p>
-          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-email-link" href="mailto:support@ubuntumarket.com">
-            support@ubuntumarket.com
+          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-email-link" href="mailto:support@ubuntu-village.org">
+            support@ubuntu-village.org
           </a>
         </div>
 
@@ -29,8 +29,8 @@ export const SupportPage = () => (
           <p className="mt-2 text-sm leading-7 text-muted-foreground">
             Kindred is shaped by the communities that use it. Share ideas for new features or improvements.
           </p>
-          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href="mailto:feedback@ubuntumarket.com">
-            feedback@ubuntumarket.com
+          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href="mailto:support@ubuntu-village.org">
+            support@ubuntu-village.org
           </a>
         </div>
       </div>
@@ -46,7 +46,7 @@ export const SupportPage = () => (
         <ul className="mt-3 list-disc pl-6 space-y-2 text-sm leading-7 text-muted-foreground">
           <li>Use the <strong>Settings</strong> page in the app to manage your profile or delete your account.</li>
           <li>Export your community timeline via the <strong>Timeline &gt; CSV Export</strong> feature.</li>
-          <li>Email <a className="font-semibold text-primary hover:underline" href="mailto:privacy@ubuntumarket.com">privacy@ubuntumarket.com</a> for any data request we will respond within 30 days.</li>
+          <li>Email <a className="font-semibold text-primary hover:underline" href="mailto:support@ubuntu-village.org">support@ubuntu-village.org</a> for any data request we will respond within 30 days.</li>
         </ul>
       </div>
 
@@ -77,7 +77,7 @@ export const SupportPage = () => (
 
             <div data-testid="support-faq-5">
               <p className="font-semibold text-foreground">How do I report a problem?</p>
-              <p className="mt-1">Email <a className="font-semibold text-primary hover:underline" href="mailto:support@ubuntumarket.com">support@ubuntumarket.com</a> with a description of the issue. Include your device type and what you were doing when the problem occurred.</p>
+              <p className="mt-1">Email <a className="font-semibold text-primary hover:underline" href="mailto:support@ubuntu-village.org">support@ubuntu-village.org</a> with a description of the issue. Include your device type and what you were doing when the problem occurred.</p>
             </div>
           </div>
         </section>
