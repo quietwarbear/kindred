@@ -136,7 +136,7 @@ export const TermsOfServicePage = () => (
           </p>
           <p className="mt-2 font-medium text-foreground">
             Ubuntu Market LLC<br />
-            Email: legal@ubuntumarket.com
+            Email: support@ubuntu-village.org
           </p>
         </section>
       </div>

@@ -17,7 +17,7 @@ export const PrivacyPolicyPage = () => (
           <p className="mt-2">
             Kindred ("we," "us," or "our") is operated by Ubuntu Market LLC. This Privacy Policy describes how we collect,
             use, and protect your personal information when you use the Kindred application (the "Service"), available at
-            kindred.ubuntumarket.com and through the Kindred mobile application (bundle ID: com.ubuntumarket.kindred).
+            heykindred.org and through the Kindred mobile application (bundle ID: com.ubuntumarket.kindred).
           </p>
           <p className="mt-2">
             By using Kindred, you agree to the collection and use of information in accordance with this policy.
@@ -121,7 +121,7 @@ export const PrivacyPolicyPage = () => (
           </p>
           <p className="mt-2 font-medium text-foreground">
             Ubuntu Market LLC<br />
-            Email: privacy@ubuntumarket.com
+            Email: support@ubuntu-village.org
           </p>
         </section>
       </div>
