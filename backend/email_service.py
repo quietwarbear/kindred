@@ -66,7 +66,10 @@ def _base_template(title: str, body: str) -> str:
 
 async def send_subscription_welcome(email: str, plan_name: str, billing_cycle: str, amount: float):
     """Welcome email after a successful new subscription."""
-    cycle_label = "month" if billing_cycle == "monthly" else "year"
+    cycle_labels = {"monthly": "month", "annual": "year"}
+    if billing_cycle not in cycle_labels:
+        raise ValueError("Subscription email requires an explicit billing interval.")
+    cycle_label = cycle_labels[billing_cycle]
     body = f"""
     <p style="font-size:16px;line-height:1.6;">Welcome to the <strong>{plan_name}</strong> plan! Your community just leveled up.</p>
     <div style="background:#f9f5f0;border-radius:8px;padding:16px 20px;margin:20px 0;">
@@ -140,7 +143,10 @@ async def send_payment_failed(email: str, plan_name: str):
 
 async def send_subscription_upgraded(email: str, old_plan: str, new_plan: str, amount: float, billing_cycle: str):
     """Email when user upgrades/downgrades their plan."""
-    cycle_label = "month" if billing_cycle == "monthly" else "year"
+    cycle_labels = {"monthly": "month", "annual": "year"}
+    if billing_cycle not in cycle_labels:
+        raise ValueError("Subscription email requires an explicit billing interval.")
+    cycle_label = cycle_labels[billing_cycle]
     body = f"""
     <p style="font-size:16px;line-height:1.6;">Your subscription has been updated from <strong>{old_plan}</strong> to <strong>{new_plan}</strong>.</p>
     <div style="background:#f0f9f0;border-radius:8px;padding:16px 20px;margin:20px 0;border-left:4px solid #27ae60;">

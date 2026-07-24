@@ -18,6 +18,10 @@ node_modules/
 
 # Testing
 /coverage
+.pytest_cache/
+
+# Generated commercial-readiness browser evidence
+docs/screenshots/
 
 # Next.js
 /.next/

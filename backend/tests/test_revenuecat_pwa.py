@@ -94,7 +94,10 @@ class TestRevenueCatOfferings:
             print(f"✓ Offerings returned expected error (subscriber not in RevenueCat): {data['error']}")
         else:
             assert data["bundle_id"] == "com.ubuntumarket.kindred"
-            print(f"✓ Offerings: bundle_id={data['bundle_id']}, subscriber={data.get('subscriber')}")
+            print(
+                "✓ Offerings returned for configured bundle "
+                f"(bundle_id={data['bundle_id']}, subscriber_present={bool(data.get('subscriber'))})"
+            )
 
 
 class TestRevenueCatRestore:

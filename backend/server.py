@@ -159,7 +159,7 @@ INVITE_NOT_FOUND_HTML = """<!DOCTYPE html>
   <div class="card">
     <h1>Invite Not Found</h1>
     <p>This invite code doesn't match any community. It may have expired or been revoked.</p>
-    <a href="https://heykindred.com" class="btn">Visit heyKindred</a>
+    <a href="https://www.heykindred.org" class="btn">Visit Kindred</a>
   </div>
 </body>
 </html>"""

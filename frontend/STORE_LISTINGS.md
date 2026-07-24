@@ -42,10 +42,10 @@ SUBSCRIPTION PLANS
 - Redwood: $39.99/month or $359.99/year — Up to 100 members, advanced governance, priority support
 - Elder Grove: Custom pricing — 100+ members, dedicated support, custom integrations
 
-Subscriptions auto-renew unless turned off at least 24 hours before the end of the current period. Payment is charged to your Apple ID account at confirmation of purchase. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel subscriptions in your Apple ID account settings.
+Subscriptions auto-renew unless renewal is turned off. The App Store confirmation shows the complete localized charge and billing interval before purchase. You can manage and cancel subscriptions in your Apple ID account settings.
 
-Privacy Policy: https://kindred.ubuntumarket.com/privacy
-Terms of Service: https://kindred.ubuntumarket.com/terms
+Privacy Policy: https://www.heykindred.org/privacy
+Terms of Service: https://www.heykindred.org/terms
 
 ### Keywords (100 char max, comma-separated)
 community,family,church,events,memories,groups,private,governance,reunion,archive,vault,gathering
@@ -60,13 +60,13 @@ Lifestyle
 4+
 
 ### Support URL
-https://kindred.ubuntumarket.com/support
+https://www.heykindred.org/support
 
 ### Marketing URL
-https://kindred.ubuntumarket.com
+https://www.heykindred.org
 
 ### Privacy Policy URL
-https://kindred.ubuntumarket.com/privacy
+https://www.heykindred.org/privacy
 
 ---
 
@@ -86,7 +86,7 @@ Built on the belief that community should be sovereign and lasting, Kindred give
 
 WHAT MAKES KINDRED DIFFERENT
 
-Your community is invitation-only. No algorithms, no ads, no data harvesting. Every feature is designed for depth and permanence, not engagement metrics.
+Your community is invitation-only, with no public profiles or ads. Kindred uses the limited service providers and analytics described in its Privacy Policy. Every feature is designed for depth and permanence, not public engagement metrics.
 
 FEATURES
 
@@ -109,10 +109,10 @@ SUBSCRIPTION PLANS
 - Redwood: $39.99/month or $359.99/year — Up to 100 members, advanced governance
 - Elder Grove: Custom pricing — 100+ members, dedicated support
 
-Subscriptions auto-renew unless canceled at least 24 hours before the end of the current billing period. Payment is charged at confirmation of purchase. You can manage and cancel subscriptions in your Google Play account settings (Google Play Store > Menu > Subscriptions).
+Subscriptions auto-renew unless renewal is turned off. Google Play shows the complete localized charge and billing interval before purchase. You can manage and cancel subscriptions in your Google Play account settings.
 
-Privacy Policy: https://kindred.ubuntumarket.com/privacy
-Terms of Service: https://kindred.ubuntumarket.com/terms
+Privacy Policy: https://www.heykindred.org/privacy
+Terms of Service: https://www.heykindred.org/terms
 
 ### Category
 Social
@@ -124,4 +124,4 @@ Everyone
 contact@ubuntumarkets.com
 
 ### Privacy Policy
-https://kindred.ubuntumarket.com/privacy
+https://www.heykindred.org/privacy

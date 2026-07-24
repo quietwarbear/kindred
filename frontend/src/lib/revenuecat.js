@@ -3,24 +3,25 @@
  * Falls back gracefully on web platforms
  */
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { Purchases } from "@revenuecat/purchases-capacitor";
+import { apiRequest } from "@/lib/api";
+import { calculateSavings } from "@/lib/pricing";
 
 const REVENUECAT_API_KEY = process.env.REACT_APP_REVENUECAT_IOS_KEY;
 
-// Map tier names to RevenueCat product IDs
-export const TIER_TO_PRODUCT_ID = {
-    sapling: {
-          monthly: "com.kindred.sapling.monthly",
-          annual: "com.kindred.sapling.annual",
-    },
-    oak: {
-          monthly: "com.kindred.oak.monthly",
-          annual: "com.kindred.oak.annual",
-    },
-    redwood: {
-          monthly: "com.kindred.redwood.monthly",
-          annual: "com.kindred.redwood.annual",
-    },
+let productMappingPromise = null;
+
+export const getRevenueCatProductMapping = async () => {
+    if (!productMappingPromise) {
+          productMappingPromise = apiRequest("/revenuecat/config")
+            .then((config) => config?.product_mapping || {})
+            .catch((error) => {
+              productMappingPromise = null;
+              throw error;
+            });
+    }
+    return productMappingPromise;
 };
 
 let revenueCatInitialized = false;
@@ -57,7 +58,7 @@ export const initializeRevenueCat = async () => {
 
     const initCore = (async () => {
           try {
-                  console.log("[Kindred] RevenueCat: configuring with key:", REVENUECAT_API_KEY?.substring(0, 8) + "...");
+                  console.log("[Kindred] RevenueCat: configuring iOS purchases");
                   await Purchases.configure({
                             apiKey: REVENUECAT_API_KEY,
                             appUserID: null,
@@ -78,13 +79,13 @@ export const initializeRevenueCat = async () => {
                     if (totalPackages === 0) {
                       console.warn("[Kindred] No packages found in any offering — check RevenueCat dashboard");
                     }
-                  }).catch((offerErr) => {
-                    console.warn("[Kindred] RevenueCat offerings pre-fetch failed:", offerErr);
+                  }).catch(() => {
+                    console.warn("[Kindred] RevenueCat offerings pre-fetch failed");
                   });
 
                   return true;
-          } catch (error) {
-                  console.error("[Kindred] Failed to initialize RevenueCat:", error?.message || error);
+          } catch {
+                  console.error("[Kindred] Failed to initialize RevenueCat");
                   initPromise = null; // Allow retry
             return false;
           }
@@ -127,10 +128,78 @@ export const fetchOfferings = async () => {
     try {
           const offerings = await Purchases.getOfferings();
           return offerings;
-    } catch (error) {
-          console.error("[Kindred] Error fetching RevenueCat offerings:", error);
+    } catch {
+          console.error("[Kindred] Error fetching RevenueCat offerings");
           return null;
     }
+};
+
+const allOfferingPackages = (offerings) => {
+    const packages = [];
+    const seen = new Set();
+    const availableOfferings = [
+          ...Object.values(offerings?.all || {}),
+          offerings?.current,
+    ].filter(Boolean);
+    for (const offering of availableOfferings) {
+          for (const pkg of offering.availablePackages || []) {
+                  const productId = pkg?.product?.identifier;
+                  if (productId && !seen.has(productId)) {
+                          seen.add(productId);
+                          packages.push(pkg);
+                  }
+          }
+    }
+    return packages;
+};
+
+/**
+ * Return StoreKit-localized display prices for every mapped package.
+ * Savings are calculated only when both package amounts use the same currency.
+ */
+export const getLocalizedRevenueCatPricing = async (productMapping) => {
+    const offerings = await fetchOfferings();
+    if (!offerings) return {};
+
+    const packages = allOfferingPackages(offerings);
+    const localized = {};
+    for (const [planId, intervals] of Object.entries(productMapping || {})) {
+          const planPricing = {};
+          for (const billingInterval of ["monthly", "annual"]) {
+                  const productId = intervals?.[billingInterval];
+                  const expectedPackage = billingInterval === "monthly" ? "$rc_monthly" : "$rc_annual";
+                  const pkg = packages.find((candidate) => candidate?.product?.identifier === productId);
+                  const product = pkg?.product;
+                  if (!pkg || pkg.identifier !== expectedPackage || !product?.priceString) continue;
+                  planPricing[billingInterval] = {
+                          amount: Number(product.price),
+                          currencyCode: product.currencyCode || "",
+                          formattedPrice: product.priceString,
+                          packageIdentifier: pkg.identifier,
+                          productId,
+                  };
+          }
+
+          const monthly = planPricing.monthly;
+          const annual = planPricing.annual;
+          if (
+                  Number.isFinite(monthly?.amount)
+                  && Number.isFinite(annual?.amount)
+                  && monthly.currencyCode
+                  && monthly.currencyCode === annual.currencyCode
+          ) {
+                  const savings = calculateSavings(monthly.amount, annual.amount);
+                  if (savings) {
+                          annual.savings = {
+                                  amount: savings.amount,
+                                  currencyCode: annual.currencyCode,
+                                  percent: savings.percent,
+                          };
+                  }
+          }
+          localized[planId] = planPricing;
+    }
+    return localized;
 };
 
 /**
@@ -166,8 +235,8 @@ export const getPackageByProductId = async (productId) => {
       }
 
       return null;
-    } catch (error) {
-          console.error("[Kindred] Error fetching package:", error);
+    } catch {
+          console.error("[Kindred] Error fetching package");
           return null;
     }
 };
@@ -176,7 +245,7 @@ export const getPackageByProductId = async (productId) => {
  * Make purchase on iOS
  * Handles transaction and receipt validation.
  */
-export const makePurchase = async (productId) => {
+export const makePurchase = async (productId, billingInterval, expectedEntitlementId) => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
@@ -198,13 +267,21 @@ export const makePurchase = async (productId) => {
                             "This subscription product is not yet available. Please try again later."
                           );
           }
+      const expectedPackageIdentifier =
+        billingInterval === "monthly" ? "$rc_monthly" : billingInterval === "annual" ? "$rc_annual" : "";
+      if (!expectedPackageIdentifier || pkg.identifier !== expectedPackageIdentifier) {
+        throw new Error("The App Store product does not match the selected billing interval.");
+      }
 
       const purchaseResult = await Purchases.purchasePackage({ aPackage: pkg });
 
-      if (purchaseResult?.customerInfo?.entitlements?.active) {
+      const activeEntitlements = purchaseResult?.customerInfo?.entitlements?.active || {};
+      if (expectedEntitlementId && !activeEntitlements[expectedEntitlementId]) {
+        throw new Error("The purchased product did not grant the expected plan entitlement.");
+      }
+      if (Object.keys(activeEntitlements).length > 0) {
               return {
                         success: true,
-                        customerInfo: purchaseResult.customerInfo,
                         message: "Purchase successful",
               };
       }
@@ -214,7 +291,6 @@ export const makePurchase = async (productId) => {
               message: "Purchase was not completed. Please try again.",
       };
     } catch (error) {
-          console.error("[Kindred] Purchase error:", error);
           throw error;
     }
 };
@@ -234,10 +310,23 @@ export const syncRevenueCatUser = async (userId) => {
 
     try {
           await Purchases.logIn({ appUserID: userId });
-          console.log("[Kindred] RevenueCat user synced:", userId);
-    } catch (error) {
-          console.error("[Kindred] Error syncing RevenueCat user:", error);
+          console.log("[Kindred] RevenueCat user sync completed");
+    } catch {
+          console.error("[Kindred] Error syncing RevenueCat user");
     }
+};
+
+export const openRevenueCatSubscriptionManagement = async () => {
+    const ready = await ensureInitialized();
+    if (!ready) {
+          throw new Error("Subscription service is not ready. Please try again.");
+    }
+    const result = await Purchases.getCustomerInfo();
+    const managementURL = result?.customerInfo?.managementURL;
+    if (!managementURL) {
+          throw new Error("The App Store subscription management link is unavailable.");
+    }
+    await Browser.open({ url: managementURL, presentationStyle: "popover" });
 };
 
 /**
@@ -262,13 +351,11 @@ export const restorePurchases = async () => {
           const activeEntitlements = customerInfo?.entitlements?.active || {};
           const hasActive = Object.keys(activeEntitlements).length > 0;
 
-          return {
-                  success: true,
-                  hasActiveSubscription: hasActive,
-                  customerInfo,
-          };
+              return {
+                      success: true,
+                      hasActiveSubscription: hasActive,
+              };
     } catch (error) {
-          console.error("[Kindred] Restore purchases error:", error);
           throw error;
     }
 };

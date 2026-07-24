@@ -523,5 +523,5 @@ class MemoryUpdateRequest(BaseModel):
 
 class SubscriptionCheckoutRequest(BaseModel):
     plan_id: str
-    billing_cycle: Literal["monthly", "annual"] = "monthly"
+    billing_cycle: Literal["monthly", "annual"]
     origin_url: str

@@ -13,7 +13,9 @@ const path = require('path');
 
 const BUILD = path.resolve(__dirname, '..', 'build');
 const PORT = 3000;
-const ROUTES = ['/', '/privacy', '/terms', '/support'];
+const HOST = '127.0.0.1';
+const ROUTES = ['/', '/pricing', '/privacy', '/terms', '/support'];
+const PLANS_API = `${process.env.REACT_APP_BACKEND_URL || 'https://kindred-production-badd.up.railway.app'}/api/subscriptions/plans`;
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -23,9 +25,18 @@ const MIME = {
 };
 
 function serveBuild() {
+  // Keep the untouched CSR shell in memory. The loop writes prerendered
+  // snapshots into build/, including build/index.html for "/", so serving
+  // that mutated file to later routes would hydrate the wrong route.
+  const appShell = fs.readFileSync(path.join(BUILD, 'index.html'));
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const urlPath = decodeURIComponent(req.url.split('?')[0]);
+      if (!path.extname(urlPath)) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(appShell);
+        return;
+      }
       let file = path.join(BUILD, urlPath);
       if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         file = path.join(BUILD, 'index.html'); // SPA fallback
@@ -33,7 +44,7 @@ function serveBuild() {
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
       fs.createReadStream(file).pipe(res);
     });
-    server.listen(PORT, () => resolve(server));
+    server.listen(PORT, HOST, () => resolve(server));
   });
 }
 
@@ -67,16 +78,48 @@ async function launchBrowser(puppeteer) {
     process.exit(0);
   }
 
+  let plansSnapshot = null;
+  try {
+    const response = await fetch(PLANS_API);
+    if (response.ok) plansSnapshot = await response.text();
+  } catch (error) {
+    console.warn('[prerender] live plan snapshot unavailable:', error.message);
+  }
+
   const server = await serveBuild();
   let browser;
   try {
     browser = await launchBrowser(puppeteer);
     const page = await browser.newPage();
+    // Prevent the PWA worker from taking control of later route navigations
+    // during this multi-route snapshot pass.
+    await page.setBypassServiceWorker(true);
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      if (plansSnapshot && request.url() === PLANS_API) {
+        request.respond({
+          status: 200,
+          contentType: 'application/json',
+          headers: {
+            'access-control-allow-origin': `http://${HOST}:${PORT}`,
+            'access-control-allow-credentials': 'true',
+          },
+          body: plansSnapshot,
+        });
+      } else if (new URL(request.url()).pathname === '/sw.js') request.abort();
+      else request.continue();
+    });
     // A recognizable UA so analytics can filter the build machine out.
     await page.setUserAgent('kindred-prerender');
 
     for (const route of ROUTES) {
-      await page.goto(`http://localhost:${PORT}${route}`, { waitUntil: 'networkidle0', timeout: 60000 });
+      const response = await page.goto(`http://${HOST}:${PORT}${route}`, { waitUntil: 'networkidle0', timeout: 60000 });
+      if (!response?.ok()) {
+        throw new Error(
+          `route ${route} returned HTTP ${response?.status() || 'unknown'} at ${page.url()}`
+          + ` (service worker: ${response?.fromServiceWorker?.() || false})`
+        );
+      }
       // Let lazy route chunks + fonts settle.
       await new Promise((r) => setTimeout(r, 1500));
       const html = await page.content();
