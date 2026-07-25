@@ -13,14 +13,80 @@ from datetime import datetime, timezone
 from db import budget_plans_collection, payments_collection, subscriptions_collection, travel_plans_collection, users_collection
 from dependencies import (
     CONTRIBUTION_PACKAGES,
+    SUBSCRIPTION_TIERS,
     ensure_minimum_role,
     get_current_user,
     now_iso,
     require_feature,
 )
 from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreateRequest
+from pricing import (
+    BILLING_ENVIRONMENT,
+    billing_amount,
+    resolve_stripe_price,
+    stripe_api_key_matches_environment,
+)
+from subscription_lifecycle import PAID_ACCESS_STATUSES, should_apply_provider_event
 
 router = APIRouter(prefix="/api")
+
+
+def _configure_stripe() -> None:
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not stripe_api_key_matches_environment(api_key):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe billing credentials do not match the configured billing environment.",
+        )
+    stripe.api_key = api_key
+
+
+def _stripe_event_identity(event: dict) -> tuple[str, int]:
+    event_id = event.get("id")
+    event_created = event.get("created")
+    if not isinstance(event_id, str) or not event_id or not isinstance(event_created, int):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Stripe lifecycle event is missing its id or timestamp.",
+        )
+    return event_id, event_created
+
+
+async def _apply_stripe_subscription_event(
+    query: dict,
+    event: dict,
+    values: dict,
+) -> tuple[bool, dict]:
+    """Apply a signed Stripe event once and reject stale state transitions."""
+    event_id, event_created = _stripe_event_identity(event)
+    current = await subscriptions_collection.find_one(query, {"_id": 0})
+    if not current:
+        return False, {}
+    if current.get("stripe_event_id") == event_id:
+        return False, current
+    if not should_apply_provider_event(current.get("stripe_event_created"), event_created):
+        return False, current
+
+    guarded_query = {
+        **query,
+        "stripe_event_id": {"$ne": event_id},
+        "$or": [
+            {"stripe_event_created": {"$exists": False}},
+            {"stripe_event_created": {"$lte": event_created}},
+        ],
+    }
+    result = await subscriptions_collection.update_one(
+        guarded_query,
+        {
+            "$set": {
+                **values,
+                "stripe_event_id": event_id,
+                "stripe_event_created": event_created,
+                "updated_at": now_iso(),
+            }
+        },
+    )
+    return bool(result.matched_count), current
 
 
 @router.get("/travel-plans")
@@ -201,7 +267,7 @@ async def create_checkout_session(
     if not package:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid contribution package.")
 
-    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    _configure_stripe()
     metadata = {
         "community_id": current_user["community_id"],
         "user_id": current_user["id"],
@@ -261,7 +327,7 @@ async def get_checkout_status(session_id: str, request: Request, current_user: d
     if not transaction_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment session not found.")
 
-    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    _configure_stripe()
     try:
         session = stripe.checkout.Session.retrieve(session_id)
     except stripe.error.InvalidRequestError as e:
@@ -306,8 +372,13 @@ async def stripe_webhook(request: Request):
       - customer.subscription.updated (plan change, status change)
       - customer.subscription.deleted (subscription fully cancelled)
     """
-    stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
+    _configure_stripe()
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    if not webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe webhook verification is not configured.",
+        )
 
     request_body = await request.body()
     sig_header = request.headers.get("Stripe-Signature")
@@ -346,46 +417,95 @@ async def stripe_webhook(request: Request):
         # --- Subscription checkout ---
         elif mode == "subscription":
             stripe_subscription_id = data_object.get("subscription", "")
+            sub_doc = await subscriptions_collection.find_one({"session_id": session_id}, {"_id": 0})
+            if not sub_doc:
+                return {"received": True, "event_type": event_type, "status": "ignored", "reason": "unknown session"}
+            expected_metadata = {
+                "community_id": sub_doc.get("community_id", ""),
+                "user_id": sub_doc.get("user_id", ""),
+                "plan_id": sub_doc.get("plan_id", ""),
+                "billing_cycle": sub_doc.get("billing_cycle", ""),
+            }
+            if any(metadata.get(key) != value for key, value in expected_metadata.items()):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Stripe checkout metadata does not match the pending subscription.",
+                )
             update_payload = {
                 "payment_status": payment_status,
                 "stripe_subscription_id": stripe_subscription_id,
             }
 
             if payment_status == "paid":
-                update_payload["status"] = "active"
-                update_payload["activated_at"] = now_iso()
+                if not stripe_subscription_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Paid Stripe checkout is missing its subscription.",
+                    )
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
+                    price_id = stripe_sub["items"]["data"][0]["price"]["id"]
+                    resolved_plan, resolved_cycle = resolve_stripe_price(price_id)
+                    period_end = datetime.fromtimestamp(
+                        stripe_sub.current_period_end,
+                        tz=timezone.utc,
+                    ).isoformat()
+                except (KeyError, IndexError, TypeError, ValueError, AttributeError, stripe.error.StripeError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Unable to verify the Stripe subscription created by checkout.",
+                    ) from exc
+                expected_livemode = BILLING_ENVIRONMENT == "production"
+                if bool(stripe_sub.livemode) != expected_livemode:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe subscription environment does not match billing configuration.",
+                    )
+                if (resolved_plan, resolved_cycle) != (
+                    sub_doc.get("plan_id"),
+                    sub_doc.get("billing_cycle"),
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe subscription product does not match the pending plan and interval.",
+                    )
+                update_payload.update(
+                    {
+                        "status": "active",
+                        "activated_at": now_iso(),
+                        "current_period_end": period_end,
+                        "expires_at": period_end,
+                        "stripe_price_id": price_id,
+                    }
+                )
 
-                # Pull period end from the Stripe Subscription object
-                if stripe_subscription_id:
-                    try:
-                        stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
-                        period_end = datetime.fromtimestamp(stripe_sub.current_period_end, tz=timezone.utc).isoformat()
-                        update_payload["current_period_end"] = period_end
-                        update_payload["expires_at"] = period_end
-                    except Exception as exc:
-                        logger.warning("Could not retrieve subscription %s: %s", stripe_subscription_id, exc)
-
-                # Supersede any older active subscriptions for this community
-                community_id = metadata.get("community_id", "")
+            applied, _ = await _apply_stripe_subscription_event(
+                {"session_id": session_id},
+                event,
+                update_payload,
+            )
+            if applied and payment_status == "paid":
+                community_id = sub_doc.get("community_id", "")
                 if community_id:
                     await subscriptions_collection.update_many(
-                        {"community_id": community_id, "status": "active", "session_id": {"$ne": session_id}},
+                        {
+                            "community_id": community_id,
+                            "status": {"$in": list(PAID_ACCESS_STATUSES)},
+                            "session_id": {"$ne": session_id},
+                        },
                         {"$set": {"status": "superseded"}},
                     )
 
-                # Send welcome email
                 try:
                     from email_service import send_subscription_welcome
                     await send_subscription_welcome(
-                        email=metadata.get("user_email", ""),
-                        plan_name=metadata.get("plan_name", ""),
-                        billing_cycle=metadata.get("billing_cycle", "monthly"),
-                        amount=float(data_object.get("amount_total", 0)) / 100,
+                        email=sub_doc.get("user_email", ""),
+                        plan_name=sub_doc.get("plan_name", ""),
+                        billing_cycle=sub_doc.get("billing_cycle", ""),
+                        amount=sub_doc.get("amount", 0),
                     )
                 except Exception as exc:
                     logger.warning("Welcome email failed: %s", exc)
-
-            await subscriptions_collection.update_one({"session_id": session_id}, {"$set": update_payload})
 
         return {"received": True, "event_type": event_type, "mode": mode}
 
@@ -405,31 +525,51 @@ async def stripe_webhook(request: Request):
             )
 
             if sub_doc:
-                # Refresh period end from Stripe
                 try:
                     stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
-                    period_end = datetime.fromtimestamp(stripe_sub.current_period_end, tz=timezone.utc).isoformat()
-                except Exception:
-                    period_end = sub_doc.get("current_period_end", "")
+                    price_id = stripe_sub["items"]["data"][0]["price"]["id"]
+                    plan_id, billing_cycle = resolve_stripe_price(price_id)
+                    period_end = datetime.fromtimestamp(
+                        stripe_sub.current_period_end,
+                        tz=timezone.utc,
+                    ).isoformat()
+                except (KeyError, IndexError, TypeError, ValueError, AttributeError, stripe.error.StripeError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Unable to verify the renewed Stripe subscription.",
+                    ) from exc
+                if bool(stripe_sub.livemode) != (BILLING_ENVIRONMENT == "production"):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe renewal environment does not match billing configuration.",
+                    )
 
-                await subscriptions_collection.update_one(
+                cancel_at_period_end = bool(stripe_sub.cancel_at_period_end)
+                update_values = {
+                    "status": "canceling" if cancel_at_period_end else "active",
+                    "payment_status": "paid",
+                    "current_period_end": period_end,
+                    "expires_at": period_end,
+                    "cancel_at_period_end": cancel_at_period_end,
+                    "stripe_price_id": price_id,
+                    "plan_id": plan_id,
+                    "plan_name": SUBSCRIPTION_TIERS[plan_id]["name"],
+                    "billing_cycle": billing_cycle,
+                    "amount": billing_amount(plan_id, billing_cycle),
+                }
+                applied, previous = await _apply_stripe_subscription_event(
                     {"stripe_subscription_id": stripe_subscription_id},
-                    {"$set": {
-                        "status": "active",
-                        "payment_status": "paid",
-                        "current_period_end": period_end,
-                        "expires_at": period_end,
-                        "cancel_at_period_end": False,
-                    }},
+                    event,
+                    update_values,
                 )
 
                 # Send renewal email only for actual renewals (not the first invoice)
-                if billing_reason == "subscription_cycle":
+                if applied and billing_reason == "subscription_cycle":
                     try:
                         from email_service import send_subscription_renewed
                         await send_subscription_renewed(
-                            email=sub_doc.get("user_email", ""),
-                            plan_name=sub_doc.get("plan_name", ""),
+                            email=previous.get("user_email", ""),
+                            plan_name=update_values["plan_name"],
                             amount=float(data_object.get("amount_paid", 0)) / 100,
                             next_renewal=period_end[:10] if period_end else "—",
                         )
@@ -451,16 +591,19 @@ async def stripe_webhook(request: Request):
             )
 
             if sub_doc:
-                await subscriptions_collection.update_one(
+                applied, previous = await _apply_stripe_subscription_event(
                     {"stripe_subscription_id": stripe_subscription_id},
-                    {"$set": {"status": "past_due", "payment_status": "failed"}},
+                    event,
+                    {"status": "past_due", "payment_status": "failed"},
                 )
 
                 try:
+                    if not applied:
+                        return {"received": True, "event_type": event_type, "status": "ignored"}
                     from email_service import send_payment_failed
                     await send_payment_failed(
-                        email=sub_doc.get("user_email", ""),
-                        plan_name=sub_doc.get("plan_name", ""),
+                        email=previous.get("user_email", ""),
+                        plan_name=previous.get("plan_name", ""),
                     )
                 except Exception as exc:
                     logger.warning("Payment failed email error: %s", exc)
@@ -482,18 +625,33 @@ async def stripe_webhook(request: Request):
             )
 
             if sub_doc:
-                update_payload = {}
-
-                # Map Stripe status to our status
-                status_map = {"active": "active", "past_due": "past_due", "canceled": "cancelled", "unpaid": "past_due"}
-                if stripe_status in status_map:
-                    new_status = status_map[stripe_status]
-                    # If cancel_at_period_end is set, mark as "canceling"
-                    if cancel_at_period_end and stripe_status == "active":
-                        new_status = "canceling"
-                    update_payload["status"] = new_status
-
-                update_payload["cancel_at_period_end"] = cancel_at_period_end
+                status_map = {
+                    "active": "active",
+                    "past_due": "past_due",
+                    "canceled": "canceled",
+                    "unpaid": "past_due",
+                    "incomplete": "pending",
+                    "incomplete_expired": "canceled",
+                    "paused": "past_due",
+                    "trialing": "pending",
+                }
+                if stripe_status not in status_map:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe returned an unsupported subscription status.",
+                    )
+                new_status = status_map[stripe_status]
+                if cancel_at_period_end and stripe_status == "active":
+                    new_status = "canceling"
+                update_payload = {
+                    "status": new_status,
+                    "cancel_at_period_end": cancel_at_period_end,
+                }
+                if bool(data_object.get("livemode")) != (BILLING_ENVIRONMENT == "production"):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe subscription environment does not match billing configuration.",
+                    )
 
                 # Update period end
                 period_end_ts = data_object.get("current_period_end")
@@ -504,43 +662,47 @@ async def stripe_webhook(request: Request):
 
                 # Check for plan changes (items array)
                 items = data_object.get("items", {}).get("data", [])
-                if items:
-                    new_price_id = items[0].get("price", {}).get("id", "")
-                    if new_price_id and new_price_id != sub_doc.get("stripe_price_id", ""):
-                        update_payload["stripe_price_id"] = new_price_id
-                        # Determine the new plan from price metadata or env lookup
-                        price_metadata = items[0].get("price", {}).get("metadata", {})
-                        new_tier = price_metadata.get("kindred_tier", "")
-                        new_cycle = price_metadata.get("billing_cycle", "")
-                        if new_tier:
-                            from dependencies import SUBSCRIPTION_TIERS
-                            new_tier_info = SUBSCRIPTION_TIERS.get(new_tier, {})
-                            old_plan = sub_doc.get("plan_name", "")
-                            update_payload["plan_id"] = new_tier
-                            update_payload["plan_name"] = new_tier_info.get("name", new_tier)
-                            if new_cycle:
-                                update_payload["billing_cycle"] = new_cycle
-                                amount = new_tier_info.get("annual_price", 0) if new_cycle == "annual" else new_tier_info.get("monthly_price", 0)
-                                update_payload["amount"] = float(amount)
-
-                            # Send upgrade/downgrade email
-                            try:
-                                from email_service import send_subscription_upgraded
-                                await send_subscription_upgraded(
-                                    email=sub_doc.get("user_email", ""),
-                                    old_plan=old_plan,
-                                    new_plan=update_payload.get("plan_name", ""),
-                                    amount=update_payload.get("amount", 0),
-                                    billing_cycle=update_payload.get("billing_cycle", sub_doc.get("billing_cycle", "monthly")),
-                                )
-                            except Exception as exc:
-                                logger.warning("Upgrade email failed: %s", exc)
-
-                if update_payload:
-                    await subscriptions_collection.update_one(
-                        {"stripe_subscription_id": stripe_subscription_id},
-                        {"$set": update_payload},
+                if not items:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe subscription update is missing its Price.",
                     )
+                new_price_id = items[0].get("price", {}).get("id", "")
+                try:
+                    new_tier, new_cycle = resolve_stripe_price(new_price_id)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe subscription uses an unmapped Price.",
+                    ) from exc
+                update_payload.update({
+                    "stripe_price_id": new_price_id,
+                    "plan_id": new_tier,
+                    "plan_name": SUBSCRIPTION_TIERS[new_tier]["name"],
+                    "billing_cycle": new_cycle,
+                    "amount": billing_amount(new_tier, new_cycle),
+                })
+
+                applied, previous = await _apply_stripe_subscription_event(
+                    {"stripe_subscription_id": stripe_subscription_id},
+                    event,
+                    update_payload,
+                )
+                if applied and (
+                    previous.get("plan_id") != new_tier
+                    or previous.get("billing_cycle") != new_cycle
+                ):
+                    try:
+                        from email_service import send_subscription_upgraded
+                        await send_subscription_upgraded(
+                            email=previous.get("user_email", ""),
+                            old_plan=previous.get("plan_name", ""),
+                            new_plan=update_payload["plan_name"],
+                            amount=update_payload["amount"],
+                            billing_cycle=new_cycle,
+                        )
+                    except Exception as exc:
+                        logger.warning("Upgrade email failed: %s", exc)
 
         return {"received": True, "event_type": event_type}
 
@@ -557,25 +719,31 @@ async def stripe_webhook(request: Request):
             )
 
             if sub_doc:
-                await subscriptions_collection.update_one(
+                if bool(data_object.get("livemode")) != (BILLING_ENVIRONMENT == "production"):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Stripe cancellation environment does not match billing configuration.",
+                    )
+                applied, previous = await _apply_stripe_subscription_event(
                     {"stripe_subscription_id": stripe_subscription_id},
-                    {"$set": {
-                        "status": "cancelled",
-                        "payment_status": "cancelled",
+                    event,
+                    {
+                        "status": "canceled",
+                        "payment_status": "canceled",
                         "cancel_at_period_end": False,
                         "cancelled_at": sub_doc.get("cancelled_at") or now_iso(),
-                    }},
+                    },
                 )
 
                 # Send final cancellation email if we haven't already
                 # (the "canceling" email was sent when user clicked cancel;
                 #  this one confirms the subscription is now truly ended)
-                if sub_doc.get("status") != "cancelled":
+                if applied and previous.get("status") != "canceled":
                     try:
                         from email_service import send_subscription_cancelled
                         await send_subscription_cancelled(
-                            email=sub_doc.get("user_email", ""),
-                            plan_name=sub_doc.get("plan_name", ""),
+                            email=previous.get("user_email", ""),
+                            plan_name=previous.get("plan_name", ""),
                             access_until="now",
                         )
                     except Exception as exc:

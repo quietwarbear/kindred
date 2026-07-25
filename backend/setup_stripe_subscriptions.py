@@ -11,35 +11,32 @@ import os
 import sys
 
 import stripe
+from pricing import (
+    BILLING_ENVIRONMENT,
+    PAID_TIER_IDS,
+    SUBSCRIPTION_TIERS,
+    price_cents,
+    stripe_api_key_matches_environment,
+)
 
 stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
 
-if not stripe.api_key:
-    print("ERROR: Set STRIPE_API_KEY environment variable first.")
+if not stripe_api_key_matches_environment(stripe.api_key):
+    print(f"ERROR: STRIPE_API_KEY does not match BILLING_ENVIRONMENT={BILLING_ENVIRONMENT}.")
     sys.exit(1)
 
 TIERS = [
     {
-        "id": "sapling",
-        "name": "Kindred Sapling",
-        "description": "Growing communities — up to 25 members. Unlimited subyards, event templates, RSVP management.",
-        "monthly_cents": 999,
-        "annual_cents": 8999,
-    },
-    {
-        "id": "oak",
-        "name": "Kindred Oak",
-        "description": "Mid-size communities — up to 50 members. Travel coordination, shared funds, priority support.",
-        "monthly_cents": 1999,
-        "annual_cents": 17999,
-    },
-    {
-        "id": "redwood",
-        "name": "Kindred Redwood",
-        "description": "Large communities — up to 100 members. Analytics, custom branding, multi-admin controls.",
-        "monthly_cents": 3999,
-        "annual_cents": 35999,
-    },
+        "id": tier_id,
+        "name": f"Kindred {SUBSCRIPTION_TIERS[tier_id]['name']}",
+        "description": (
+            f"{SUBSCRIPTION_TIERS[tier_id]['tagline']} "
+            f"Up to {SUBSCRIPTION_TIERS[tier_id]['max_members']} members."
+        ),
+        "monthly_cents": price_cents(tier_id, "monthly"),
+        "annual_cents": price_cents(tier_id, "annual"),
+    }
+    for tier_id in PAID_TIER_IDS
 ]
 
 

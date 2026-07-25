@@ -9,6 +9,7 @@ import { AuthPage } from "@/components/AuthPage";
 import { InviteLandingPage } from "@/components/InviteLandingPage";
 import { LandingPage } from "@/components/LandingPage";
 import { OnboardingPage } from "@/components/OnboardingPage";
+import { PricingPage } from "@/components/PricingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -17,12 +18,13 @@ import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
 import { identifyUser, resetAnalytics } from "@/lib/analytics";
 import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
+import { publicUrl } from "@/config/publicIdentity";
 
 const APP_STATE_KEY = "gathering-cypher-auth";
 const MOBILE_GOOGLE_CALLBACK_URL = process.env.REACT_APP_MOBILE_GOOGLE_CALLBACK_URL || "kindred://auth/google/callback";
 const MOBILE_APPLE_CALLBACK_URL = "kindred://auth/apple/callback";
 const INVITE_SCHEME_PREFIX = "kindred://invite/";
-const INVITE_HTTPS_PREFIX = "https://heykindred.org/invite/";
+const INVITE_HTTPS_PREFIX = publicUrl("/invite/");
 
 const FullScreenMessage = ({ title, copy }) => (
   <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-16">
@@ -153,7 +155,7 @@ function App() {
 
     // Handle invite deep links:
     //   kindred://invite/ABC12345
-    //   https://kindred.ubuntumarket.com/invite/ABC12345
+    //   https://www.heykindred.org/invite/ABC12345
     if (url?.startsWith(INVITE_SCHEME_PREFIX) || url?.startsWith(INVITE_HTTPS_PREFIX)) {
       try {
         let code;
@@ -253,7 +255,7 @@ function App() {
 
   const publicAuthPage = useMemo(
     () => <AuthPage onAuthSuccess={handleFreshLogin} onGoogleNativeSignIn={handleNativeGoogleSignIn} session={session} pendingInviteCode={pendingInviteCode} onInviteCodeConsumed={() => setPendingInviteCode(null)} />,
-    [handleFreshLogin, handleNativeGoogleSignIn, session]
+    [handleFreshLogin, handleNativeGoogleSignIn, pendingInviteCode, session]
   );
   const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
 
@@ -283,6 +285,7 @@ function App() {
             <Route element={<PublicRSVPPage />} path="/rsvp/:token" />
             <Route element={<SSOHandoffPage onAuthSuccess={handleFreshLogin} />} path="/sso" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
+            <Route element={<PricingPage />} path="/pricing" />
             <Route element={<TermsOfServicePage />} path="/terms" />
             <Route element={<SupportPage />} path="/support" />
             <Route

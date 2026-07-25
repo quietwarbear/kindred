@@ -1,5 +1,6 @@
 import { ArrowLeft, Mail, MessageCircle, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
+import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 
 export const SupportPage = () => (
   <div className="min-h-screen bg-background px-4 py-12 sm:px-6 lg:px-8">
@@ -18,8 +19,8 @@ export const SupportPage = () => (
           <p className="mt-2 text-sm leading-7 text-muted-foreground">
             For general questions, feature requests, or account help, email us directly.
           </p>
-          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-email-link" href="mailto:support@ubuntu-village.org">
-            support@ubuntu-village.org
+          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-email-link" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>
+            {PUBLIC_IDENTITY.supportEmail}
           </a>
         </div>
 
@@ -29,8 +30,8 @@ export const SupportPage = () => (
           <p className="mt-2 text-sm leading-7 text-muted-foreground">
             Kindred is shaped by the communities that use it. Share ideas for new features or improvements.
           </p>
-          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href="mailto:support@ubuntu-village.org">
-            support@ubuntu-village.org
+          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>
+            {PUBLIC_IDENTITY.supportEmail}
           </a>
         </div>
       </div>
@@ -46,7 +47,7 @@ export const SupportPage = () => (
         <ul className="mt-3 list-disc pl-6 space-y-2 text-sm leading-7 text-muted-foreground">
           <li>Use the <strong>Settings</strong> page in the app to manage your profile or delete your account.</li>
           <li>Export your community timeline via the <strong>Timeline &gt; CSV Export</strong> feature.</li>
-          <li>Email <a className="font-semibold text-primary hover:underline" href="mailto:support@ubuntu-village.org">support@ubuntu-village.org</a> for any data request we will respond within 30 days.</li>
+          <li>Email <a className="font-semibold text-primary hover:underline" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>{PUBLIC_IDENTITY.supportEmail}</a> for privacy and data requests.</li>
         </ul>
       </div>
 
@@ -62,7 +63,7 @@ export const SupportPage = () => (
 
             <div data-testid="support-faq-2">
               <p className="font-semibold text-foreground">Is my data private?</p>
-              <p className="mt-1">Yes. Kindred is invitation-only with no public profiles, no ads, and no data mining. Your community data is encrypted and never shared with advertisers. See our <Link className="font-semibold text-primary hover:underline" to="/privacy">Privacy Policy</Link> for full details.</p>
+              <p className="mt-1">Kindred is invitation-only with no public profiles or ads. We process account, community, subscription, device, and usage data to operate the service and use service providers described in our <Link className="font-semibold text-primary hover:underline" to="/privacy">Privacy Policy</Link>.</p>
             </div>
 
             <div data-testid="support-faq-3">
@@ -77,7 +78,7 @@ export const SupportPage = () => (
 
             <div data-testid="support-faq-5">
               <p className="font-semibold text-foreground">How do I report a problem?</p>
-              <p className="mt-1">Email <a className="font-semibold text-primary hover:underline" href="mailto:support@ubuntu-village.org">support@ubuntu-village.org</a> with a description of the issue. Include your device type and what you were doing when the problem occurred.</p>
+              <p className="mt-1">Email <a className="font-semibold text-primary hover:underline" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>{PUBLIC_IDENTITY.supportEmail}</a> with a description of the issue. Include your device type and what you were doing when the problem occurred.</p>
             </div>
           </div>
         </section>

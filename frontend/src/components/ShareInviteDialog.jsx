@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Check, Copy, Link2, Hash, Share2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { publicUrl } from "@/config/publicIdentity";
 
-const INVITE_BASE_URL = "https://heykindred.org/invite/";
+const INVITE_BASE_URL = publicUrl("/invite/");
 
 export const ShareInviteDialog = ({ inviteCode, contextLabel, onClose }) => {
   const [mode, setMode] = useState("link"); // "link" | "code"

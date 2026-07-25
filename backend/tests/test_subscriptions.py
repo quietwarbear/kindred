@@ -92,29 +92,25 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 200
         plans = {p["id"]: p for p in response.json()["plans"]}
         
-        # Verify Seedling: $19/mo
-        assert plans["seedling"]["monthly_price"] == 19.00
-        assert plans["seedling"]["annual_price"] == 194.00
+        # Seedling is explicitly free, without a fabricated annual interval.
+        assert set(plans["seedling"]["billing_options"]) == {"free"}
+        assert plans["seedling"]["billing_options"]["free"]["amount"] == 0.00
         assert plans["seedling"]["max_members"] == 10
-        
-        # Verify Sapling: $49/mo
-        assert plans["sapling"]["monthly_price"] == 49.00
-        assert plans["sapling"]["annual_price"] == 500.00
-        assert plans["sapling"]["max_members"] == 25
-        
-        # Verify Oak: $79/mo
-        assert plans["oak"]["monthly_price"] == 79.00
-        assert plans["oak"]["annual_price"] == 806.00
-        assert plans["oak"]["max_members"] == 50
-        
-        # Verify Redwood: $129/mo
-        assert plans["redwood"]["monthly_price"] == 129.00
-        assert plans["redwood"]["annual_price"] == 1316.00
-        assert plans["redwood"]["max_members"] == 100
-        
-        # Verify Elder Grove: Custom pricing ($0)
-        assert plans["elder-grove"]["monthly_price"] == 0.00
-        assert plans["elder-grove"]["annual_price"] == 0.00
+
+        expected_paid = {
+            "sapling": (9.99, 89.99, 25),
+            "oak": (19.99, 179.99, 50),
+            "redwood": (39.99, 359.99, 100),
+        }
+        for plan_id, (monthly, annual, members) in expected_paid.items():
+            assert set(plans[plan_id]["billing_options"]) == {"monthly", "annual"}
+            assert plans[plan_id]["billing_options"]["monthly"]["amount"] == monthly
+            assert plans[plan_id]["billing_options"]["annual"]["amount"] == annual
+            assert plans[plan_id]["max_members"] == members
+
+        # Elder Grove is custom-priced and has no self-serve billing interval.
+        assert plans["elder-grove"]["billing_options"] == {}
+        assert plans["elder-grove"]["custom_pricing"] is True
         assert plans["elder-grove"]["max_members"] == 9999
 
     def test_get_plans_has_features_and_limits(self, auth_token):
@@ -245,9 +241,9 @@ class TestSubscriptionEndpoints:
         """Verify GET /api/subscriptions/checkout/status returns status for valid session."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         
-        # First create a checkout session
+        # First create a paid checkout session; Seedling has no billing interval.
         checkout_response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
-            "plan_id": "seedling",
+            "plan_id": "sapling",
             "billing_cycle": "monthly",
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)

@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 
 export const TermsOfServicePage = () => (
   <div className="min-h-screen bg-background px-4 py-12 sm:px-6 lg:px-8">
@@ -136,7 +137,7 @@ export const TermsOfServicePage = () => (
           </p>
           <p className="mt-2 font-medium text-foreground">
             Ubuntu Market LLC<br />
-            Email: support@ubuntu-village.org
+            Email: {PUBLIC_IDENTITY.supportEmail}
           </p>
         </section>
       </div>

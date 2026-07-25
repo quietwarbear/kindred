@@ -17,23 +17,15 @@ const app = (
 );
 
 // Public routes ship as prerendered HTML (scripts/prerender.js) so crawlers
-// see real content. Hydrate the snapshot for anonymous visitors; signed-in
-// users get a fresh client render (no flash of the marketing page).
-let hasSession = false;
-try {
-  hasSession = !!localStorage.getItem("gathering-cypher-auth");
-} catch (e) { /* storage unavailable */ }
-
-if (rootEl.hasChildNodes() && !hasSession) {
-  ReactDOM.hydrateRoot(rootEl, app);
-} else {
-  if (rootEl.hasChildNodes()) rootEl.innerHTML = "";
-  ReactDOM.createRoot(rootEl).render(app);
-}
+// see real content. Those snapshots are browser-captured rather than React
+// server output, so they are replaced with a fresh client tree instead of
+// being hydrated as though their markup were an exact SSR match.
+if (rootEl.hasChildNodes()) rootEl.innerHTML = "";
+ReactDOM.createRoot(rootEl).render(app);
 
 // Initialize RevenueCat AFTER first render so it never blocks the UI
 setTimeout(() => {
-  initializeRevenueCat().catch((error) => {
-    console.error("[Kindred] RevenueCat initialization error:", error);
+  initializeRevenueCat().catch(() => {
+    console.error("[Kindred] RevenueCat initialization failed");
   });
 }, 100);

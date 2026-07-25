@@ -24,7 +24,9 @@ Courtyards/Subyards → Gatherings (RSVP, agenda, volunteers, potluck, travel, r
 Memory Vault (photos + voice + AI tags via litellm/Gemini), Legacy Threads (oral history,
 7 categories), Kinship Map (network graph of relationship pairs), Timeline, Polls,
 Contributions/Funds, Activity Feed, Announcements, Chat. Five tiers named for growing
-trees: Seedling (free/10) → Sapling ($9.99/25) → Oak ($19.99/50) → Redwood ($39.99/100) →
+trees: Seedling (free/10) → Sapling ($9.99/month or $89.99/year/25) →
+Oak ($19.99/month or $179.99/year/50) →
+Redwood ($39.99/month or $359.99/year/100) →
 Elder Grove (custom). Role tooling: organizer, treasurer, historian, communications lead,
 elder, contributor. Design system: "The Digital Hearth" — Playfair Display + Manrope +
 JetBrains Mono, terracotta/bone, warm-organic light / deep-legacy dark.

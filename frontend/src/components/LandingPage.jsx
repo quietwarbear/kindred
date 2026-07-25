@@ -9,6 +9,8 @@ import {
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { PublicPlanCards } from "@/components/PublicPlanCards";
+import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { isNative } from "@/lib/native-bridge";
 
 const heroImage =
@@ -43,6 +45,7 @@ const audience = ["Family reunions", "Church communities", "Greek organizations"
 
 export const LandingPage = ({ isAuthenticated }) => {
   const showStoreBadges = !isNative();
+  const { plans, loading: plansLoading, error: plansError } = usePublicPlans();
 
   return (
     <div className="app-canvas min-h-screen">
@@ -94,13 +97,13 @@ export const LandingPage = ({ isAuthenticated }) => {
                   <Link
                     className="pill-button"
                     data-testid="landing-primary-cta"
-                    to={isAuthenticated ? "/dashboard" : "/login"}
+                    to={isAuthenticated ? "/dashboard" : "/pricing"}
                   >
                     {isAuthenticated ? "Open your community →" : "See if Kindred fits your circle →"}
                   </Link>
                 </div>
                 <p className="text-sm text-foreground/60" data-testid="landing-tertiary-line">
-                  Free on iOS · Invitation-only · No public profiles
+                  Seedling plan available at no cost · Invitation-only · No public profiles
                 </p>
               </div>
 
@@ -172,14 +175,11 @@ export const LandingPage = ({ isAuthenticated }) => {
           </article>
 
           <article className="archival-card" data-testid="landing-business-card">
-            <p className="eyebrow-text">Strategic framing</p>
-            <h2 className="mt-3 font-display text-3xl text-foreground">Not another app. Community infrastructure.</h2>
+            <p className="eyebrow-text">Built for continuity</p>
+            <h2 className="mt-3 font-display text-3xl text-foreground">Not another feed. A home your community controls.</h2>
             <p className="mt-4 text-sm leading-7 text-muted-foreground">
-              The model supports recurring revenue through paid community tiers while preserving private ownership over memory, logistics, and membership.
+              Keep gathering plans, shared memories, and member coordination together without public profiles or advertising.
             </p>
-            <Link className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary" data-testid="landing-read-strategy-link" to="/strategy">
-              Explore the strategy deck <ArrowRight className="h-4 w-4" />
-            </Link>
           </article>
         </div>
       </section>
@@ -192,45 +192,15 @@ export const LandingPage = ({ isAuthenticated }) => {
             Every plan includes private gatherings, memory vault, legacy threads, and shared contributions. Pick the one that fits your circle — change any time.
           </p>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="soft-panel" data-testid="landing-plan-sapling">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sapling</p>
-              <p className="mt-3 font-display text-3xl font-bold text-foreground">
-                $49<span className="text-base font-normal text-muted-foreground">/mo</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Up to 25 members</p>
-              <p className="mt-3 text-sm text-muted-foreground">For growing families and small circles.</p>
-            </div>
-
-            <div className="soft-panel relative ring-2 ring-primary" data-testid="landing-plan-oak">
-              <span className="absolute -top-3 left-4 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-sm">
-                Most popular
-              </span>
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">Oak</p>
-              <p className="mt-3 font-display text-3xl font-bold text-foreground">
-                $79<span className="text-base font-normal text-muted-foreground">/mo</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Up to 50 members</p>
-              <p className="mt-3 text-sm text-muted-foreground">For congregations, reunions, and cultural collectives.</p>
-            </div>
-
-            <div className="soft-panel" data-testid="landing-plan-redwood">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Redwood</p>
-              <p className="mt-3 font-display text-3xl font-bold text-foreground">
-                $129<span className="text-base font-normal text-muted-foreground">/mo</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Up to 100 members</p>
-              <p className="mt-3 text-sm text-muted-foreground">For ministries, chapters, and large organizations.</p>
-            </div>
+          <div className="mt-8" aria-live="polite">
+            {plansLoading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
+            {plansError && <p className="text-sm text-destructive" role="alert">{plansError}</p>}
+            {!plansLoading && !plansError && <PublicPlanCards plans={plans.filter((plan) => plan.id !== "elder-grove")} />}
           </div>
-
-          <p className="mt-6 text-xs text-muted-foreground">
-            Small circles start at $19/mo with Seedling. Nonprofit Elder Grove tier available by request. Annual billing saves ~25%.
-          </p>
           <Link
             className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
             data-testid="landing-see-all-plans-link"
-            to="/subscription"
+            to="/pricing"
           >
             See all plans <ArrowRight className="h-4 w-4" />
           </Link>

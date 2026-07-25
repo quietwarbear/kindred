@@ -17,6 +17,8 @@ from db import (
     users_collection,
 )
 from security import create_access_token, decode_token
+from pricing import STRIPE_PRICE_IDS, SUBSCRIPTION_TIERS, TIER_ORDER
+from subscription_lifecycle import PAID_ACCESS_STATUSES, subscription_has_paid_access
 
 bearer_scheme = HTTPBearer(auto_error=False)
 ROLE_ORDER = {"member": 1, "organizer": 2, "host": 3}
@@ -42,114 +44,9 @@ CONTRIBUTION_PACKAGES = {
     },
 }
 
-SUBSCRIPTION_TIERS = {
-    "seedling": {
-        "id": "seedling",
-        "name": "Seedling",
-        "emoji": "seedling",
-        "tagline": "Perfect for small circles just getting started.",
-        "max_members": 10,
-        "monthly_price": 0.00,
-        "annual_price": 0.00,
-        "features": [
-            "Full event planning suite",
-            "Community feed & posts",
-            "Timeline / memory archive",
-            "1 subyard",
-        ],
-        "limits": {"max_subyards": 1, "travel_coordination": False, "shared_funds": False, "analytics": False, "custom_branding": False, "multi_admin": False},
-    },
-    "sapling": {
-        "id": "sapling",
-        "name": "Sapling",
-        "emoji": "sapling",
-        "tagline": "Growing communities that need more room.",
-        "max_members": 25,
-        "monthly_price": 9.99,
-        "annual_price": 89.99,
-        "features": [
-            "All Seedling features",
-            "Unlimited subyards",
-            "Event templates",
-            "RSVP & attendee management",
-            "Basic notifications",
-        ],
-        "limits": {"max_subyards": 999, "travel_coordination": False, "shared_funds": False, "analytics": False, "custom_branding": False, "multi_admin": False},
-    },
-    "oak": {
-        "id": "oak",
-        "name": "Oak",
-        "emoji": "oak",
-        "tagline": "Full coordination tools for mid-size communities.",
-        "max_members": 50,
-        "monthly_price": 19.99,
-        "annual_price": 179.99,
-        "features": [
-            "All Sapling features",
-            "Travel coordination",
-            "Shared event funds",
-            "Priority support",
-            "Expanded event templates",
-        ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": False, "custom_branding": False, "multi_admin": False},
-    },
-    "redwood": {
-        "id": "redwood",
-        "name": "Redwood",
-        "emoji": "redwood",
-        "tagline": "Advanced tools for large, active communities.",
-        "max_members": 100,
-        "monthly_price": 39.99,
-        "annual_price": 359.99,
-        "features": [
-            "All Oak features",
-            "Advanced analytics & engagement tracking",
-            "Custom branding (logo, color)",
-            "Multi-admin controls",
-        ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": True, "custom_branding": True, "multi_admin": True},
-    },
-    "elder-grove": {
-        "id": "elder-grove",
-        "name": "Elder Grove",
-        "emoji": "elder-grove",
-        "tagline": "Fully customized for enterprise-scale communities.",
-        "max_members": 9999,
-        "monthly_price": 0.00,
-        "annual_price": 0.00,
-        "features": [
-            "Fully customized community experience",
-            "Dedicated account manager",
-            "Enterprise-grade privacy & security",
-            "Optional partner integrations",
-        ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": True, "custom_branding": True, "multi_admin": True},
-    },
-}
-
-TIER_ORDER = ["seedling", "sapling", "oak", "redwood", "elder-grove"]
-
-# Stripe recurring Price IDs — defaults match live Stripe products.
-# Can be overridden via environment variables in Railway / .env if needed.
-STRIPE_PRICE_IDS: dict[str, dict[str, str]] = {
-    "sapling": {
-        "monthly": os.environ.get("STRIPE_PRICE_SAPLING_MONTHLY", "price_1TCNAdAk1UyEdCJUIlI3clyU"),
-        "annual": os.environ.get("STRIPE_PRICE_SAPLING_ANNUAL", "price_1TCMNIAk1UyEdCJUHIFvOqex"),
-    },
-    "oak": {
-        "monthly": os.environ.get("STRIPE_PRICE_OAK_MONTHLY", "price_1TCN7VAk1UyEdCJU3LdlXY14"),
-        "annual": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", "price_1TCMQRAk1UyEdCJU8yS5hdLe"),
-    },
-    "redwood": {
-        "monthly": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCN3XAk1UyEdCJUuhFERcuD"),
-        "annual": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCMVYAk1UyEdCJUJqhBRIFc"),
-    },
-}
-
-
 def get_community_tier(subscription: dict | None) -> dict:
     """Return the tier config for a subscription, defaulting to seedling."""
-    if not subscription or subscription.get("status") != "active":
+    if not subscription_has_paid_access(subscription):
         return SUBSCRIPTION_TIERS["seedling"]
     return SUBSCRIPTION_TIERS.get(subscription.get("plan_id", "seedling"), SUBSCRIPTION_TIERS["seedling"])
 
@@ -162,7 +59,7 @@ async def _get_active_subscription(community_id: str) -> dict | None:
     """Fetch the active subscription for a community."""
     from db import subscriptions_collection
     return await subscriptions_collection.find_one(
-        {"community_id": community_id, "status": {"$in": ["active", "trialing"]}},
+        {"community_id": community_id, "status": {"$in": list(PAID_ACCESS_STATUSES)}},
         {"_id": 0},
     )
 

@@ -17,12 +17,16 @@ import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import {
   ensureInitialized,
+  getLocalizedRevenueCatPricing,
+  getRevenueCatProductMapping,
   isIOS,
   makePurchase,
+  openRevenueCatSubscriptionManagement,
   restorePurchases,
   syncRevenueCatUser,
-  TIER_TO_PRODUCT_ID,
 } from "@/lib/revenuecat";
+import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
+import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
 
 const TIER_ICONS = {
   seedling: Leaf,
@@ -56,16 +60,22 @@ const TIER_BTN = {
   "elder-grove": "bg-violet-600 hover:bg-violet-700 text-white",
 };
 
-const formatPrice = (val) =>
-  val === 0
-    ? "Included"
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
-
-const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, currentTierId }) => {
+const PlanCard = ({
+  plan,
+  isCurrentTier,
+  billingCycle,
+  onSelect,
+  isLoading,
+  currentTierId,
+  localizedBillingOption,
+  nativePricing,
+  nativePricingLoading,
+}) => {
   const Icon = TIER_ICONS[plan.id] || Leaf;
   const isElderGrove = plan.id === "elder-grove";
-  const price = billingCycle === "annual" ? plan.annual_price : plan.monthly_price;
-  const monthlyEquivalent = billingCycle === "annual" && plan.annual_price > 0 ? (plan.annual_price / 12).toFixed(2) : null;
+  const isFree = Boolean(plan.billing_options?.free);
+  const billingOption = plan.billing_options?.[billingCycle];
+  const displayedBillingOption = nativePricing ? localizedBillingOption : billingOption;
   const isPopular = plan.id === "oak";
 
   const tierOrder = ["seedling", "sapling", "oak", "redwood", "elder-grove"];
@@ -112,17 +122,37 @@ const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, curr
       <div className="mb-5">
         {isElderGrove ? (
           <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`}>Custom</p>
+        ) : isFree ? (
+          <>
+            <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`}>Free</p>
+            <p className="mt-1 text-xs text-muted-foreground">No recurring billing interval</p>
+          </>
+        ) : !displayedBillingOption ? (
+          <p className="text-sm font-semibold text-destructive">
+            {nativePricing
+              ? nativePricingLoading
+                ? "Loading App Store price…"
+                : "App Store price unavailable"
+              : "Pricing unavailable"}
+          </p>
         ) : (
           <>
             <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`} data-testid={`plan-price-${plan.id}`}>
-              {formatPrice(price)}
-              <span className="text-base font-normal text-muted-foreground">
-                /{billingCycle === "annual" ? "yr" : "mo"}
-              </span>
+              {nativePricing ? displayedBillingOption.formattedPrice : formatPrice(displayedBillingOption.amount)}
             </p>
-            {monthlyEquivalent && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {billingCycle === "annual" ? "Billed once per year" : "Billed every month"}
+            </p>
+            {billingCycle === "annual" && displayedBillingOption.savings && (
               <p className="mt-1 text-xs text-muted-foreground">
-                ~${monthlyEquivalent}/mo · Save {billingCycle === "annual" ? "~25%" : ""}
+                Save{" "}
+                {nativePricing
+                  ? formatLocalizedPrice(
+                    displayedBillingOption.savings.amount,
+                    displayedBillingOption.savings.currencyCode,
+                  )
+                  : formatPrice(displayedBillingOption.savings.amount)}{" "}
+                per year ({displayedBillingOption.savings.percent}%) versus 12 monthly payments
               </p>
             )}
           </>
@@ -145,7 +175,7 @@ const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, curr
       ) : isElderGrove ? (
         <Button
           className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
-          onClick={() => toast.info("Contact us at hello@kindred.community for Elder Grove pricing.")}
+          onClick={() => toast.info(`Contact us at ${PUBLIC_IDENTITY.supportEmail} for Elder Grove pricing.`)}
           data-testid={`plan-select-${plan.id}`}
         >
           Contact Sales
@@ -153,7 +183,7 @@ const PlanCard = ({ plan, isCurrentTier, billingCycle, onSelect, isLoading, curr
       ) : (
         <Button
           className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
-          disabled={isLoading}
+          disabled={isLoading || (!isFree && !displayedBillingOption)}
           onClick={() => onSelect(plan.id)}
           data-testid={`plan-select-${plan.id}`}
         >
@@ -271,14 +301,15 @@ export const SubscriptionPage = ({ token, user }) => {
   const [pollingSessionId, setPollingSessionId] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
-  const [rcReady, setRcReady] = useState(!isIOS()); // web is always "ready"
+  const [localizedPricing, setLocalizedPricing] = useState({});
+  const [nativePricingLoading, setNativePricingLoading] = useState(isIOS());
 
   const isHost = user?.role === "host";
 
   const loadPlans = useCallback(async () => {
     try {
       const payload = await apiRequest("/subscriptions/plans", { token });
-      setPlans(payload.plans || []);
+      setPlans(normalizePlans(payload.plans));
     } catch {
       toast.error("Unable to load subscription plans.");
     }
@@ -307,7 +338,14 @@ export const SubscriptionPage = ({ token, user }) => {
           const ready = await ensureInitialized();
           if (ready) {
             await syncRevenueCatUser(user.id).catch(() => {});
-            setRcReady(true);
+            try {
+              const productMapping = await getRevenueCatProductMapping();
+              setLocalizedPricing(await getLocalizedRevenueCatPricing(productMapping));
+            } catch {
+              console.error("[Kindred] Unable to load localized App Store pricing");
+              setLocalizedPricing({});
+            }
+            setNativePricingLoading(false);
             return;
           }
           // Wait before retrying (2s, 4s)
@@ -317,7 +355,7 @@ export const SubscriptionPage = ({ token, user }) => {
         }
         // All retries exhausted — still mark as ready so user can attempt purchase
         // (makePurchase will show a specific error if init truly failed)
-        setRcReady(true);
+        setNativePricingLoading(false);
         console.warn("[Kindred] RevenueCat init failed after 3 attempts");
       };
       initRC();
@@ -373,6 +411,16 @@ export const SubscriptionPage = ({ token, user }) => {
       toast.error("Only the community host can manage subscriptions.");
       return;
     }
+    if (planId === "seedling" && currentTierId !== "seedling") {
+      await handleCancel();
+      return;
+    }
+    const selectedPlan = plans.find((plan) => plan.id === planId);
+    const selectedOption = selectedPlan?.billing_options?.[billingCycle];
+    if (!selectedOption?.recurring) {
+      toast.error(`Checkout is unavailable for ${selectedPlan?.name || planId}/${billingCycle}.`);
+      return;
+    }
     setCheckoutLoading(planId);
     try {
       // Determine if we're on iOS and should use RevenueCat
@@ -380,14 +428,15 @@ export const SubscriptionPage = ({ token, user }) => {
 
       if (useRevenueCat) {
         // iOS: Use RevenueCat for native IAP
-        const productIdMap = TIER_TO_PRODUCT_ID[planId];
-        if (!productIdMap) {
-          toast.error("Plan not available on this platform.");
+        const productMapping = await getRevenueCatProductMapping();
+        const productIdMap = productMapping[planId];
+        if (!productIdMap?.[billingCycle]) {
+          toast.error(`This ${billingCycle} plan is not available on this platform.`);
           setCheckoutLoading(null);
           return;
         }
 
-        const productId = billingCycle === "annual" ? productIdMap.annual : productIdMap.monthly;
+        const productId = productIdMap[billingCycle];
 
         try {
           // Ensure RevenueCat is initialized before attempting purchase
@@ -398,7 +447,7 @@ export const SubscriptionPage = ({ token, user }) => {
             return;
           }
 
-          const result = await makePurchase(productId);
+          const result = await makePurchase(productId, billingCycle, planId);
 
           if (result.success) {
             toast.success("Purchase completed! Activating your plan...");
@@ -412,7 +461,7 @@ export const SubscriptionPage = ({ token, user }) => {
             toast.error(result.message || "Purchase was not completed.");
           }
         } catch (error) {
-          console.error("[Kindred] RevenueCat purchase error:", error);
+          console.error("[Kindred] RevenueCat purchase failed");
           // Check if user cancelled (common for iOS purchases)
           const msg = error?.message || "";
           if (
@@ -427,7 +476,7 @@ export const SubscriptionPage = ({ token, user }) => {
           } else if (msg.includes("not ready")) {
             toast.error("Unable to connect to the App Store. Please check your connection and try again.");
           } else {
-            toast.error(msg || "Unable to complete purchase. Please try again.");
+            toast.error("Unable to complete purchase. Please try again.");
           }
         }
       } else {
@@ -448,10 +497,15 @@ export const SubscriptionPage = ({ token, user }) => {
     }
   };
 
-  const handleCancel = async () => {
+  async function handleCancel() {
     if (!window.confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.")) return;
     setCancelLoading(true);
     try {
+      if (isIOS() && currentSub?.provider === "revenuecat") {
+        await openRevenueCatSubscriptionManagement();
+        toast.info("Use the App Store subscription screen to turn off renewal.");
+        return;
+      }
       const res = await apiRequest("/subscriptions/cancel", { method: "POST", token });
       toast.success(res.message || "Subscription cancelled.");
       loadCurrentSub();
@@ -460,7 +514,7 @@ export const SubscriptionPage = ({ token, user }) => {
     } finally {
       setCancelLoading(false);
     }
-  };
+  }
 
   const handleRestorePurchases = async () => {
     setRestoreLoading(true);
@@ -474,7 +528,7 @@ export const SubscriptionPage = ({ token, user }) => {
         toast.info("No previous purchases found to restore.");
       }
     } catch (error) {
-      console.error("[Kindred] Restore error:", error);
+      console.error("[Kindred] Restore purchases failed");
       const msg = error?.message || "";
       if (msg.includes("not ready")) {
         toast.error("Unable to connect to the App Store. Please try again.");
@@ -503,8 +557,14 @@ export const SubscriptionPage = ({ token, user }) => {
         </p>
 
         {/* Billing Toggle */}
-        <div className="mt-6 flex items-center justify-center gap-3" data-testid="billing-toggle">
+        <div
+          aria-label="Billing interval"
+          className="mt-6 flex items-center justify-center gap-3"
+          data-testid="billing-toggle"
+          role="group"
+        >
           <button
+            aria-pressed={billingCycle === "monthly"}
             className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${billingCycle === "monthly" ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
             onClick={() => setBillingCycle("monthly")}
             data-testid="billing-toggle-monthly"
@@ -512,14 +572,12 @@ export const SubscriptionPage = ({ token, user }) => {
             Monthly
           </button>
           <button
+            aria-pressed={billingCycle === "annual"}
             className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${billingCycle === "annual" ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
             onClick={() => setBillingCycle("annual")}
             data-testid="billing-toggle-annual"
           >
             Annual
-            <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-              Save ~25%
-            </span>
           </button>
         </div>
 
@@ -563,8 +621,13 @@ export const SubscriptionPage = ({ token, user }) => {
                 {currentTier?.name || "Seedling"} Plan
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {currentSub.billing_cycle === "annual" ? "Annual" : "Monthly"} billing
-                {currentSub.expires_at && ` · Renews ${new Date(currentSub.expires_at).toLocaleDateString()}`}
+                {currentSub.billing_cycle === "annual"
+                  ? "Annual billing"
+                  : currentSub.billing_cycle === "monthly"
+                    ? "Monthly billing"
+                    : "No recurring billing"}
+                {(currentSub.current_period_end || currentSub.expires_at)
+                  && ` · ${currentSub.status === "canceling" ? "Access through" : "Current period ends"} ${new Date(currentSub.current_period_end || currentSub.expires_at).toLocaleDateString()}`}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {usage.member_count || 0} of {currentTier?.max_members || 10} members · {usage.subyard_count || 0} subyard(s)
@@ -595,6 +658,9 @@ export const SubscriptionPage = ({ token, user }) => {
             isCurrentTier={currentTierId === plan.id}
             isLoading={checkoutLoading === plan.id}
             key={plan.id}
+            localizedBillingOption={localizedPricing[plan.id]?.[billingCycle]}
+            nativePricing={isIOS()}
+            nativePricingLoading={nativePricingLoading}
             onSelect={handleSelectPlan}
             plan={plan}
           />
@@ -608,9 +674,8 @@ export const SubscriptionPage = ({ token, user }) => {
       <div className="archival-card" data-testid="subscription-faq">
         <h2 className="font-display text-xl text-foreground">Pricing Notes</h2>
         <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-          <p>All plans include a 14-day trial period. Cancel anytime before the trial ends and you won't be charged.</p>
-          <p>Annual billing offers approximately 25% savings compared to monthly billing.</p>
-          <p>Downgrading takes effect at the end of your current billing period. Your community data is always preserved.</p>
+          <p>Each paid plan shows its complete monthly or annual charge. Annual savings appear only when both interval prices are available in the same currency.</p>
+          <p>The effective date of a plan change is confirmed by the applicable web or App Store purchase flow.</p>
           <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
         </div>
       </div>
@@ -618,12 +683,10 @@ export const SubscriptionPage = ({ token, user }) => {
       {/* Auto-Renewal Disclosure (Apple 3.1.2(c) compliance) */}
       <div className="archival-card space-y-3" data-testid="subscription-legal">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Paid plans are auto-renewable subscriptions. Payment is charged to your account
-          or payment method on file at confirmation of purchase.
-          Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the
-          end of the current billing period. Your account will be charged for renewal within 24 hours prior
-          to the end of the current period. You can manage and cancel subscriptions at any time through
-          your device's subscription settings or by using the Cancel Plan button above.
+          Paid plans are auto-renewable subscriptions. The applicable checkout or App Store confirmation
+          shows the complete charge and interval before purchase. Subscriptions renew unless auto-renew is
+          turned off. You can manage renewal through your device's subscription settings for App Store
+          purchases or through the web billing portal for Stripe purchases.
         </p>
         <div className="flex items-center justify-center gap-4 text-xs">
           <a href="/terms" className="text-primary hover:underline">Terms of Service</a>

@@ -1,127 +1,132 @@
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
+
 export const PrivacyPolicyPage = () => (
   <div className="min-h-screen bg-background px-4 py-12 sm:px-6 lg:px-8">
     <div className="mx-auto max-w-3xl" data-testid="privacy-policy-page">
-      <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary mb-8 hover:underline" data-testid="privacy-back-link" to="/">
+      <Link className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline" data-testid="privacy-back-link" to="/">
         <ArrowLeft className="h-4 w-4" /> Back to Kindred
       </Link>
 
       <h1 className="font-display text-4xl text-foreground" data-testid="privacy-title">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Last updated: March 15, 2026</p>
+      <p className="mt-2 text-sm text-muted-foreground">Last updated: July 23, 2026</p>
 
       <div className="mt-8 space-y-8 text-sm leading-7 text-muted-foreground">
         <section>
-          <h2 className="text-lg font-semibold text-foreground">1. Introduction</h2>
+          <h2 className="text-lg font-semibold text-foreground">1. About this policy</h2>
           <p className="mt-2">
-            Kindred ("we," "us," or "our") is operated by Ubuntu Market LLC. This Privacy Policy describes how we collect,
-            use, and protect your personal information when you use the Kindred application (the "Service"), available at
-            heykindred.org and through the Kindred mobile application (bundle ID: com.ubuntumarket.kindred).
-          </p>
-          <p className="mt-2">
-            By using Kindred, you agree to the collection and use of information in accordance with this policy.
+            Kindred is operated by {PUBLIC_IDENTITY.companyName}. This policy explains how we collect, use, disclose,
+            retain, and delete information through {PUBLIC_IDENTITY.canonicalHost}, the Kindred web application, and
+            the Kindred mobile application (bundle/package ID com.ubuntumarket.kindred).
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">2. Information We Collect</h2>
-          <h3 className="mt-3 font-semibold text-foreground">2.1 Information You Provide</h3>
-          <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li><strong>Account information:</strong> Full name, email address, password (stored as a one-way hash).</li>
-            <li><strong>Profile information:</strong> Nickname, phone number, profile image.</li>
-            <li><strong>Community content:</strong> Events, memories, announcements, chat messages, polls, threads, and voice recordings you create or upload.</li>
-            <li><strong>Payment information:</strong> Processed securely through Stripe and RevenueCat. We do not store credit card numbers.</li>
-          </ul>
-
-          <h3 className="mt-3 font-semibold text-foreground">2.2 Information Collected Automatically</h3>
-          <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li><strong>Device information:</strong> Device type, operating system, and push notification tokens (mobile only).</li>
-            <li><strong>Usage data:</strong> Pages visited, features used, and interaction timestamps for improving the Service.</li>
+          <h2 className="text-lg font-semibold text-foreground">2. Information we process</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li><strong>Account and profile data:</strong> name, nickname, email, phone number, password hash, profile image, authentication provider, role, community membership, and account timestamps.</li>
+            <li><strong>Community content:</strong> community details, invitations, events and RSVPs, announcements, chats and attachments, polls and votes, kinship links, care circles, budgets, travel plans, contributions, memories, images, voice notes, transcripts, translations, tags, and legacy threads.</li>
+            <li><strong>Payment and subscription data:</strong> plan, billing cycle, amount, payment status, store, transaction and customer identifiers, renewal or expiration dates, and limited checkout metadata. Stripe, Apple, or Google processes payment credentials; Kindred does not receive full card numbers.</li>
+            <li><strong>Device and notification data:</strong> push notification tokens, device/platform information made available by the mobile runtime, and notification preferences.</li>
+            <li><strong>Usage and diagnostics:</strong> page views, clicks and other interactions, IP-derived and browser/device information, timestamps, product user ID, and technical events collected through Google Analytics/Google Tag Manager and PostHog.</li>
+            <li><strong>Support and communications:</strong> support messages, email addresses, email delivery events, and notification or digest preferences.</li>
           </ul>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">3. How We Use Your Information</h2>
-          <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li>To provide, maintain, and improve the Service.</li>
-            <li>To authenticate your identity and manage your account.</li>
-            <li>To process payments and manage subscriptions.</li>
-            <li>To send notifications about community activity (events, announcements, etc.).</li>
-            <li>To provide AI-powered features such as memory auto-tagging (via Google Gemini). Content is sent to Google's API solely for tag generation and is not stored by Google.</li>
-            <li>To respond to your support requests.</li>
+          <h2 className="text-lg font-semibold text-foreground">3. Why we use information</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li>Provide accounts, private communities, invitations, collaboration, archives, and support.</li>
+            <li>Authenticate users through passwords, Google Sign-In, or Apple Sign In and protect sessions.</li>
+            <li>Process purchases, validate entitlements, prevent billing drift, and manage subscriptions.</li>
+            <li>Deliver transactional email, community digests, reminders, and mobile push notifications.</li>
+            <li>Measure product use, diagnose reliability issues, and improve Kindred.</li>
+            <li>Generate optional AI assistance, including memory tags and summaries, gathering suggestions, stewardship suggestions, voice transcription, and Spanish/Yoruba translations.</li>
+            <li>Enable user-requested sign-on handoffs to configured Ubuntu Market sibling products.</li>
           </ul>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">4. Data Sharing</h2>
-          <p className="mt-2">
-            We do not sell, rent, or trade your personal information. We share data only with:
-          </p>
-          <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li><strong>Stripe:</strong> For payment processing.</li>
-            <li><strong>RevenueCat:</strong> For mobile subscription management.</li>
-            <li><strong>Google (Gemini API):</strong> For AI-powered memory tagging (text and images only, no personal identifiers).</li>
-            <li><strong>Google OAuth:</strong> If you choose to sign in with Google.</li>
+          <h2 className="text-lg font-semibold text-foreground">4. Service providers and disclosures</h2>
+          <p className="mt-2">We do not sell personal information. Code in the Service can disclose limited data to:</p>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li><strong>MongoDB and the configured hosting provider:</strong> application records, content, media stored as data URLs, and operational metadata.</li>
+            <li><strong>Stripe:</strong> web checkout, billing, customer, payment, and subscription data.</li>
+            <li><strong>RevenueCat, Apple, and Google Play:</strong> mobile purchase identifiers, entitlements, store, status, and subscription dates.</li>
+            <li><strong>Google:</strong> Google Sign-In identity data; Google Analytics and Tag Manager usage data; Google Fonts requests; and, when the configured AI model uses Gemini, content supplied to that model.</li>
+            <li><strong>PostHog (EU ingestion endpoint):</strong> product analytics, autocaptured interactions, page views, a Kindred user ID after sign-in, and authentication-provider label.</li>
+            <li><strong>OpenAI or another LiteLLM-routed model provider:</strong> text, images, or audio submitted to enabled AI features. Whisper is used for voice transcription when configured. The actual provider is controlled by server model configuration.</li>
+            <li><strong>Resend:</strong> recipient email address and the content of subscription notices and community digests.</li>
+            <li><strong>Apple Push Notification service / Google push infrastructure:</strong> device token and notification delivery data when push notifications are enabled.</li>
+            <li><strong>Legacy Table and Ile Ubuntu:</strong> name and email only when an authenticated user initiates a configured cross-product sign-in handoff.</li>
           </ul>
           <p className="mt-2">
-            We may also disclose information if required by law or to protect the rights and safety of our users.
+            We may also disclose information when required by law, to protect users and the Service, or as part of a
+            business transaction subject to appropriate safeguards.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">5. Data Storage and Security</h2>
+          <h2 className="text-lg font-semibold text-foreground">5. AI features</h2>
           <p className="mt-2">
-            Your data is stored on secure servers using MongoDB with encryption at rest. Passwords are hashed using bcrypt.
-            All data transmission uses HTTPS/TLS encryption. We implement industry-standard security measures to protect your data.
+            AI features are best-effort and are activated by particular user actions or product workflows. Depending
+            on the configured model, relevant prompts, community text, uploaded images, or voice recordings may be
+            transmitted to Google Gemini, OpenAI, Whisper, or another provider selected through LiteLLM. Do not submit
+            sensitive content to an AI feature unless your community authorizes that use. Provider retention and
+            training terms depend on the production account and contract configured by Kindred.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">6. Your Rights</h2>
-          <p className="mt-2">You have the right to:</p>
-          <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li><strong>Access</strong> your personal data through the Settings page.</li>
-            <li><strong>Correct</strong> inaccurate data by editing your profile.</li>
-            <li><strong>Delete</strong> your account and all associated data through Settings &gt; Delete Account. This action is irreversible and removes all your data from our servers within 30 days.</li>
-            <li><strong>Export</strong> your community timeline data via the Timeline CSV export feature.</li>
-            <li><strong>Withdraw consent</strong> for push notifications through your device settings.</li>
+          <h2 className="text-lg font-semibold text-foreground">6. Storage, security, and retention</h2>
+          <p className="mt-2">
+            Kindred stores application data in the configured MongoDB database. Uploaded profile images, community
+            attachments, images, and voice notes may be stored in database records as encoded data URLs. Passwords are
+            hashed with bcrypt and network traffic is intended to use HTTPS/TLS. Access is restricted by account,
+            community, and role checks.
+          </p>
+          <p className="mt-2">
+            Account, community, and subscription records are generally retained while needed to provide the Service
+            and meet legal, security, and accounting obligations. One-time SSO codes have an automated short-lived
+            database expiration mechanism; most other record categories have no automatic time-based purge in the
+            current code. Provider logs, backups, analytics, payment, email, and AI-provider records follow each
+            provider's configured retention. Production backup and vendor-retention periods require operator
+            confirmation.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-foreground">7. Your choices and controls</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-6">
+            <li>Edit available profile fields and notification or digest preferences in Kindred.</li>
+            <li>Disable push notifications in device settings and use available digest unsubscribe controls.</li>
+            <li>Manage or cancel subscriptions through Kindred or the applicable Apple/Google account settings.</li>
+            <li>Delete individual content where the product provides a delete control.</li>
+            <li>Delete your account in Settings. A community owner with other members must first transfer ownership. Sole-owner deletion cascades through the community records handled by the deletion endpoint; non-owner deletion removes the user's account/session records but may leave community content and operational records.</li>
+            <li>Use browser or device controls to limit cookies or analytics. Kindred does not currently provide a separate in-product analytics opt-out.</li>
+            <li>Request access, correction, deletion, or other applicable privacy rights by contacting us.</li>
           </ul>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">7. Data Retention</h2>
+          <h2 className="text-lg font-semibold text-foreground">8. Children</h2>
           <p className="mt-2">
-            We retain your data for as long as your account is active. When you delete your account, all personal data
-            is permanently removed within 30 days. Community content you created (events, memories) may be retained
-            in anonymized form for the community's archive unless the community owner also deletes them.
+            Kindred is not directed to children under 13. Communities should not create accounts for children or upload
+            children's personal information unless they have the authority and consent required by applicable law.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-foreground">8. Children's Privacy</h2>
+          <h2 className="text-lg font-semibold text-foreground">9. Changes and contact</h2>
           <p className="mt-2">
-            Kindred is not intended for children under 13. We do not knowingly collect personal information from children
-            under 13. If you believe a child has provided us with personal data, please contact us immediately.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-lg font-semibold text-foreground">9. Changes to This Policy</h2>
-          <p className="mt-2">
-            We may update this Privacy Policy from time to time. We will notify you of significant changes through the
-            app or via email. Continued use of the Service after changes constitutes acceptance of the updated policy.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-lg font-semibold text-foreground">10. Contact Us</h2>
-          <p className="mt-2">
-            If you have questions about this Privacy Policy or wish to exercise your data rights, contact us at:
+            We may update this policy as the Service or its providers change. We will update the date above and provide
+            additional notice when required. For privacy questions or rights requests, contact:
           </p>
           <p className="mt-2 font-medium text-foreground">
-            Ubuntu Market LLC<br />
-            Email: support@ubuntu-village.org
+            {PUBLIC_IDENTITY.companyName}<br />
+            Email: <a className="text-primary hover:underline" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>{PUBLIC_IDENTITY.supportEmail}</a>
           </p>
         </section>
       </div>

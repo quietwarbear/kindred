@@ -33,9 +33,9 @@
    - [ ] Consider uploading a custom EULA with subscription-specific terms (same pattern as Ile Ubuntu)
 
 4. **URLs**
-   - [ ] Privacy Policy: `https://kindred.ubuntumarket.com/privacy` — verify loads publicly
-   - [ ] Terms: `https://kindred.ubuntumarket.com/terms` — verify loads publicly
-   - [ ] Support: `https://kindred.ubuntumarket.com/support`
+   - [ ] Privacy Policy: `https://www.heykindred.org/privacy` — verify loads publicly
+   - [ ] Terms: `https://www.heykindred.org/terms` — verify loads publicly
+   - [ ] Support: `https://www.heykindred.org/support`
 
 5. **Build & Upload**
    - [ ] `cd frontend && npm install && GENERATE_SOURCEMAP=false npm run build`
