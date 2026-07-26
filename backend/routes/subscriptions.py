@@ -1,7 +1,12 @@
-"""Subscription routes — Stripe recurring billing."""
+"""Subscription catalog plus legacy Stripe subscription management.
+
+New web purchases are owned by RevenueCat Billing and start in the RevenueCat
+Web SDK. Direct Stripe subscription creation is deliberately unavailable.
+Stripe remains here only for already-created legacy subscriptions and one-time
+add-on payments.
+"""
 
 import os
-import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from db import subscriptions_collection, subyards_collection, users_collection
 from dependencies import (
-    STRIPE_PRICE_IDS,
     SUBSCRIPTION_TIERS,
     TIER_ORDER,
     ensure_minimum_role,
@@ -20,13 +24,8 @@ from dependencies import (
 )
 from models import SubscriptionCheckoutRequest
 from pricing import (
-    BILLING_ENVIRONMENT,
-    PAID_TIER_IDS,
-    billing_amount,
     plan_payload,
-    price_cents,
     stripe_api_key_matches_environment,
-    stripe_price_expectation,
 )
 from subscription_lifecycle import PAID_ACCESS_STATUSES
 
@@ -48,28 +47,6 @@ def _is_admin_email(email: str | None) -> bool:
     return email in ADMIN_EMAILS or email.endswith("@ubuntu-village.org")
 
 
-def _validate_stripe_price(price: Any, tier_id: str, billing_cycle: str) -> None:
-    """Reject a configured Stripe Price that disagrees with the canonical catalog."""
-    recurring = getattr(price, "recurring", None) or price.get("recurring", {})
-    metadata = getattr(price, "metadata", None) or price.get("metadata", {})
-    interval = getattr(recurring, "interval", None) or recurring.get("interval")
-    actual = {
-        "active": getattr(price, "active", None) if not isinstance(price, dict) else price.get("active"),
-        "livemode": getattr(price, "livemode", None) if not isinstance(price, dict) else price.get("livemode"),
-        "currency": getattr(price, "currency", None) if not isinstance(price, dict) else price.get("currency"),
-        "unit_amount": getattr(price, "unit_amount", None) if not isinstance(price, dict) else price.get("unit_amount"),
-        "interval": interval,
-        "tier": metadata.get("kindred_tier"),
-        "cycle": metadata.get("billing_cycle"),
-    }
-    expected = stripe_price_expectation(tier_id, billing_cycle)
-    if actual != expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Billing configuration does not match the published plan. Checkout is temporarily unavailable.",
-        )
-
-
 def _configure_stripe() -> None:
     api_key = os.environ.get("STRIPE_API_KEY", "")
     if not stripe_api_key_matches_environment(api_key):
@@ -78,46 +55,6 @@ def _configure_stripe() -> None:
             detail="Stripe billing credentials do not match the configured billing environment.",
         )
     stripe.api_key = api_key
-
-
-# ---------------------------------------------------------------------------
-# Stripe Customer management
-# ---------------------------------------------------------------------------
-
-async def _get_or_create_stripe_customer(user: dict[str, Any]) -> str:
-    """Retrieve existing Stripe Customer ID or create a new one."""
-    _configure_stripe()
-
-    # Check if the user already has a Stripe customer ID stored
-    sub_doc = await subscriptions_collection.find_one(
-        {"community_id": user["community_id"], "stripe_customer_id": {"$exists": True, "$ne": ""}},
-        {"stripe_customer_id": 1, "_id": 0},
-    )
-    if sub_doc and sub_doc.get("stripe_customer_id"):
-        return sub_doc["stripe_customer_id"]
-
-    # Also check the user doc itself
-    user_doc = await users_collection.find_one({"id": user["id"]}, {"_id": 0})
-    if user_doc and user_doc.get("stripe_customer_id"):
-        return user_doc["stripe_customer_id"]
-
-    # Create a new Stripe Customer
-    customer = stripe.Customer.create(
-        email=user.get("email", ""),
-        name=user.get("full_name", ""),
-        metadata={
-            "kindred_user_id": user["id"],
-            "kindred_community_id": user["community_id"],
-        },
-    )
-
-    # Store customer ID on the user doc for future reference
-    await users_collection.update_one(
-        {"id": user["id"]},
-        {"$set": {"stripe_customer_id": customer.id}},
-    )
-
-    return customer.id
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +101,7 @@ async def get_current_subscription(current_user: dict[str, Any] = Depends(get_cu
 
 
 # ---------------------------------------------------------------------------
-# Checkout — creates a Stripe Subscription via Checkout Session
+# Checkout — legacy direct Stripe creation is permanently fail-closed
 # ---------------------------------------------------------------------------
 
 @router.post("/subscriptions/checkout")
@@ -174,92 +111,13 @@ async def create_subscription_checkout(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     ensure_minimum_role(current_user, "host")
-    tier = SUBSCRIPTION_TIERS.get(payload.plan_id)
-    if not tier:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid subscription plan.")
-    if payload.plan_id not in PAID_TIER_IDS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This plan does not have a self-serve paid subscription.",
-        )
-
-    # Look up the recurring Stripe Price ID for this tier + cycle
-    price_ids = STRIPE_PRICE_IDS.get(payload.plan_id, {})
-    price_id = price_ids.get(payload.billing_cycle, "")
-    if not price_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Stripe checkout is unavailable for {payload.plan_id}/{payload.billing_cycle}.",
-        )
-
-    _configure_stripe()
-    try:
-        configured_price = stripe.Price.retrieve(price_id)
-        _validate_stripe_price(configured_price, payload.plan_id, payload.billing_cycle)
-    except HTTPException:
-        raise
-    except stripe.error.StripeError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Unable to verify the published plan with Stripe.",
-        )
-
-    # Get or create Stripe Customer
-    customer_id = await _get_or_create_stripe_customer(current_user)
-
-    metadata = {
-        "type": "subscription",
-        "community_id": current_user["community_id"],
-        "user_id": current_user["id"],
-        "user_email": current_user["email"],
-        "plan_id": tier["id"],
-        "plan_name": tier["name"],
-        "billing_cycle": payload.billing_cycle,
-    }
-
-    try:
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[{"price": price_id, "quantity": 1}],
-            mode="subscription",
-            success_url=f"{payload.origin_url.rstrip('/')}/subscription?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{payload.origin_url.rstrip('/')}/subscription",
-            metadata=metadata,
-            subscription_data={"metadata": metadata},
-            allow_promotion_codes=True,
-        )
-    except stripe.error.StripeError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
-
-    # Store a pending subscription record
-    amount = billing_amount(payload.plan_id, payload.billing_cycle)
-    sub_doc = {
-        "id": str(uuid.uuid4()),
-        "community_id": current_user["community_id"],
-        "user_id": current_user["id"],
-        "user_email": current_user["email"],
-        "plan_id": tier["id"],
-        "plan_name": tier["name"],
-        "billing_cycle": payload.billing_cycle,
-        "amount": float(amount),
-        "currency": "usd",
-        "session_id": session.id,
-        "stripe_customer_id": customer_id,
-        "stripe_subscription_id": "",
-        "stripe_price_id": price_id,
-        "status": "pending",
-        "payment_status": "unpaid",
-        "provider": "stripe",
-        "cancel_at_period_end": False,
-        "created_at": now_iso(),
-        "activated_at": None,
-        "expires_at": None,
-        "cancelled_at": None,
-        "current_period_end": None,
-    }
-    await subscriptions_collection.insert_one(sub_doc.copy())
-    return {"url": session.url, "session_id": session.id}
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=(
+            "Direct Stripe subscription checkout is retired. "
+            "Use the verified RevenueCat Billing purchase flow."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -368,14 +226,29 @@ async def cancel_subscription(current_user: dict[str, Any] = Depends(get_current
     if not sub:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active subscription to cancel.")
 
-    # Cancel on Stripe (at period end — user keeps access until then)
+    if sub.get("provider") == "revenuecat":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Manage this subscription through the RevenueCat customer portal.",
+        )
+    if sub.get("provider") != "stripe":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The subscription provider cannot be managed by this legacy endpoint.",
+        )
+
+    # Existing legacy Stripe subscribers retain provider-backed cancellation.
     stripe_sub_id = sub.get("stripe_subscription_id", "")
-    if stripe_sub_id and sub.get("provider") == "stripe":
-        _configure_stripe()
-        try:
-            stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=True)
-        except stripe.error.StripeError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe cancellation error: {str(e)}")
+    if not stripe_sub_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The legacy Stripe subscription is missing its provider identifier.",
+        )
+    _configure_stripe()
+    try:
+        stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=True)
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe cancellation error: {str(e)}")
 
     access_until = sub.get("current_period_end") or sub.get("expires_at") or "the end of your billing period"
 
@@ -414,13 +287,22 @@ async def reactivate_subscription(current_user: dict[str, Any] = Depends(get_cur
     if not sub:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending cancellation to reactivate.")
 
+    if sub.get("provider") != "stripe":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Reactivate this subscription through the RevenueCat customer portal.",
+        )
     stripe_sub_id = sub.get("stripe_subscription_id", "")
-    if stripe_sub_id and sub.get("provider") == "stripe":
-        _configure_stripe()
-        try:
-            stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=False)
-        except stripe.error.StripeError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
+    if not stripe_sub_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The legacy Stripe subscription is missing its provider identifier.",
+        )
+    _configure_stripe()
+    try:
+        stripe.Subscription.modify(stripe_sub_id, cancel_at_period_end=False)
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
 
     await subscriptions_collection.update_one(
         {"id": sub["id"]},
@@ -439,11 +321,23 @@ async def create_customer_portal(
     body: dict,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Create a Stripe Customer Portal session for managing payment methods and invoices."""
+    """Create a portal only for an existing legacy Stripe subscriber."""
     ensure_minimum_role(current_user, "host")
+    sub = await subscriptions_collection.find_one(
+        {
+            "community_id": current_user["community_id"],
+            "provider": "stripe",
+            "stripe_customer_id": {"$exists": True, "$ne": ""},
+        },
+        {"_id": 0, "stripe_customer_id": 1},
+    )
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="RevenueCat subscriptions must be managed through the RevenueCat customer portal.",
+        )
+    customer_id = sub["stripe_customer_id"]
     _configure_stripe()
-
-    customer_id = await _get_or_create_stripe_customer(current_user)
     origin_url = body.get("origin_url", os.environ.get("APP_URL", "https://www.heykindred.org"))
 
     try:
@@ -479,63 +373,6 @@ async def check_feature_access(feature_key: str, current_user: dict[str, Any] = 
     limits = tier.get("limits", {})
     allowed = limits.get(feature_key, False)
     return {"feature_key": feature_key, "allowed": allowed, "tier_id": tier["id"], "tier_name": tier["name"]}
-
-
-# ---------------------------------------------------------------------------
-# Admin: one-time Stripe product/price setup (REMOVE after initial run)
-# ---------------------------------------------------------------------------
-
-@router.post("/subscriptions/admin/setup-stripe-products")
-async def setup_stripe_products(current_user: dict[str, Any] = Depends(get_current_user)):
-    """One-time admin endpoint: create Stripe Products and recurring Prices.
-
-    Returns the env vars to set in Railway. REMOVE this endpoint after use.
-    """
-    ensure_minimum_role(current_user, "host")
-    # Extra safety: only the platform admin can run this
-    admin_email = os.environ.get("PLATFORM_ADMIN_EMAIL", "")
-    if current_user.get("email") != admin_email:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only platform admin can run setup.")
-
-    _configure_stripe()
-
-    env_vars = {}
-    created = []
-
-    for tier_id in PAID_TIER_IDS:
-        tier = SUBSCRIPTION_TIERS[tier_id]
-        product = stripe.Product.create(
-            name=f"Kindred {tier['name']}",
-            description=f"{tier['tagline']} Up to {tier['max_members']} members.",
-            metadata={"kindred_tier": tier_id},
-        )
-
-        monthly_price = stripe.Price.create(
-            product=product.id,
-            unit_amount=price_cents(tier_id, "monthly"),
-            currency="usd",
-            recurring={"interval": "month"},
-            metadata={"kindred_tier": tier_id, "billing_cycle": "monthly"},
-        )
-
-        annual_price = stripe.Price.create(
-            product=product.id,
-            unit_amount=price_cents(tier_id, "annual"),
-            currency="usd",
-            recurring={"interval": "year"},
-            metadata={"kindred_tier": tier_id, "billing_cycle": "annual"},
-        )
-
-        env_vars[f"STRIPE_PRICE_{tier_id.upper()}_MONTHLY"] = monthly_price.id
-        env_vars[f"STRIPE_PRICE_{tier_id.upper()}_ANNUAL"] = annual_price.id
-        created.append({
-            "tier": tier_id,
-            "product_id": product.id,
-            "monthly_price_id": monthly_price.id,
-            "annual_price_id": annual_price.id,
-        })
-
-    return {"status": "success", "env_vars": env_vars, "created": created}
 
 
 # ---------------------------------------------------------------------------

@@ -34,12 +34,16 @@ class TestRevenueCatConfig:
         assert data["bundle_id"] == "com.ubuntumarket.kindred"
         assert "tier_mapping" in data
         assert "seedling" in data["tier_mapping"]
-        assert "sapling" in data["tier_mapping"]
-        assert "oak" in data["tier_mapping"]
-        assert "redwood" in data["tier_mapping"]
+        assert data["tier_mapping"]["sapling_access"] == "sapling"
+        assert data["tier_mapping"]["oak_access"] == "oak"
+        assert data["tier_mapping"]["redwood_access"] == "redwood"
         assert "elder_grove" in data["tier_mapping"]
         assert "premium" in data["tier_mapping"]
-        assert data["platform"] == "ios"
+        assert data["subscription_architecture"] == "revenuecat_billing"
+        assert data["billing_engine"] == "revenuecat"
+        assert data["payment_gateway"] == "stripe"
+        assert set(data["platforms"]) == {"web", "app_store", "play_store"}
+        assert set(data["web_billing"]) == {"sapling", "oak", "redwood"}
         print(f"✓ RevenueCat config OK: bundle_id={data['bundle_id']}")
 
     def test_revenuecat_config_entitlement_ids(self):
@@ -49,6 +53,9 @@ class TestRevenueCatConfig:
         data = resp.json()
         assert "entitlement_ids" in data
         assert "seedling" in data["entitlement_ids"]
+        assert "sapling_access" in data["entitlement_ids"]
+        assert "oak_access" in data["entitlement_ids"]
+        assert "redwood_access" in data["entitlement_ids"]
         assert "premium" in data["entitlement_ids"]
         print(f"✓ Entitlement IDs: {data['entitlement_ids']}")
 

@@ -77,7 +77,14 @@ class TestRevenueCatConfig:
         assert "entitlement_ids" in data
         assert isinstance(data["entitlement_ids"], list)
         # Should have subscription tiers
-        expected_entitlements = ["seedling", "sapling", "oak", "redwood", "elder_grove", "premium"]
+        expected_entitlements = [
+            "seedling",
+            "sapling_access",
+            "oak_access",
+            "redwood_access",
+            "elder_grove",
+            "premium",
+        ]
         for ent in expected_entitlements:
             assert ent in data["entitlement_ids"]
 
@@ -89,7 +96,7 @@ class TestRevenueCatConfig:
         assert "tier_mapping" in data
         tier_mapping = data["tier_mapping"]
         assert tier_mapping.get("seedling") == "seedling"
-        assert tier_mapping.get("oak") == "oak"
+        assert tier_mapping.get("oak_access") == "oak"
         assert tier_mapping.get("premium") == "oak"  # premium maps to oak
 
     def test_revenuecat_config_returns_webhook_url(self):
@@ -99,12 +106,16 @@ class TestRevenueCatConfig:
         data = response.json()
         assert data.get("webhook_url") == "/api/revenuecat/webhook"
 
-    def test_revenuecat_config_returns_platform(self):
-        """GET /api/revenuecat/config returns platform=ios"""
+    def test_revenuecat_config_returns_cross_platform_architecture(self):
+        """GET /api/revenuecat/config names RevenueCat Billing and all stores."""
         response = requests.get(f"{BASE_URL}/api/revenuecat/config")
         assert response.status_code == 200
         data = response.json()
-        assert data.get("platform") == "ios"
+        assert data.get("subscription_architecture") == "revenuecat_billing"
+        assert data.get("billing_engine") == "revenuecat"
+        assert data.get("payment_gateway") == "stripe"
+        assert set(data.get("platforms", [])) == {"web", "app_store", "play_store"}
+        assert set(data.get("web_billing", {})) == {"sapling", "oak", "redwood"}
 
 
 class TestRevenueCatOfferings:

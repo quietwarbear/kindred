@@ -1,5 +1,5 @@
 /**
- * RevenueCat integration for iOS in-app purchases via Capacitor
+ * RevenueCat integration for App Store and Google Play purchases via Capacitor
  * Falls back gracefully on web platforms
  */
 import { Capacitor } from "@capacitor/core";
@@ -8,20 +8,31 @@ import { Purchases } from "@revenuecat/purchases-capacitor";
 import { apiRequest } from "@/lib/api";
 import { calculateSavings } from "@/lib/pricing";
 
-const REVENUECAT_API_KEY = process.env.REACT_APP_REVENUECAT_IOS_KEY;
+const REVENUECAT_API_KEYS = {
+    ios: process.env.REACT_APP_REVENUECAT_IOS_KEY,
+    android: process.env.REACT_APP_REVENUECAT_ANDROID_KEY,
+};
 
-let productMappingPromise = null;
+let revenueCatConfigPromise = null;
 
-export const getRevenueCatProductMapping = async () => {
-    if (!productMappingPromise) {
-          productMappingPromise = apiRequest("/revenuecat/config")
-            .then((config) => config?.product_mapping || {})
+export const getRevenueCatConfig = async () => {
+    if (!revenueCatConfigPromise) {
+          revenueCatConfigPromise = apiRequest("/revenuecat/config")
             .catch((error) => {
-              productMappingPromise = null;
+              revenueCatConfigPromise = null;
               throw error;
             });
     }
-    return productMappingPromise;
+    return revenueCatConfigPromise;
+};
+
+export const getRevenueCatProductMapping = async () => {
+    const config = await getRevenueCatConfig();
+    const platform = Capacitor.getPlatform();
+    const providerPlatform = platform === "android" ? "play_store" : "app_store";
+    return config?.product_mapping_by_platform?.[providerPlatform]
+      || config?.product_mapping
+      || {};
 };
 
 let revenueCatInitialized = false;
@@ -33,7 +44,7 @@ let initPromise = null;
 const RC_INIT_TIMEOUT_MS = 30000;
 
 /**
- * Initialize RevenueCat SDK (iOS only)
+ * Initialize RevenueCat SDK on supported native stores
  * Safe to call on web - will no-op.
  * Re-entrant: returns the same promise if already in progress.
  * Has a timeout so it never hangs forever.
@@ -45,22 +56,22 @@ export const initializeRevenueCat = async () => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    // Only initialize on iOS
-    if (!isNative || platform !== "ios") {
-          console.log("[Kindred] RevenueCat: skipping init (not iOS native)");
+    if (!isNative || !["ios", "android"].includes(platform)) {
+          console.log("[Kindred] RevenueCat: skipping init (not a supported native store)");
           return false;
     }
 
-    if (!REVENUECAT_API_KEY) {
-          console.warn("[Kindred] RevenueCat: REACT_APP_REVENUECAT_IOS_KEY not configured");
+    const apiKey = REVENUECAT_API_KEYS[platform];
+    if (!apiKey) {
+          console.warn(`[Kindred] RevenueCat: ${platform} API key is not configured`);
           return false;
     }
 
     const initCore = (async () => {
           try {
-                  console.log("[Kindred] RevenueCat: configuring iOS purchases");
+                  console.log(`[Kindred] RevenueCat: configuring ${platform} purchases`);
                   await Purchases.configure({
-                            apiKey: REVENUECAT_API_KEY,
+                            apiKey,
                             appUserID: null,
                   });
                   revenueCatInitialized = true;
@@ -113,14 +124,14 @@ export const ensureInitialized = async () => {
 };
 
 /**
- * Fetch offerings from RevenueCat (iOS only)
+ * Fetch offerings from RevenueCat on supported native stores
  * Returns structured offerings or null on web/error
  */
 export const fetchOfferings = async () => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (!isNative || platform !== "ios") return null;
+    if (!isNative || !["ios", "android"].includes(platform)) return null;
 
     const ready = await ensureInitialized();
     if (!ready) return null;
@@ -134,25 +145,6 @@ export const fetchOfferings = async () => {
     }
 };
 
-const allOfferingPackages = (offerings) => {
-    const packages = [];
-    const seen = new Set();
-    const availableOfferings = [
-          ...Object.values(offerings?.all || {}),
-          offerings?.current,
-    ].filter(Boolean);
-    for (const offering of availableOfferings) {
-          for (const pkg of offering.availablePackages || []) {
-                  const productId = pkg?.product?.identifier;
-                  if (productId && !seen.has(productId)) {
-                          seen.add(productId);
-                          packages.push(pkg);
-                  }
-          }
-    }
-    return packages;
-};
-
 /**
  * Return StoreKit-localized display prices for every mapped package.
  * Savings are calculated only when both package amounts use the same currency.
@@ -161,9 +153,10 @@ export const getLocalizedRevenueCatPricing = async (productMapping) => {
     const offerings = await fetchOfferings();
     if (!offerings) return {};
 
-    const packages = allOfferingPackages(offerings);
     const localized = {};
     for (const [planId, intervals] of Object.entries(productMapping || {})) {
+          const offering = offerings?.all?.[`${planId}_access`];
+          const packages = offering?.availablePackages || [];
           const planPricing = {};
           for (const billingInterval of ["monthly", "annual"]) {
                   const productId = intervals?.[billingInterval];
@@ -204,13 +197,13 @@ export const getLocalizedRevenueCatPricing = async (productMapping) => {
 
 /**
  * Get package (product) from offerings by product ID
- * iOS only
+ * Supported native stores only
  */
-export const getPackageByProductId = async (productId) => {
+export const getPackageByProductId = async (productId, expectedOfferingId) => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (!isNative || platform !== "ios") return null;
+    if (!isNative || !["ios", "android"].includes(platform)) return null;
 
     const ready = await ensureInitialized();
     if (!ready) return null;
@@ -218,23 +211,10 @@ export const getPackageByProductId = async (productId) => {
     try {
           const offerings = await Purchases.getOfferings();
 
-      if (offerings?.current?.availablePackages) {
-              const found = offerings.current.availablePackages.find(
-                        (pkg) => pkg.product.identifier === productId
-                      );
-              if (found) return found;
-      }
-
-      if (offerings?.all) {
-              for (const offering of Object.values(offerings.all)) {
-                        const found = (offering.availablePackages || []).find(
-                                    (pkg) => pkg.product.identifier === productId
-                                  );
-                        if (found) return found;
-              }
-      }
-
-      return null;
+      const offering = offerings?.all?.[expectedOfferingId];
+      return (offering?.availablePackages || []).find(
+        (pkg) => pkg.product.identifier === productId,
+      ) || null;
     } catch {
           console.error("[Kindred] Error fetching package");
           return null;
@@ -242,15 +222,20 @@ export const getPackageByProductId = async (productId) => {
 };
 
 /**
- * Make purchase on iOS
+ * Make a purchase through the active native store
  * Handles transaction and receipt validation.
  */
-export const makePurchase = async (productId, billingInterval, expectedEntitlementId) => {
+export const makePurchase = async (
+  productId,
+  billingInterval,
+  expectedOfferingId,
+  expectedEntitlementId,
+) => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (!isNative || platform !== "ios") {
-          throw new Error("In-app purchases are only available on iOS.");
+    if (!isNative || !["ios", "android"].includes(platform)) {
+          throw new Error("In-app purchases are only available in a supported native app.");
     }
 
     const ready = await ensureInitialized();
@@ -261,7 +246,7 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
     }
 
     try {
-      const pkg = await getPackageByProductId(productId);
+      const pkg = await getPackageByProductId(productId, expectedOfferingId);
           if (!pkg) {
                   throw new Error(
                             "This subscription product is not yet available. Please try again later."
@@ -270,7 +255,7 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
       const expectedPackageIdentifier =
         billingInterval === "monthly" ? "$rc_monthly" : billingInterval === "annual" ? "$rc_annual" : "";
       if (!expectedPackageIdentifier || pkg.identifier !== expectedPackageIdentifier) {
-        throw new Error("The App Store product does not match the selected billing interval.");
+        throw new Error("The store product does not match the selected billing interval.");
       }
 
       const purchaseResult = await Purchases.purchasePackage({ aPackage: pkg });
@@ -297,13 +282,13 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
 
 /**
  * Sync customer ID with RevenueCat (call this after user login)
- * iOS only
+ * Supported native stores only
  */
 export const syncRevenueCatUser = async (userId) => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (!isNative || platform !== "ios") return;
+    if (!isNative || !["ios", "android"].includes(platform)) return;
 
     const ready = await ensureInitialized();
     if (!ready) return;
@@ -324,21 +309,21 @@ export const openRevenueCatSubscriptionManagement = async () => {
     const result = await Purchases.getCustomerInfo();
     const managementURL = result?.customerInfo?.managementURL;
     if (!managementURL) {
-          throw new Error("The App Store subscription management link is unavailable.");
+          throw new Error("The store subscription management link is unavailable.");
     }
     await Browser.open({ url: managementURL, presentationStyle: "popover" });
 };
 
 /**
- * Restore previously purchased subscriptions (iOS only)
+ * Restore previously purchased subscriptions on supported native stores
  * Apple requires a visible "Restore Purchases" button per guideline 3.1.1
  */
 export const restorePurchases = async () => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (!isNative || platform !== "ios") {
-          throw new Error("Restore purchases is only available on iOS.");
+    if (!isNative || !["ios", "android"].includes(platform)) {
+          throw new Error("Restore purchases is only available in a supported native app.");
     }
 
     const ready = await ensureInitialized();
@@ -361,8 +346,9 @@ export const restorePurchases = async () => {
 };
 
 /**
- * Check if running on iOS
+ * Check if running on a supported native store
  */
-export const isIOS = () => {
-    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
+export const isNativePurchasePlatform = () => {
+    return Capacitor.isNativePlatform()
+      && ["ios", "android"].includes(Capacitor.getPlatform());
 };

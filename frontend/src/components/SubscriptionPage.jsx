@@ -18,13 +18,20 @@ import { toast } from "@/components/ui/sonner";
 import {
   ensureInitialized,
   getLocalizedRevenueCatPricing,
+  getRevenueCatConfig,
   getRevenueCatProductMapping,
-  isIOS,
+  isNativePurchasePlatform,
   makePurchase,
   openRevenueCatSubscriptionManagement,
   restorePurchases,
   syncRevenueCatUser,
 } from "@/lib/revenuecat";
+import {
+  getVerifiedRevenueCatWebPricing,
+  isRevenueCatWebCancellation,
+  makeRevenueCatWebPurchase,
+  openRevenueCatWebSubscriptionManagement,
+} from "@/lib/revenuecatWeb";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
 
@@ -68,14 +75,15 @@ const PlanCard = ({
   isLoading,
   currentTierId,
   localizedBillingOption,
-  nativePricing,
-  nativePricingLoading,
+  providerPricing,
+  providerPricingLoading,
+  purchaseAvailable,
 }) => {
   const Icon = TIER_ICONS[plan.id] || Leaf;
   const isElderGrove = plan.id === "elder-grove";
   const isFree = Boolean(plan.billing_options?.free);
   const billingOption = plan.billing_options?.[billingCycle];
-  const displayedBillingOption = nativePricing ? localizedBillingOption : billingOption;
+  const displayedBillingOption = providerPricing ? localizedBillingOption : billingOption;
   const isPopular = plan.id === "oak";
 
   const tierOrder = ["seedling", "sapling", "oak", "redwood", "elder-grove"];
@@ -129,16 +137,16 @@ const PlanCard = ({
           </>
         ) : !displayedBillingOption ? (
           <p className="text-sm font-semibold text-destructive">
-            {nativePricing
-              ? nativePricingLoading
-                ? "Loading App Store price…"
-                : "App Store price unavailable"
+            {providerPricing
+              ? providerPricingLoading
+                ? "Loading provider price…"
+                : "Provider price unavailable"
               : "Pricing unavailable"}
           </p>
         ) : (
           <>
             <p className={`font-display text-3xl font-bold ${TIER_ACCENT[plan.id]}`} data-testid={`plan-price-${plan.id}`}>
-              {nativePricing ? displayedBillingOption.formattedPrice : formatPrice(displayedBillingOption.amount)}
+              {providerPricing ? displayedBillingOption.formattedPrice : formatPrice(displayedBillingOption.amount)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {billingCycle === "annual" ? "Billed once per year" : "Billed every month"}
@@ -146,7 +154,7 @@ const PlanCard = ({
             {billingCycle === "annual" && displayedBillingOption.savings && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Save{" "}
-                {nativePricing
+                {providerPricing
                   ? formatLocalizedPrice(
                     displayedBillingOption.savings.amount,
                     displayedBillingOption.savings.currencyCode,
@@ -183,7 +191,7 @@ const PlanCard = ({
       ) : (
         <Button
           className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
-          disabled={isLoading || (!isFree && !displayedBillingOption)}
+          disabled={isLoading || (!isFree && (!displayedBillingOption || !purchaseAvailable))}
           onClick={() => onSelect(plan.id)}
           data-testid={`plan-select-${plan.id}`}
         >
@@ -192,7 +200,13 @@ const PlanCard = ({
           ) : (
             <ChevronRight className="mr-1 h-4 w-4" />
           )}
-          {isDowngrade ? "Downgrade" : isUpgrade ? "Upgrade" : "Select Plan"}
+          {!isFree && !purchaseAvailable
+            ? "Purchase unavailable"
+            : isDowngrade
+              ? "Downgrade"
+              : isUpgrade
+                ? "Upgrade"
+                : "Select Plan"}
         </Button>
       )}
     </div>
@@ -302,7 +316,9 @@ export const SubscriptionPage = ({ token, user }) => {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [localizedPricing, setLocalizedPricing] = useState({});
-  const [nativePricingLoading, setNativePricingLoading] = useState(isIOS());
+  const [providerPricingLoading, setProviderPricingLoading] = useState(Boolean(user?.id));
+  const [webBillingMapping, setWebBillingMapping] = useState({});
+  const [webBillingReady, setWebBillingReady] = useState(false);
 
   const isHost = user?.role === "host";
 
@@ -330,8 +346,8 @@ export const SubscriptionPage = ({ token, user }) => {
     loadPlans();
     loadCurrentSub();
 
-    // Initialize and sync user with RevenueCat on iOS
-    if (isIOS() && user?.id) {
+    // Validate the active RevenueCat catalog before enabling any paid purchase.
+    if (isNativePurchasePlatform() && user?.id) {
       const initRC = async () => {
         // Try up to 3 times with increasing delays
         for (let attempt = 1; attempt <= 3; attempt++) {
@@ -345,7 +361,7 @@ export const SubscriptionPage = ({ token, user }) => {
               console.error("[Kindred] Unable to load localized App Store pricing");
               setLocalizedPricing({});
             }
-            setNativePricingLoading(false);
+            setProviderPricingLoading(false);
             return;
           }
           // Wait before retrying (2s, 4s)
@@ -355,10 +371,29 @@ export const SubscriptionPage = ({ token, user }) => {
         }
         // All retries exhausted — still mark as ready so user can attempt purchase
         // (makePurchase will show a specific error if init truly failed)
-        setNativePricingLoading(false);
+        setProviderPricingLoading(false);
         console.warn("[Kindred] RevenueCat init failed after 3 attempts");
       };
       initRC();
+    } else if (user?.id) {
+      const initRevenueCatBilling = async () => {
+        try {
+          const config = await getRevenueCatConfig();
+          const mapping = config?.web_billing || {};
+          setWebBillingMapping(mapping);
+          setLocalizedPricing(await getVerifiedRevenueCatWebPricing(user.id, mapping));
+          setWebBillingReady(true);
+        } catch {
+          console.error("[Kindred] RevenueCat Billing catalog verification failed");
+          setLocalizedPricing({});
+          setWebBillingReady(false);
+        } finally {
+          setProviderPricingLoading(false);
+        }
+      };
+      initRevenueCatBilling();
+    } else {
+      setProviderPricingLoading(false);
     }
   }, [loadPlans, loadCurrentSub, user?.id]);
 
@@ -423,11 +458,8 @@ export const SubscriptionPage = ({ token, user }) => {
     }
     setCheckoutLoading(planId);
     try {
-      // Determine if we're on iOS and should use RevenueCat
-      const useRevenueCat = isIOS();
-
-      if (useRevenueCat) {
-        // iOS: Use RevenueCat for native IAP
+      if (isNativePurchasePlatform()) {
+        // Native: RevenueCat resolves the App Store or Play Store product.
         const productMapping = await getRevenueCatProductMapping();
         const productIdMap = productMapping[planId];
         if (!productIdMap?.[billingCycle]) {
@@ -447,7 +479,13 @@ export const SubscriptionPage = ({ token, user }) => {
             return;
           }
 
-          const result = await makePurchase(productId, billingCycle, planId);
+          const expectedAccessId = `${planId}_access`;
+          const result = await makePurchase(
+            productId,
+            billingCycle,
+            expectedAccessId,
+            expectedAccessId,
+          );
 
           if (result.success) {
             toast.success("Purchase completed! Activating your plan...");
@@ -462,7 +500,7 @@ export const SubscriptionPage = ({ token, user }) => {
           }
         } catch (error) {
           console.error("[Kindred] RevenueCat purchase failed");
-          // Check if user cancelled (common for iOS purchases)
+          // User cancellation is expected on either native store.
           const msg = error?.message || "";
           if (
             msg.includes("cancelled") ||
@@ -480,18 +518,29 @@ export const SubscriptionPage = ({ token, user }) => {
           }
         }
       } else {
-        // Web: Use existing Stripe backend flow
-        const res = await apiRequest("/subscriptions/checkout", {
-          method: "POST",
-          token,
-          data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
-        });
-        if (res.url) {
-          window.location.href = res.url;
+        // RevenueCat owns the web product and workflow; Stripe is only its gateway.
+        if (!webBillingReady) {
+          throw new Error(
+            "RevenueCat Billing is unavailable because its live catalog does not match Kindred pricing.",
+          );
         }
+        await makeRevenueCatWebPurchase({
+          appUserId: user?.id,
+          email: user?.email,
+          mapping: webBillingMapping,
+          planId,
+          billingInterval: billingCycle,
+        });
+        await apiRequest("/revenuecat/validate", { method: "POST", token, data: {} });
+        toast.success("Purchase completed! Your plan is active.");
+        await loadCurrentSub();
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Unable to start checkout.");
+      if (isRevenueCatWebCancellation(err)) {
+        toast.info("Purchase was cancelled.");
+      } else {
+        toast.error(err.response?.data?.detail || err.message || "Unable to start checkout.");
+      }
     } finally {
       setCheckoutLoading(null);
     }
@@ -501,9 +550,14 @@ export const SubscriptionPage = ({ token, user }) => {
     if (!window.confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.")) return;
     setCancelLoading(true);
     try {
-      if (isIOS() && currentSub?.provider === "revenuecat") {
-        await openRevenueCatSubscriptionManagement();
-        toast.info("Use the App Store subscription screen to turn off renewal.");
+      if (currentSub?.provider === "revenuecat") {
+        if (isNativePurchasePlatform()) {
+          await openRevenueCatSubscriptionManagement();
+          toast.info("Use your device subscription screen to manage renewal.");
+        } else {
+          await openRevenueCatWebSubscriptionManagement(user?.id);
+          toast.info("Use the RevenueCat billing portal to manage renewal.");
+        }
         return;
       }
       const res = await apiRequest("/subscriptions/cancel", { method: "POST", token });
@@ -581,8 +635,8 @@ export const SubscriptionPage = ({ token, user }) => {
           </button>
         </div>
 
-        {/* Restore Purchases — iOS only (Apple guideline 3.1.1) */}
-        {isIOS() && (
+        {/* Restore purchases on supported native stores. */}
+        {isNativePurchasePlatform() && (
           <div className="mt-4">
             <button
               className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
@@ -608,6 +662,17 @@ export const SubscriptionPage = ({ token, user }) => {
         <div className="archival-card flex items-center gap-3 border-primary/30 bg-primary/5" data-testid="payment-processing-banner">
           <Loader2 className="h-5 w-5 animate-spin text-primary" />
           <p className="text-sm font-medium text-foreground">Verifying your payment... This may take a moment.</p>
+        </div>
+      )}
+
+      {!isNativePurchasePlatform() && !providerPricingLoading && !webBillingReady && (
+        <div className="archival-card border-destructive/30 bg-destructive/5" role="status">
+          <p className="text-sm font-medium text-foreground">
+            Web subscriptions are temporarily unavailable while the RevenueCat Billing catalog is reconciled.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No checkout will start until every plan, interval, price, and entitlement matches the published catalog.
+          </p>
         </div>
       )}
 
@@ -659,16 +724,17 @@ export const SubscriptionPage = ({ token, user }) => {
             isLoading={checkoutLoading === plan.id}
             key={plan.id}
             localizedBillingOption={localizedPricing[plan.id]?.[billingCycle]}
-            nativePricing={isIOS()}
-            nativePricingLoading={nativePricingLoading}
+            providerPricing={isNativePurchasePlatform() || webBillingReady}
+            providerPricingLoading={providerPricingLoading}
+            purchaseAvailable={isNativePurchasePlatform() || webBillingReady}
             onSelect={handleSelectPlan}
             plan={plan}
           />
         ))}
       </div>
 
-      {/* Add-Ons Section — hidden on iOS per App Store guideline 3.1.1 */}
-      {!isIOS() && <AddOnsSection token={token} />}
+      {/* Add-ons are a separate one-time Stripe flow and stay outside native apps. */}
+      {!isNativePurchasePlatform() && <AddOnsSection token={token} />}
 
       {/* FAQ / Notes */}
       <div className="archival-card" data-testid="subscription-faq">
@@ -686,7 +752,7 @@ export const SubscriptionPage = ({ token, user }) => {
           Paid plans are auto-renewable subscriptions. The applicable checkout or App Store confirmation
           shows the complete charge and interval before purchase. Subscriptions renew unless auto-renew is
           turned off. You can manage renewal through your device's subscription settings for App Store
-          purchases or through the web billing portal for Stripe purchases.
+          purchases or through the RevenueCat web billing portal for web purchases.
         </p>
         <div className="flex items-center justify-center gap-4 text-xs">
           <a href="/terms" className="text-primary hover:underline">Terms of Service</a>

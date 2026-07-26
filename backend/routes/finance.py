@@ -23,7 +23,7 @@ from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreate
 from pricing import (
     BILLING_ENVIRONMENT,
     billing_amount,
-    resolve_stripe_price,
+    resolve_legacy_stripe_subscription_price,
     stripe_api_key_matches_environment,
 )
 from subscription_lifecycle import PAID_ACCESS_STATUSES, should_apply_provider_event
@@ -445,7 +445,7 @@ async def stripe_webhook(request: Request):
                 try:
                     stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
                     price_id = stripe_sub["items"]["data"][0]["price"]["id"]
-                    resolved_plan, resolved_cycle = resolve_stripe_price(price_id)
+                    resolved_plan, resolved_cycle = resolve_legacy_stripe_subscription_price(price_id)
                     period_end = datetime.fromtimestamp(
                         stripe_sub.current_period_end,
                         tz=timezone.utc,
@@ -528,7 +528,7 @@ async def stripe_webhook(request: Request):
                 try:
                     stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
                     price_id = stripe_sub["items"]["data"][0]["price"]["id"]
-                    plan_id, billing_cycle = resolve_stripe_price(price_id)
+                    plan_id, billing_cycle = resolve_legacy_stripe_subscription_price(price_id)
                     period_end = datetime.fromtimestamp(
                         stripe_sub.current_period_end,
                         tz=timezone.utc,
@@ -669,7 +669,7 @@ async def stripe_webhook(request: Request):
                     )
                 new_price_id = items[0].get("price", {}).get("id", "")
                 try:
-                    new_tier, new_cycle = resolve_stripe_price(new_price_id)
+                    new_tier, new_cycle = resolve_legacy_stripe_subscription_price(new_price_id)
                 except ValueError as exc:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,

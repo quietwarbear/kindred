@@ -64,7 +64,7 @@ def resolve_revenuecat_subscriber(
     subscriber: dict,
     now: Optional[datetime] = None,
 ) -> Optional[tuple[str, str, str, str, str]]:
-    """Resolve active subscriber state to one canonical native purchase."""
+    """Resolve active subscriber state to one canonical cross-platform purchase."""
     entitlements = subscriber.get("entitlements", {})
     subscriptions = subscriber.get("subscriptions", {})
     known = []

@@ -1,5 +1,6 @@
 """Fast, offline regression checks for commercial-readiness invariants."""
 
+import json
 import sys
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -15,17 +16,18 @@ from pricing import (  # noqa: E402
     BILLING_INTERVALS,
     BILLING_ENVIRONMENT,
     BILLING_PROVIDER_MATRIX,
+    LEGACY_STRIPE_SUBSCRIPTION_PRICE_IDS,
     PAID_TIER_IDS,
     PRICING_MATRIX,
     REVENUECAT_ENTITLEMENT_TO_TIER,
     REVENUECAT_PRODUCT_IDS,
-    STRIPE_PRICE_IDS,
+    REVENUECAT_PRODUCT_IDS_BY_PLATFORM,
     TIER_ORDER,
     annual_savings,
     price_cents,
+    revenuecat_billing_mapping,
     resolve_revenuecat_product,
-    resolve_stripe_price,
-    stripe_price_expectation,
+    resolve_legacy_stripe_subscription_price,
     stripe_api_key_matches_environment,
     validate_catalog,
 )
@@ -55,8 +57,8 @@ def test_canonical_pricing_matches_live_schedule_and_provider_mappings():
     }
     assert set(PRICING_MATRIX["seedling"]) == {"free"}
     assert not PRICING_MATRIX["seedling"]["free"]["recurring"]
-    assert set(STRIPE_PRICE_IDS) == set(PAID_TIER_IDS)
     assert set(REVENUECAT_PRODUCT_IDS) == set(PAID_TIER_IDS)
+    assert set(REVENUECAT_PRODUCT_IDS_BY_PLATFORM) == {"web", "app_store", "play_store"}
     assert price_cents("sapling", "monthly") == 999
     assert price_cents("redwood", "annual") == 35999
     assert annual_savings("sapling") == {
@@ -69,12 +71,14 @@ def test_canonical_pricing_matches_live_schedule_and_provider_mappings():
         assert set(BILLING_PROVIDER_MATRIX[tier_id]) == set(BILLING_INTERVALS)
         for interval in BILLING_INTERVALS:
             provider = BILLING_PROVIDER_MATRIX[tier_id][interval]
-            assert resolve_stripe_price(provider["stripe"]["price_id"]) == (tier_id, interval)
-            assert resolve_revenuecat_product(provider["revenuecat"]["product_id"]) == (
-                tier_id,
-                interval,
-                tier_id,
-            )
+            assert set(provider) == {"revenuecat"}
+            assert provider["revenuecat"]["entitlement_id"] == f"{tier_id}_access"
+            for product_id in provider["revenuecat"]["products"].values():
+                assert resolve_revenuecat_product(product_id) == (
+                    tier_id,
+                    interval,
+                    f"{tier_id}_access",
+                )
 
 
 def test_catalog_rejects_missing_or_contradictory_provider_intervals():
@@ -84,34 +88,74 @@ def test_catalog_rejects_missing_or_contradictory_provider_intervals():
         validate_catalog(provider_matrix=missing)
 
     crossed_entitlement = deepcopy(BILLING_PROVIDER_MATRIX)
-    crossed_entitlement["sapling"]["annual"]["revenuecat"]["entitlement_id"] = "oak"
-    with pytest.raises(RuntimeError, match="wrong native entitlement"):
+    crossed_entitlement["sapling"]["annual"]["revenuecat"]["entitlement_id"] = "oak_access"
+    with pytest.raises(RuntimeError, match="wrong entitlement"):
         validate_catalog(provider_matrix=crossed_entitlement)
 
     duplicate_identifier = deepcopy(BILLING_PROVIDER_MATRIX)
-    duplicate_identifier["redwood"]["annual"]["stripe"]["price_id"] = (
-        duplicate_identifier["redwood"]["monthly"]["stripe"]["price_id"]
+    duplicate_identifier["redwood"]["annual"]["revenuecat"]["products"]["web"] = (
+        duplicate_identifier["redwood"]["monthly"]["revenuecat"]["products"]["web"]
     )
-    with pytest.raises(RuntimeError, match="must be unique"):
+    with pytest.raises(RuntimeError, match="unique"):
         validate_catalog(provider_matrix=duplicate_identifier)
 
 
-def test_remote_stripe_expectations_detect_swapped_or_contradictory_prices():
-    monthly = stripe_price_expectation("oak", "monthly")
-    annual = stripe_price_expectation("oak", "annual")
-    assert monthly == {
-        "active": True,
-        "livemode": True,
-        "currency": "usd",
-        "unit_amount": 1999,
-        "interval": "month",
-        "tier": "oak",
-        "cycle": "monthly",
+def test_revenuecat_billing_expectations_cover_every_paid_plan_interval():
+    mapping = revenuecat_billing_mapping()
+    expected_web_products = {
+        "sapling": {
+            "monthly": "sapling_monthly_web_v2",
+            "annual": "sapling_annual_web_v2",
+        },
+        "oak": {
+            "monthly": "oak_monthly_web_v2",
+            "annual": "oak_annual_web_v2",
+        },
+        "redwood": {
+            "monthly": "redwood_monthly_web_v2",
+            "annual": "redwood_annual_web_v2",
+        },
     }
-    assert annual["unit_amount"] == 17999
-    assert annual["interval"] == "year"
-    assert annual["cycle"] == "annual"
-    assert monthly != annual
+    assert set(mapping) == set(PAID_TIER_IDS)
+    for tier_id in PAID_TIER_IDS:
+        assert set(mapping[tier_id]) == set(BILLING_INTERVALS)
+        for interval in BILLING_INTERVALS:
+            expected = mapping[tier_id][interval]
+            assert expected["product_id"] == expected_web_products[tier_id][interval]
+            assert expected["offering_id"] == f"{tier_id}_access"
+            assert expected["entitlement_id"] == f"{tier_id}_access"
+            assert expected["package_id"] == (
+                "$rc_monthly" if interval == "monthly" else "$rc_annual"
+            )
+            assert expected["amount_micros"] == price_cents(tier_id, interval) * 10_000
+            assert expected["currency"] == "USD"
+            assert expected["period"] == ("P1M" if interval == "monthly" else "P1Y")
+
+    assert all(
+        expected["product_id"].endswith("_web_v2")
+        for intervals in mapping.values()
+        for expected in intervals.values()
+    )
+
+
+def test_direct_stripe_subscription_prices_are_legacy_only():
+    assert set(LEGACY_STRIPE_SUBSCRIPTION_PRICE_IDS) == set(PAID_TIER_IDS)
+    for tier_id in PAID_TIER_IDS:
+        for interval in BILLING_INTERVALS:
+            price_id = LEGACY_STRIPE_SUBSCRIPTION_PRICE_IDS[tier_id][interval]
+            assert resolve_legacy_stripe_subscription_price(price_id) == (tier_id, interval)
+
+    subscriptions = read("backend/routes/subscriptions.py")
+    assert "Direct Stripe subscription checkout is retired" in subscriptions
+    direct_checkout = subscriptions.split(
+        '@router.post("/subscriptions/checkout")',
+        1,
+    )[1].split(
+        '@router.get("/subscriptions/checkout/status/{session_id}")',
+        1,
+    )[0]
+    assert "stripe.checkout.Session.create(" not in direct_checkout
+    assert "setup-stripe-products" not in subscriptions
     assert BILLING_ENVIRONMENT == "production"
     assert stripe_api_key_matches_environment("sk_live_example")
     assert not stripe_api_key_matches_environment("sk_test_example")
@@ -121,13 +165,17 @@ def test_revenuecat_product_entitlement_and_interval_resolution_fails_closed():
     expiration_ms = 2_000_000_000_000
     event = {
         "product_id": "com.kindred.oak.annual",
-        "entitlement_ids": ["oak"],
+        "entitlement_ids": ["oak_access"],
         "expiration_at_ms": expiration_ms,
     }
-    assert resolve_revenuecat_webhook_purchase(event)[:3] == ("oak", "annual", "oak")
+    assert resolve_revenuecat_webhook_purchase(event)[:3] == (
+        "oak",
+        "annual",
+        "oak_access",
+    )
 
     with pytest.raises(ValueError, match="entitlement"):
-        resolve_revenuecat_webhook_purchase({**event, "entitlement_ids": ["sapling"]})
+        resolve_revenuecat_webhook_purchase({**event, "entitlement_ids": ["sapling_access"]})
     with pytest.raises(ValueError, match="Unknown RevenueCat product"):
         resolve_revenuecat_webhook_purchase({**event, "product_id": "com.kindred.unknown"})
 
@@ -139,12 +187,12 @@ def test_revenuecat_subscriber_rejects_multiple_or_unmapped_active_products():
         "subscriptions": {
             "com.kindred.sapling.monthly": {"expires_date": future},
         },
-        "entitlements": {"sapling": {"expires_date": future}},
+        "entitlements": {"sapling_access": {"expires_date": future}},
     }
     assert resolve_revenuecat_subscriber(subscriber, now)[:4] == (
         "sapling",
         "monthly",
-        "sapling",
+        "sapling_access",
         "com.kindred.sapling.monthly",
     )
     contradictory = deepcopy(subscriber)
@@ -199,6 +247,54 @@ def test_native_prices_and_savings_are_storekit_localized():
     assert "getLocalizedRevenueCatPricing" in subscription_page
     assert "localizedBillingOption" in subscription_page
     assert "formatLocalizedPrice" in subscription_page
+    assert 'offerings?.all?.[`${planId}_access`]' in revenuecat
+    assert "expectedOfferingId" in revenuecat
+
+
+def test_local_storekit_fixture_matches_the_canonical_matrix():
+    storekit = json.loads(read("frontend/ios/App/app64a12dfad0.storekit"))
+    subscriptions = [
+        subscription
+        for group in storekit["subscriptionGroups"]
+        for subscription in group["subscriptions"]
+    ]
+    actual = {
+        subscription["productID"]: (
+            subscription["displayPrice"],
+            subscription["recurringSubscriptionPeriod"],
+        )
+        for subscription in subscriptions
+    }
+    assert actual == {
+        "com.kindred.sapling.monthly": ("9.99", "P1M"),
+        "com.kindred.sapling.annual": ("89.99", "P1Y"),
+        "com.kindred.oak.monthly": ("19.99", "P1M"),
+        "com.kindred.oak.annual": ("179.99", "P1Y"),
+        "com.kindred.redwood.monthly": ("39.99", "P1M"),
+        "com.kindred.redwood.annual": ("359.99", "P1Y"),
+    }
+
+
+def test_web_subscription_uses_revenuecat_billing_and_fails_closed_on_drift():
+    web = read("frontend/src/lib/revenuecatWeb.js")
+    subscription_page = read("frontend/src/components/SubscriptionPage.jsx")
+    subscriptions = read("backend/routes/subscriptions.py")
+
+    assert '@revenuecat/purchases-js' in web
+    for invariant in (
+        "offering",
+        "package",
+        "product",
+        "billing interval",
+        "currency",
+        "amount",
+        "free trial",
+        "introductory price",
+    ):
+        assert invariant in web
+    assert "makeRevenueCatWebPurchase" in subscription_page
+    assert 'apiRequest("/subscriptions/checkout"' not in subscription_page
+    assert "Direct Stripe subscription checkout is retired" in subscriptions
 
 
 def test_checkout_interval_and_authenticated_toggle_are_explicit():

@@ -17,7 +17,7 @@ from db import (
     users_collection,
 )
 from security import create_access_token, decode_token
-from pricing import STRIPE_PRICE_IDS, SUBSCRIPTION_TIERS, TIER_ORDER
+from pricing import SUBSCRIPTION_TIERS, TIER_ORDER
 from subscription_lifecycle import PAID_ACCESS_STATUSES, subscription_has_paid_access
 
 bearer_scheme = HTTPBearer(auto_error=False)

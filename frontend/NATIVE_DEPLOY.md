@@ -98,19 +98,26 @@ cd android
 - Fill in store listing, screenshots, privacy policy
 - Submit for review
 
-## RevenueCat Mobile Setup
+## RevenueCat subscription setup
 
 ### iOS
 1. In RevenueCat dashboard, add iOS app with bundle ID `com.ubuntumarket.kindred`
 2. Add App Store Connect API key in RevenueCat
-3. Create Products matching entitlement IDs: `seedling`, `sapling`, `oak`, `redwood`, `elder_grove`
+3. Map monthly and annual products to `sapling_access`, `oak_access`, or `redwood_access`
 4. The Kindred backend webhook is already configured at:
    `https://your-domain.com/api/revenuecat/webhook`
 
 ### Android
 1. Add Android app with package name `com.ubuntumarket.kindred`
 2. Add Google Play service account JSON in RevenueCat
-3. Create matching products in Google Play Console
+3. Map monthly/yearly base plans to the same three access entitlements
+4. Send a Play Console test notification and verify RevenueCat's **Last received** timestamp
+
+### Web
+1. Use RevenueCat Billing products, not imported Stripe Billing Prices
+2. Map the verified versioned products `sapling_monthly_web_v2` through `redwood_annual_web_v2` to the matching access entitlement and `$rc_monthly`/`$rc_annual` package
+3. Verify all six products against the canonical amount, USD currency, period, and absence of unsupported trial/intro pricing before setting `REACT_APP_REVENUECAT_WEB_KEY`
+4. Stripe is RevenueCat Billing's payment gateway; do not re-enable Kindred's retired direct Stripe subscription checkout
 
 ## Native Plugin Permissions (Info.plist / AndroidManifest.xml)
 

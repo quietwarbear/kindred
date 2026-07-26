@@ -162,8 +162,8 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 401
 
     # ── POST /api/subscriptions/checkout ──
-    def test_checkout_creates_session_and_returns_url(self, auth_token):
-        """Verify POST /api/subscriptions/checkout creates Stripe checkout session."""
+    def test_direct_stripe_checkout_is_retired(self, auth_token):
+        """New web subscriptions must start in RevenueCat Billing."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "sapling",
@@ -171,11 +171,8 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert "session_id" in data
-        assert data["url"].startswith("http")
+        assert response.status_code == 410
+        assert "RevenueCat Billing" in response.json().get("detail", "")
 
     def test_checkout_blocks_non_host_users(self, member_token):
         """Verify POST /api/subscriptions/checkout blocks non-host users with 403."""
@@ -191,8 +188,8 @@ class TestSubscriptionEndpoints:
         
         assert response.status_code == 403
 
-    def test_checkout_returns_400_for_invalid_plan(self, auth_token):
-        """Verify POST /api/subscriptions/checkout returns 400 for invalid plan_id."""
+    def test_direct_checkout_stays_retired_for_invalid_plan(self, auth_token):
+        """The retired route never falls through to provider selection."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "invalid-tier-xyz",
@@ -200,11 +197,10 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 400
-        assert "Invalid subscription plan" in response.json().get("detail", "")
+        assert response.status_code == 410
 
-    def test_checkout_returns_400_for_elder_grove(self, auth_token):
-        """Verify POST /api/subscriptions/checkout returns 400 for elder-grove (contact sales)."""
+    def test_direct_checkout_stays_retired_for_elder_grove(self, auth_token):
+        """The retired route cannot create custom-plan checkout."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "elder-grove",
@@ -212,11 +208,10 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 400
-        assert "Contact sales" in response.json().get("detail", "") or "Elder Grove" in response.json().get("detail", "")
+        assert response.status_code == 410
 
-    def test_checkout_works_with_annual_billing(self, auth_token):
-        """Verify checkout works with annual billing cycle."""
+    def test_direct_checkout_stays_retired_for_annual_billing(self, auth_token):
+        """Annual web purchase also belongs to RevenueCat Billing."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "oak",
@@ -224,10 +219,7 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert "session_id" in data
+        assert response.status_code == 410
 
     # ── GET /api/subscriptions/checkout/status/{session_id} ──
     def test_checkout_status_returns_404_for_invalid_session(self, auth_token):
@@ -236,30 +228,6 @@ class TestSubscriptionEndpoints:
         response = requests.get(f"{BASE_URL}/api/subscriptions/checkout/status/invalid-session-id-xyz", headers=headers)
         
         assert response.status_code == 404
-
-    def test_checkout_status_returns_status_for_valid_session(self, auth_token):
-        """Verify GET /api/subscriptions/checkout/status returns status for valid session."""
-        headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
-        
-        # First create a paid checkout session; Seedling has no billing interval.
-        checkout_response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
-            "plan_id": "sapling",
-            "billing_cycle": "monthly",
-            "origin_url": "https://kindred-gather.preview.emergentagent.com"
-        }, headers=headers)
-        
-        if checkout_response.status_code != 200:
-            pytest.skip("Unable to create checkout session")
-            
-        session_id = checkout_response.json().get("session_id")
-        
-        # Now check status
-        status_response = requests.get(f"{BASE_URL}/api/subscriptions/checkout/status/{session_id}", headers=headers)
-        
-        assert status_response.status_code == 200
-        data = status_response.json()
-        assert "status" in data
-        assert "payment_status" in data
 
     # ── POST /api/subscriptions/cancel ──
     def test_cancel_requires_auth(self):

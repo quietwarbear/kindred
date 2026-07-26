@@ -1,4 +1,4 @@
-"""RevenueCat billing integration routes for mobile app store purchases."""
+"""RevenueCat Billing and app-store purchase lifecycle routes."""
 
 import os
 from datetime import datetime, timezone
@@ -11,7 +11,9 @@ from dependencies import get_current_user, now_iso
 from pricing import (
     REVENUECAT_ENTITLEMENT_TO_TIER,
     REVENUECAT_PRODUCT_IDS,
+    REVENUECAT_PRODUCT_IDS_BY_PLATFORM,
     SUBSCRIPTION_TIERS,
+    revenuecat_billing_mapping,
 )
 from subscription_lifecycle import (
     resolve_revenuecat_subscriber,
@@ -93,7 +95,7 @@ async def _apply_revenuecat_event(
 
 @router.post("/revenuecat/webhook")
 async def revenuecat_webhook(request: Request):
-    """Handle RevenueCat webhook events for mobile purchases."""
+    """Handle RevenueCat Billing, App Store, and Google Play lifecycle events."""
     if not REVENUECAT_WEBHOOK_SECRET:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -170,12 +172,14 @@ async def revenuecat_webhook(request: Request):
 
 
 @router.post("/revenuecat/validate")
-async def validate_mobile_receipt(
+async def validate_revenuecat_purchase(
     body: dict,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    """Validate a mobile purchase receipt and update subscription status.
-    Called from mobile app after a purchase is made via RevenueCat SDK.
+    """Validate RevenueCat customer state and update subscription status.
+
+    Called after a RevenueCat Web SDK or native store purchase and during
+    provider reconciliation.
     """
     import httpx
 
@@ -262,7 +266,7 @@ BUNDLE_ID = "com.ubuntumarket.kindred"
 
 @router.get("/revenuecat/offerings")
 async def revenuecat_offerings(current_user: dict[str, Any] = Depends(get_current_user)):
-    """Fetch current product offerings from RevenueCat for display in mobile app."""
+    """Fetch current subscriber state for RevenueCat-backed clients."""
     import httpx
 
     if not REVENUECAT_API_KEY:
@@ -385,12 +389,18 @@ async def restore_purchases(current_user: dict[str, Any] = Depends(get_current_u
 
 @router.get("/revenuecat/config")
 async def revenuecat_config():
-    """Return mobile SDK configuration for the Kindred app."""
+    """Return fail-closed RevenueCat mappings for web and native clients."""
     return {
+        "subscription_architecture": "revenuecat_billing",
+        "billing_engine": "revenuecat",
+        "payment_gateway": "stripe",
         "bundle_id": BUNDLE_ID,
-        "platform": "ios",
+        "platforms": ["web", "app_store", "play_store"],
         "entitlement_ids": list(ENTITLEMENT_TO_TIER.keys()),
         "tier_mapping": ENTITLEMENT_TO_TIER,
+        # Backward-compatible App Store mapping for existing native builds.
         "product_mapping": REVENUECAT_PRODUCT_IDS,
+        "product_mapping_by_platform": REVENUECAT_PRODUCT_IDS_BY_PLATFORM,
+        "web_billing": revenuecat_billing_mapping(),
         "webhook_url": "/api/revenuecat/webhook",
     }
