@@ -8,6 +8,7 @@ response history.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -15,6 +16,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ACTIVITY_RESPONSES = {"coming", "not-coming", "maybe"}
 OVERALL_RESPONSES = {"going", "some", "maybe", "not-going"}
+
+
+def safe_roster_row_key(scope_id: str, respondent_id: str) -> str:
+    """Return a stable UI key without exposing member IDs or invite tokens."""
+    source = f"{scope_id}:{respondent_id}".encode("utf-8")
+    return hashlib.sha256(source).hexdigest()[:24]
 
 
 def valid_timezone(value: str) -> bool:

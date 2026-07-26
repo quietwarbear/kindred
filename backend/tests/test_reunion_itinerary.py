@@ -9,6 +9,7 @@ from itinerary import (
     parse_local_datetime,
     published_activities,
     replace_respondent_activity_responses,
+    safe_roster_row_key,
     valid_timezone,
     validate_activity,
 )
@@ -187,3 +188,12 @@ def test_billing_and_contribution_routes_are_not_part_of_itinerary_implementatio
     assert "subscriptions/checkout" not in public_route
     assert "stripe" not in events_route.lower()
     assert "revenuecat" not in events_route.lower()
+
+
+def test_roster_row_keys_do_not_expose_invitation_tokens_or_member_ids():
+    invite_token = "invite:7f4da824-100f-4f01-bf61-e14ed96fa792"
+    row_key = safe_roster_row_key("activity-qa", invite_token)
+    assert len(row_key) == 24
+    assert invite_token not in row_key
+    assert "activity-qa" not in row_key
+    assert row_key == safe_roster_row_key("activity-qa", invite_token)

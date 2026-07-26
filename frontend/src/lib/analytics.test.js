@@ -10,7 +10,13 @@ jest.mock("posthog-js", () => ({
 }));
 
 import posthog from "posthog-js";
-import { initAnalytics, REUNION_EVENTS, trackReunionEvent } from "./analytics";
+import {
+  initAnalytics,
+  redactInvitationPaths,
+  REUNION_EVENTS,
+  sanitizeAnalyticsEvent,
+  trackReunionEvent,
+} from "./analytics";
 
 beforeEach(() => {
   posthog.capture.mockClear();
@@ -99,6 +105,44 @@ test("masks autocaptured text and element attributes", () => {
     expect.objectContaining({
       mask_all_text: true,
       mask_all_element_attributes: true,
+      before_send: sanitizeAnalyticsEvent,
     })
   );
+});
+
+test("redacts invitation tokens from analytics URL properties", () => {
+  const event = sanitizeAnalyticsEvent({
+    event: "invite_opened",
+    properties: {
+      $current_url: "https://heykindred.org/rsvp/private-token?source=email",
+      $pathname: "/rsvp/private-token",
+      nested: {
+        referrer: "https://heykindred.org/rsvp/another-private-token#reply",
+      },
+    },
+  });
+  expect(event.properties).toEqual({
+    $current_url: "https://heykindred.org/rsvp/[redacted]?source=email",
+    $pathname: "/rsvp/[redacted]",
+    nested: {
+      referrer: "https://heykindred.org/rsvp/[redacted]#reply",
+    },
+  });
+  expect(JSON.stringify(event)).not.toContain("private-token");
+  expect(redactInvitationPaths("https://heykindred.org/pricing")).toBe(
+    "https://heykindred.org/pricing"
+  );
+});
+
+test("disables automatic capture on secure RSVP routes", () => {
+  window.history.replaceState({}, "", "/rsvp/private-token");
+  initAnalytics();
+  expect(posthog.init).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      capture_pageview: false,
+      autocapture: false,
+    })
+  );
+  window.history.replaceState({}, "", "/");
 });

@@ -29,6 +29,7 @@ from itinerary import (
     overlap_pairs,
     parse_local_datetime,
     replace_respondent_activity_responses,
+    safe_roster_row_key,
     valid_timezone,
     validate_activity,
 )
@@ -828,7 +829,10 @@ async def reunion_operations(
         activity_id = activity.get("id", "")
         rosters[activity_id] = [
             {
-                "row_key": f"{activity_id}:{response.get('respondent_id', '')}",
+                "row_key": safe_roster_row_key(
+                    activity_id,
+                    response.get("respondent_id", ""),
+                ),
                 "display_name": response.get("display_name") or "Invited guest",
                 "status": response.get("status", "no-response"),
                 "party_size": max(1, int(response.get("party_size", 1) or 1)),
@@ -839,7 +843,10 @@ async def reunion_operations(
     recent = sorted(
         [
             {
-                "row_key": f"{item.get('activity_id', 'overall')}:{item.get('respondent_id') or item.get('user_id', '')}",
+                "row_key": safe_roster_row_key(
+                    item.get("activity_id", "overall"),
+                    item.get("respondent_id") or item.get("user_id", ""),
+                ),
                 "display_name": item.get("display_name") or item.get("user_name") or "Invited guest",
                 "status": item.get("status", ""),
                 "updated_at": item.get("updated_at", ""),
