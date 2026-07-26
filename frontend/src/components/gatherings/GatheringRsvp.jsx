@@ -29,6 +29,7 @@ export const GatheringRsvp = ({ event, token, onUpdate }) => {
       <div className="mt-4 space-y-3">
         <select className="field-input w-full" data-testid="gatherings-rsvp-status-select" onChange={(e) => setStatus(e.target.value)} value={status}>
           <option value="going">Going</option>
+          <option value="some">Attending some activities</option>
           <option value="maybe">Maybe</option>
           <option value="not-going">Not going</option>
         </select>

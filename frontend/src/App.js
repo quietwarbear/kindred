@@ -12,6 +12,8 @@ import { OnboardingPage } from "@/components/OnboardingPage";
 import { PricingPage } from "@/components/PricingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
+import { ReunionActivationPage } from "@/components/ReunionActivationPage";
+import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
 import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
@@ -60,6 +62,14 @@ const ProtectedApp = ({ session, onLogout, onSessionRefresh }) => {
       user={session.user}
     />
   );
+};
+
+const AuthRoute = ({ session, authPage }) => {
+  const location = useLocation();
+  const intent = new URLSearchParams(location.search).get("intent");
+  if (!session?.token) return authPage;
+  if (intent === "reunion") return <Navigate replace to="/reunion/start" />;
+  return <Navigate replace to="/dashboard" />;
 };
 
 function App() {
@@ -273,8 +283,13 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
+            <Route element={<ReunionStartPage session={session} />} path="/reunion/start" />
             <Route
-              element={session?.token ? <Navigate replace to="/dashboard" /> : publicAuthPage}
+              element={<ReunionActivationPage session={session} />}
+              path="/reunion/activate/:eventId"
+            />
+            <Route
+              element={<AuthRoute authPage={publicAuthPage} session={session} />}
               path="/login"
             />
             <Route

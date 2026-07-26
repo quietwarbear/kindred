@@ -2,9 +2,10 @@
 
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from courtyard_helpers import build_planning_checklist, build_recurring_dates, build_role_suggestions
 from db import events_collection, users_collection
@@ -21,7 +22,19 @@ from dependencies import (
     GATHERING_TEMPLATES,
 )
 from ai_gathering import generate_gathering_plan
+from itinerary import (
+    ACTIVITY_RESPONSES,
+    activity_summaries,
+    normalize_activity,
+    overlap_pairs,
+    parse_local_datetime,
+    replace_respondent_activity_responses,
+    safe_roster_row_key,
+    valid_timezone,
+    validate_activity,
+)
 from models import (
+    ActivityRSVPRequest,
     AgendaItemRequest,
     ChecklistItemRequest,
     ChecklistToggleRequest,
@@ -40,6 +53,61 @@ from models import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _event_with_activity_summaries(event_doc: dict[str, Any]) -> dict[str, Any]:
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    return event_doc
+
+
+def _agenda_activity_from_payload(
+    payload: AgendaItemRequest,
+    *,
+    activity_id: str,
+    reunion_timezone: str,
+    created_at: str,
+) -> dict[str, Any]:
+    activity = normalize_activity(
+        payload.model_dump(),
+        activity_id=activity_id,
+    )
+    activity["created_at"] = created_at
+    activity["updated_at"] = created_at
+    if activity.get("start_at") or activity.get("end_at"):
+        errors = validate_activity(activity, reunion_timezone)
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_itinerary_activity", "errors": errors},
+            )
+    return activity
+
+
+def _event_invite_message(event_doc: dict[str, Any], rsvp_link: str) -> str:
+    published = [
+        item for item in event_doc.get("agenda", [])
+        if item.get("visibility") == "published"
+    ]
+    date_label = event_doc.get("start_at", "")
+    if event_doc.get("end_at"):
+        date_label = f"{date_label} through {event_doc['end_at']}"
+    activity_label = (
+        f" {len(published)} planned activities."
+        if published else ""
+    )
+    featured = next((item for item in published if item.get("featured")), published[0] if published else None)
+    featured_label = f" First up: {featured.get('title')}." if featured else ""
+    virtual_label = (
+        f" Join online: {event_doc.get('zoom_link', '')}"
+        if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link")
+        else ""
+    )
+    return (
+        f"You're invited to {event_doc['title']} · {date_label} · "
+        f"{event_doc.get('location') or 'location to be announced'}."
+        f"{activity_label}{featured_label}{virtual_label} "
+        f"View the full schedule and tell us which activities you're joining: {rsvp_link}"
+    )
 
 
 @router.get("/gatherings/templates")
@@ -83,13 +151,13 @@ async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
         {"community_id": current_user["community_id"], "hidden_from_user_ids": {"$ne": current_user["id"]}},
         {"_id": 0},
     ).sort("start_at", 1).to_list(200)
-    return events
+    return [_event_with_activity_summaries(event) for event in events]
 
 
 @router.get("/events/{event_id}", response_model=EventPublic)
 async def get_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     event_doc = await get_event_for_user(event_id, current_user)
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
 
 
 @router.put("/events/{event_id}", response_model=EventPublic)
@@ -103,6 +171,15 @@ async def update_event(event_id: str, payload: EventUpdateRequest, current_user:
         updates["description"] = payload.description.strip()
     if payload.start_at:
         updates["start_at"] = payload.start_at
+    if payload.end_at:
+        updates["end_at"] = payload.end_at
+    if payload.timezone:
+        if not valid_timezone(payload.timezone):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Primary timezone is not valid.",
+            )
+        updates["timezone"] = payload.timezone
     if payload.location:
         updates["location"] = payload.location.strip()
     if payload.gathering_format:
@@ -115,10 +192,20 @@ async def update_event(event_id: str, payload: EventUpdateRequest, current_user:
         updates["special_focus"] = payload.special_focus.strip()
     if payload.map_url is not None and payload.map_url != "":
         updates["map_url"] = payload.map_url.strip()
+    prospective_timezone = updates.get("timezone", event_doc.get("timezone", "UTC"))
+    prospective_start = updates.get("start_at", event_doc.get("start_at", ""))
+    prospective_end = updates.get("end_at", event_doc.get("end_at", ""))
+    parsed_start = parse_local_datetime(prospective_start, prospective_timezone)
+    parsed_end = parse_local_datetime(prospective_end, prospective_timezone)
+    if prospective_end and parsed_start and parsed_end and parsed_end < parsed_start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Gathering end must not be before its start.",
+        )
     if updates:
         await events_collection.update_one({"id": event_id}, {"$set": updates})
         event_doc.update(updates)
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
 
 
 @router.delete("/events/{event_id}")
@@ -151,6 +238,18 @@ async def ai_plan_gathering(payload: GatheringPlanRequest, current_user: dict[st
 @router.post("/events", response_model=EventPublic)
 async def create_event(payload: EventCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
+    if not valid_timezone(payload.timezone):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Primary timezone is not valid.",
+        )
+    parsed_start = parse_local_datetime(payload.start_at, payload.timezone)
+    parsed_end = parse_local_datetime(payload.end_at, payload.timezone)
+    if payload.end_at and parsed_start and parsed_end and parsed_end < parsed_start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Gathering end must not be before its start.",
+        )
     subyard_name = ""
     if payload.subyard_id:
         subyard_doc = await get_subyard_for_user(payload.subyard_id, current_user)
@@ -158,13 +257,31 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
 
     assigned_roles = payload.assigned_roles or build_role_suggestions(payload.event_template)
     series_id = str(uuid.uuid4()) if payload.recurrence_frequency != "none" else ""
+    created_at = now_iso()
+    normalized_agenda = []
+    for source in payload.agenda or []:
+        if not isinstance(source, dict) or not source.get("title"):
+            continue
+        agenda_payload = AgendaItemRequest(**source)
+        normalized_agenda.append(
+            _agenda_activity_from_payload(
+                agenda_payload,
+                activity_id=str(uuid.uuid4()),
+                reunion_timezone=payload.timezone,
+                created_at=created_at,
+            )
+        )
+
     event_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
         "created_by": current_user["id"],
+        "created_by_name": current_user["full_name"],
         "title": payload.title.strip(),
         "description": payload.description.strip(),
         "start_at": payload.start_at,
+        "end_at": payload.end_at,
+        "timezone": payload.timezone,
         "location": payload.location.strip(),
         "map_url": (payload.map_url or "").strip(),
         "event_template": payload.event_template,
@@ -188,10 +305,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
             for role in assigned_roles
         ],
-        "agenda": [
-            {"id": str(uuid.uuid4()), "time_label": a.get("time_label", ""), "title": a.get("title", ""), "notes": a.get("notes", "")}
-            for a in (payload.agenda or []) if isinstance(a, dict) and a.get("title")
-        ],
+        "agenda": normalized_agenda,
+        "activity_rsvps": [],
+        "activity_rsvp_summaries": {},
         "volunteer_slots": [
             {"id": str(uuid.uuid4()), "title": s.get("title", ""), "needed_count": int(s.get("needed_count", 1) or 1), "assigned_members": []}
             for s in (payload.volunteer_slots or []) if isinstance(s, dict) and s.get("title")
@@ -201,8 +317,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             for p in (payload.potluck_items or []) if str(p).strip()
         ],
         "rsvp_records": [],
-        "created_at": now_iso(),
+        "created_at": created_at,
     }
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
     await events_collection.insert_one(event_doc.copy())
 
     recurring_dates = build_recurring_dates(payload.start_at, payload.recurrence_frequency)
@@ -223,6 +340,8 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
                         for role in assigned_roles
                     ],
                     "agenda": [],
+                    "activity_rsvps": [],
+                    "activity_rsvp_summaries": {},
                     "volunteer_slots": [],
                     "potluck_items": [],
                     "rsvp_records": [],
@@ -243,7 +362,7 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             related_id=event_doc["id"],
             audience_scope="community",
         )
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
 
 
 @router.post("/events/{event_id}/rsvp", response_model=EventPublic)
@@ -275,7 +394,7 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
         related_id=event_id,
         audience_scope="event",
     )
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
 
 
 @router.post("/events/{event_id}/reveal", response_model=EventPublic)
@@ -342,7 +461,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                     "rsvp_status": "pending",
                     "note": (payload.note or "").strip(),
                     "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
-                    "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else "") + f" RSVP without the app: {rsvp_link}",
+                    "share_message": _event_invite_message(event_doc, rsvp_link),
                     "delivery_status": "ready-for-email",
                     "created_at": now_iso(),
                 }
@@ -365,7 +484,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                 "rsvp_status": "pending",
                 "note": (payload.note or "").strip(),
                 "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
-                "share_message": f"You're invited to {event_doc['title']} on {event_doc['start_at']}." + (f" Join via Zoom: {event_doc.get('zoom_link', '')}" if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link") else "") + f" RSVP without the app: {rsvp_link}",
+                "share_message": _event_invite_message(event_doc, rsvp_link),
                 "delivery_status": "ready-for-email",
                 "created_at": now_iso(),
             }
@@ -373,7 +492,14 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         existing_emails.add(email)
 
     event_doc["event_invites"] = invite_records
-    await events_collection.update_one({"id": event_id}, {"$set": {"event_invites": invite_records}})
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$set": {
+            "event_invites": invite_records,
+            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+        }},
+    )
     await log_notification_event(
         community_id=current_user["community_id"],
         actor_name=current_user["full_name"],
@@ -383,7 +509,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         related_id=event_id,
         audience_scope="event",
     )
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
 
 
 @router.post("/events/{event_id}/role-assignments", response_model=EventPublic)
@@ -422,10 +548,338 @@ async def add_agenda_item(event_id: str, payload: AgendaItemRequest, current_use
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     agenda = event_doc.get("agenda", [])
-    agenda.append({"id": str(uuid.uuid4()), "time_label": payload.time_label.strip(), "title": payload.title.strip(), "notes": (payload.notes or "").strip()})
+    agenda.append(
+        _agenda_activity_from_payload(
+            payload,
+            activity_id=str(uuid.uuid4()),
+            reunion_timezone=event_doc.get("timezone", "UTC"),
+            created_at=now_iso(),
+        )
+    )
+    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("time_label", ""), item.get("title", "")))
+    event_doc["agenda"] = agenda
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$set": {
+            "agenda": agenda,
+            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+        }},
+    )
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.put("/events/{event_id}/agenda/{activity_id}", response_model=EventPublic)
+async def update_agenda_activity(
+    event_id: str,
+    activity_id: str,
+    payload: AgendaItemRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    agenda = event_doc.get("agenda", [])
+    existing = next((item for item in agenda if item.get("id") == activity_id), None)
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+
+    replacement = _agenda_activity_from_payload(
+        payload,
+        activity_id=activity_id,
+        reunion_timezone=event_doc.get("timezone", "UTC"),
+        created_at=existing.get("created_at") or now_iso(),
+    )
+    changed_schedule = any(
+        existing.get(key) != replacement.get(key)
+        for key in (
+            "start_at", "end_at", "timezone", "venue_name", "venue_address",
+            "venue_detail", "map_url", "virtual_link", "location_tba",
+        )
+    )
+    history = list(existing.get("revision_history") or [])
+    if changed_schedule:
+        history.append({
+            "changed_at": now_iso(),
+            "start_at": existing.get("start_at", ""),
+            "end_at": existing.get("end_at", ""),
+            "timezone": existing.get("timezone", ""),
+            "venue_name": existing.get("venue_name", ""),
+            "venue_address": existing.get("venue_address", ""),
+            "venue_detail": existing.get("venue_detail", ""),
+        })
+    replacement["revision_history"] = history[-20:]
+    replacement["updated_at"] = now_iso()
+    agenda = [replacement if item.get("id") == activity_id else item for item in agenda]
+    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("time_label", ""), item.get("title", "")))
     event_doc["agenda"] = agenda
     await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
-    return event_doc
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.post("/events/{event_id}/agenda/{activity_id}/duplicate", response_model=EventPublic)
+async def duplicate_agenda_activity(
+    event_id: str,
+    activity_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    source = next((item for item in event_doc.get("agenda", []) if item.get("id") == activity_id), None)
+    if not source:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+    duplicate = normalize_activity(
+        {
+            **source,
+            "title": f"{source.get('title', 'Activity')} copy",
+            "visibility": "draft",
+            "featured": False,
+            "revision_history": [],
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        },
+        activity_id=str(uuid.uuid4()),
+    )
+    agenda = [*event_doc.get("agenda", []), duplicate]
+    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("title", "")))
+    event_doc["agenda"] = agenda
+    await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.post("/events/{event_id}/agenda/{activity_id}/publish", response_model=EventPublic)
+async def publish_agenda_activity(
+    event_id: str,
+    activity_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    agenda = event_doc.get("agenda", [])
+    activity = next((item for item in agenda if item.get("id") == activity_id), None)
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+    errors = validate_activity(activity, event_doc.get("timezone", "UTC"))
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_itinerary_activity", "errors": errors},
+        )
+    activity["visibility"] = "published"
+    activity["updated_at"] = now_iso()
+    await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.delete("/events/{event_id}/agenda/{activity_id}", response_model=EventPublic)
+async def delete_agenda_activity(
+    event_id: str,
+    activity_id: str,
+    confirm_responses: bool = Query(False),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    activity = next((item for item in event_doc.get("agenda", []) if item.get("id") == activity_id), None)
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+    response_count = sum(
+        1 for item in event_doc.get("activity_rsvps", [])
+        if item.get("activity_id") == activity_id
+    )
+    if response_count and not confirm_responses:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "activity_has_responses",
+                "response_count": response_count,
+                "message": "Confirm before removing an activity with responses.",
+            },
+        )
+    if response_count:
+        activity["visibility"] = "archived"
+        activity["archived_at"] = now_iso()
+    else:
+        event_doc["agenda"] = [
+            item for item in event_doc.get("agenda", [])
+            if item.get("id") != activity_id
+        ]
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$set": {
+            "agenda": event_doc.get("agenda", []),
+            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+        }},
+    )
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.post("/events/{event_id}/activity-rsvp", response_model=EventPublic)
+async def update_activity_rsvp(
+    event_id: str,
+    payload: ActivityRSVPRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    event_doc = await get_event_for_user(event_id, current_user)
+    activity = next(
+        (
+            item for item in event_doc.get("agenda", [])
+            if item.get("id") == payload.activity_id
+            and item.get("visibility") == "published"
+            and item.get("attendance_requested", True)
+        ),
+        None,
+    )
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activity RSVP is unavailable.")
+    deadline = parse_local_datetime(
+        activity.get("rsvp_deadline", ""),
+        activity.get("timezone") or event_doc.get("timezone", "UTC"),
+    )
+    if deadline and datetime.now(timezone.utc) > deadline:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "activity_rsvp_closed",
+                "message": "The RSVP deadline has passed for this activity.",
+            },
+        )
+    if payload.status not in ACTIVITY_RESPONSES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid activity response.")
+    replacement = {
+        "activity_id": payload.activity_id,
+        "respondent_id": current_user["id"],
+        "respondent_type": "member",
+        "display_name": current_user["full_name"],
+        "status": payload.status,
+        "party_size": max(1, payload.party_size),
+        "updated_at": now_iso(),
+        "via": "authenticated",
+    }
+    responses = replace_respondent_activity_responses(
+        event_doc.get("activity_rsvps", []),
+        current_user["id"],
+        [replacement],
+    )
+    event_doc["activity_rsvps"] = responses
+    event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$set": {
+            "activity_rsvps": responses,
+            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+        }},
+    )
+    return _event_with_activity_summaries(event_doc)
+
+
+@router.get("/events/{event_id}/operations")
+async def reunion_operations(
+    event_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    agenda = [
+        item for item in event_doc.get("agenda", [])
+        if item.get("visibility") != "archived"
+    ]
+    responses = event_doc.get("activity_rsvps", [])
+    overall = event_doc.get("rsvp_records", [])
+    summaries = activity_summaries(event_doc)
+    activity_days = {
+        item.get("id", ""): str(item.get("start_at", ""))[:10]
+        for item in agenda if item.get("id") and item.get("start_at")
+    }
+    day_people: dict[str, dict[str, dict[str, Any]]] = {}
+    for response in responses:
+        day = activity_days.get(response.get("activity_id", ""))
+        respondent_id = response.get("respondent_id", "")
+        if not day or not respondent_id:
+            continue
+        existing_person = day_people.setdefault(day, {}).get(respondent_id, {})
+        response_status = response.get("status", "no-response")
+        combined_status = (
+            "coming"
+            if "coming" in {existing_person.get("status"), response_status}
+            else "maybe"
+            if "maybe" in {existing_person.get("status"), response_status}
+            else response_status
+        )
+        day_people[day][respondent_id] = {
+            "status": combined_status,
+            "party_size": max(
+                int(existing_person.get("party_size", 1)),
+                int(response.get("party_size", 1) or 1),
+            ),
+        }
+    day_summaries = {
+        day: {
+            "coming": sum(1 for person in people.values() if person["status"] == "coming"),
+            "maybe": sum(1 for person in people.values() if person["status"] == "maybe"),
+            "party_size": sum(
+                person["party_size"] for person in people.values()
+                if person["status"] == "coming"
+            ),
+        }
+        for day, people in day_people.items()
+    }
+    rosters = {}
+    for activity in agenda:
+        activity_id = activity.get("id", "")
+        rosters[activity_id] = [
+            {
+                "row_key": safe_roster_row_key(
+                    activity_id,
+                    response.get("respondent_id", ""),
+                ),
+                "display_name": response.get("display_name") or "Invited guest",
+                "status": response.get("status", "no-response"),
+                "party_size": max(1, int(response.get("party_size", 1) or 1)),
+                "updated_at": response.get("updated_at", ""),
+            }
+            for response in responses if response.get("activity_id") == activity_id
+        ]
+    recent = sorted(
+        [
+            {
+                "row_key": safe_roster_row_key(
+                    item.get("activity_id", "overall"),
+                    item.get("respondent_id") or item.get("user_id", ""),
+                ),
+                "display_name": item.get("display_name") or item.get("user_name") or "Invited guest",
+                "status": item.get("status", ""),
+                "updated_at": item.get("updated_at", ""),
+            }
+            for item in [*responses, *overall]
+        ],
+        key=lambda item: item.get("updated_at", ""),
+        reverse=True,
+    )[:10]
+    return {
+        "event_id": event_id,
+        "timezone": event_doc.get("timezone", "UTC"),
+        "total_invitees": len(event_doc.get("event_invites", [])),
+        "unanswered_invitations": sum(
+            1 for invite in event_doc.get("event_invites", [])
+            if invite.get("rsvp_status", "pending") == "pending"
+        ),
+        "overall": {
+            response: sum(1 for item in overall if item.get("status") == response)
+            for response in ("going", "some", "maybe", "not-going")
+        },
+        "activity_summaries": summaries,
+        "day_summaries": day_summaries,
+        "activity_rosters": rosters,
+        "overlaps": overlap_pairs(agenda, event_doc.get("timezone", "UTC")),
+        "missing_venue_activity_ids": [
+            item.get("id") for item in agenda
+            if not item.get("location_tba")
+            and not item.get("venue_name")
+            and not item.get("virtual_link")
+        ],
+        "recent_changes": recent,
+    }
 
 
 @router.post("/events/{event_id}/checklist-items", response_model=EventPublic)

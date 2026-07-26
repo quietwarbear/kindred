@@ -16,21 +16,30 @@ SECURITY (do not relax without review):
   account and grants no access.
 """
 
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from db import communities_collection, events_collection, users_collection
 from dependencies import now_iso
+from itinerary import (
+    ACTIVITY_RESPONSES,
+    activity_summaries,
+    parse_local_datetime,
+    published_activities,
+    replace_respondent_activity_responses,
+)
 
 router = APIRouter(prefix="/api/public")
 
 
 class PublicRSVPRequest(BaseModel):
-    status: Literal["going", "maybe", "not-going"]
+    status: Literal["going", "some", "maybe", "not-going"]
     guests: int = 0
+    activity_responses: dict[str, Literal["coming", "not-coming", "maybe"]] = Field(default_factory=dict)
 
 
 async def _find_event_and_invite(token: str):
@@ -43,6 +52,43 @@ async def _find_event_and_invite(token: str):
 
 def _public_view(event: dict, invite: dict) -> dict:
     fmt = event.get("gathering_format", "in-person")
+    summaries = activity_summaries(event)
+    invite_respondent_id = f"invite:{invite.get('id', '')}"
+    own_activity_responses = {
+        response.get("activity_id", ""): response.get("status", "")
+        for response in event.get("activity_rsvps", [])
+        if response.get("respondent_id") == invite_respondent_id
+    }
+    activities = []
+    for activity in published_activities(event):
+        activity_id = activity.get("id", "")
+        deadline = parse_local_datetime(
+            activity.get("rsvp_deadline", ""),
+            activity.get("timezone") or event.get("timezone", "UTC"),
+        )
+        response_open = not deadline or datetime.now(timezone.utc) <= deadline
+        activities.append({
+            "id": activity_id,
+            "title": activity.get("title", ""),
+            "description": activity.get("description", ""),
+            "start_at": activity.get("start_at", ""),
+            "end_at": activity.get("end_at", ""),
+            "timezone": activity.get("timezone") or event.get("timezone", "UTC"),
+            "venue_name": activity.get("venue_name", ""),
+            "venue_address": activity.get("venue_address", ""),
+            "venue_detail": activity.get("venue_detail", ""),
+            "map_url": activity.get("map_url", ""),
+            "virtual_link": activity.get("virtual_link", ""),
+            "location_tba": bool(activity.get("location_tba", False)),
+            "capacity": activity.get("capacity"),
+            "rsvp_deadline": activity.get("rsvp_deadline", ""),
+            "response_open": response_open,
+            "attendance_requested": bool(activity.get("attendance_requested", True)),
+            "notes": activity.get("notes", ""),
+            "featured": bool(activity.get("featured", False)),
+            "attendance": summaries.get(activity_id, {}),
+            "my_response": own_activity_responses.get(activity_id, "no-response"),
+        })
     return {
         "invite_id": invite.get("id", ""),
         "invitee_name": invite.get("invitee_name", ""),
@@ -50,10 +96,15 @@ def _public_view(event: dict, invite: dict) -> dict:
         "gathering": {
             "title": event.get("title", ""),
             "start_at": event.get("start_at", ""),
+            "end_at": event.get("end_at", ""),
+            "timezone": event.get("timezone", "UTC"),
             "location": event.get("location", ""),
             "gathering_format": fmt,
             "zoom_link": event.get("zoom_link", "") if fmt in {"online", "hybrid"} else "",
             "description": event.get("description", ""),
+            "event_template": event.get("event_template", "custom"),
+            "activity_count": len(activities),
+            "activities": activities,
         },
     }
 
@@ -69,6 +120,14 @@ async def public_rsvp_view(token: str):
     )
     view = _public_view(event, invite)
     view["community_name"] = community.get("name", "") if community else ""
+    organizer = await users_collection.find_one(
+        {"id": event.get("created_by"), "community_id": event.get("community_id")},
+        {"_id": 0, "full_name": 1},
+    )
+    view["invited_by_name"] = (
+        event.get("created_by_name")
+        or (organizer or {}).get("full_name", "")
+    )
     return view
 
 
@@ -95,9 +154,80 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
         if i.get("id") == invite["id"]:
             i["rsvp_status"] = payload.status
 
+    published_by_id = {
+        item.get("id"): item for item in published_activities(event)
+        if item.get("attendance_requested", True)
+    }
+    invalid_activity_ids = [
+        activity_id for activity_id, response in payload.activity_responses.items()
+        if activity_id not in published_by_id or response not in ACTIVITY_RESPONSES
+    ]
+    if invalid_activity_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "invalid_activity_response",
+                "message": "One or more activity responses are unavailable.",
+            },
+        )
+
+    existing_own_responses = {
+        response.get("activity_id"): response.get("status")
+        for response in event.get("activity_rsvps", [])
+        if response.get("respondent_id") == rsvp_uid
+    }
+    closed_activity_ids = []
+    for activity_id, response in payload.activity_responses.items():
+        activity = published_by_id[activity_id]
+        deadline = parse_local_datetime(
+            activity.get("rsvp_deadline", ""),
+            activity.get("timezone") or event.get("timezone", "UTC"),
+        )
+        if (
+            deadline
+            and datetime.now(timezone.utc) > deadline
+            and existing_own_responses.get(activity_id) != response
+        ):
+            closed_activity_ids.append(activity_id)
+    if closed_activity_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "activity_rsvp_closed",
+                "message": "The RSVP deadline has passed for one or more activities.",
+            },
+        )
+
+    replacement_activity_responses = []
+    for activity_id, response_status in payload.activity_responses.items():
+        replacement_activity_responses.append({
+            "activity_id": activity_id,
+            "respondent_id": rsvp_uid,
+            "respondent_type": "public-invite",
+            "display_name": invite.get("invitee_name", "Invited guest"),
+            "status": response_status,
+            "party_size": max(1, payload.guests + 1),
+            "updated_at": now_iso(),
+            "via": "public-link",
+        })
+    activity_responses = replace_respondent_activity_responses(
+        event.get("activity_rsvps", []),
+        rsvp_uid,
+        replacement_activity_responses,
+    )
+    event["event_invites"] = invites
+    event["rsvp_records"] = next_records
+    event["activity_rsvps"] = activity_responses
+    event["activity_rsvp_summaries"] = activity_summaries(event)
+
     await events_collection.update_one(
         {"id": event["id"]},
-        {"$set": {"rsvp_records": next_records, "event_invites": invites}},
+        {"$set": {
+            "rsvp_records": next_records,
+            "event_invites": invites,
+            "activity_rsvps": activity_responses,
+            "activity_rsvp_summaries": event["activity_rsvp_summaries"],
+        }},
     )
 
     community = await communities_collection.find_one(
@@ -105,6 +235,14 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     )
     view = _public_view(event, {**invite, "rsvp_status": payload.status})
     view["community_name"] = community.get("name", "") if community else ""
+    organizer = await users_collection.find_one(
+        {"id": event.get("created_by"), "community_id": event.get("community_id")},
+        {"_id": 0, "full_name": 1},
+    )
+    view["invited_by_name"] = (
+        event.get("created_by_name")
+        or (organizer or {}).get("full_name", "")
+    )
     view["saved"] = True
     return view
 

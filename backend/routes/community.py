@@ -163,6 +163,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
                 "countdown_days": countdown_days(event.get("start_at")),
                 "rsvp_summary": {
                     "going": len([record for record in rsvp_records if record.get("status") == "going"]),
+                    "some": len([record for record in rsvp_records if record.get("status") == "some"]),
                     "maybe": len([record for record in rsvp_records if record.get("status") == "maybe"]),
                     "not_going": len([record for record in rsvp_records if record.get("status") == "not-going"]),
                 },
