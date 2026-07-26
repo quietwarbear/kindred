@@ -200,7 +200,11 @@ def parse_datetime_safe(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # Legacy gatherings stored local-looking values without an offset.
+        # Give those a deterministic UTC interpretation so reminder and
+        # dashboard arithmetic never mixes naive and aware datetimes.
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
     except Exception:
         return None
 

@@ -38,7 +38,7 @@ export const GatheringPotluck = ({ event, token, canCreate, onUpdate }) => {
         <p className="text-lg font-semibold text-foreground">Shared table planning</p>
       </div>
       <div className="mt-4 space-y-3">
-        {event.potluck_items.map((potluck) => (
+        {(event.potluck_items || []).map((potluck) => (
           <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-potluck-item-${potluck.id}`} key={potluck.id}>
             <div className="flex items-center justify-between gap-3">
               <div>

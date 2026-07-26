@@ -1,6 +1,8 @@
 # Reunion itinerary and activity attendance
 
-Status: local implementation on `reunion-first-activation`; not deployed.
+Status: PR #14 was merged externally. Its post-merge security and integrity
+corrections are documented in `docs/REUNION_SECURITY_INCIDENT_CORRECTION.md`;
+that corrective branch is not yet merged or deployed.
 
 ## Approved product decisions
 

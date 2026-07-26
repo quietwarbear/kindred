@@ -1,6 +1,7 @@
 const REUNION_DRAFT_KEY = "kindred-reunion-draft-v1";
 
 export const emptyReunionDraft = Object.freeze({
+  client_request_id: "",
   gathering_name: "",
   approximate_date: "",
   end_date: "",
@@ -11,6 +12,11 @@ export const emptyReunionDraft = Object.freeze({
 });
 
 const clean = (value, maxLength) => String(value || "").trim().slice(0, maxLength);
+
+const createClientRequestId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `reunion-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+};
 
 export function browserTimezone() {
   try {
@@ -34,6 +40,7 @@ export function normalizeReunionDraft(value = {}) {
   const endDate = clean(value.end_date, 10);
   const multidayEnabled = Boolean(value.multiday_enabled || (endDate && endDate !== startDate));
   return {
+    client_request_id: clean(value.client_request_id, 100) || createClientRequestId(),
     gathering_name: clean(value.gathering_name, 120),
     approximate_date: startDate,
     end_date: multidayEnabled ? endDate : "",
@@ -49,9 +56,9 @@ export function loadReunionDraft() {
     const stored = window.localStorage.getItem(REUNION_DRAFT_KEY);
     return stored
       ? normalizeReunionDraft(JSON.parse(stored))
-      : { ...emptyReunionDraft, timezone: browserTimezone() };
+      : normalizeReunionDraft({ ...emptyReunionDraft, timezone: browserTimezone() });
   } catch {
-    return { ...emptyReunionDraft, timezone: browserTimezone() };
+    return normalizeReunionDraft({ ...emptyReunionDraft, timezone: browserTimezone() });
   }
 }
 
@@ -82,6 +89,7 @@ export function reunionDraftToEventPayload(draft) {
   const startAt = `${normalized.approximate_date}T09:00:00`;
   const endAt = `${endDate}T18:00:00`;
   return {
+    client_request_id: normalized.client_request_id,
     title: normalized.gathering_name,
     description: `A private reunion gathering organized by ${normalized.organizer_name}.`,
     start_at: startAt,

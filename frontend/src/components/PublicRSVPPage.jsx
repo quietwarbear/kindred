@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 
 import { API_URL } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
-import { runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
+import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 
 // Public, no-account RSVP page for https://heykindred.org/rsvp/:token.
 // The bearer token is intentionally used only in the API URL and never analytics.
@@ -47,8 +47,12 @@ const dateRange = (gathering) => {
   return end && end !== start ? `${start} through ${end}` : start;
 };
 
-const dayGroups = (activities) => activities.reduce((groups, activity) => {
-  const day = activity.start_at.slice(0, 10);
+const dayGroups = (activities, reunionTimezone) => activities.reduce((groups, activity) => {
+  const day = dayKeyAtTimezone(
+    activity.start_at,
+    activity.timezone || reunionTimezone || "UTC"
+  );
+  if (!day) return groups;
   if (!groups[day]) groups[day] = [];
   groups[day].push(activity);
   return groups;
@@ -111,7 +115,10 @@ export const PublicRSVPPage = () => {
       timezone: gathering.timezone,
     });
   }, [gathering.activities, gathering.timezone]);
-  const groupedActivities = useMemo(() => dayGroups(activities), [activities]);
+  const groupedActivities = useMemo(
+    () => dayGroups(activities, gathering.timezone),
+    [activities, gathering.timezone]
+  );
   const everyActivityDeclined = activities.length > 0
     && activities.every((activity) => activityResponses[activity.id] === "not-coming");
   const comingCount = Object.values(activityResponses).filter((value) => value === "coming").length;

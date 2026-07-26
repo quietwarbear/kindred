@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from db import communities_collection, events_collection, memories_collection, threads_collection
 from dependencies import get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
+from event_privacy import serialize_event_for_user
 from models import CommentRequest, MemoryCreateRequest, MemoryPublic, MemoryUpdateRequest, ThreadCreateRequest, ThreadPublic
 from ai_tagging import generate_memory_tags
 from ai_oralhistory import transcribe_audio, translate_text
@@ -20,7 +21,13 @@ router = APIRouter(prefix="/api")
 @router.get("/timeline/archive")
 async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_user)):
     community_id = current_user["community_id"]
-    events = await events_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+    events = await events_collection.find(
+        {
+            "community_id": community_id,
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
+        {"_id": 0},
+    ).to_list(300)
     memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
 
@@ -72,7 +79,13 @@ async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_us
         event for event in events
         if (parsed := parse_datetime_safe(event.get("start_at"))) and parsed.month == today.month and parsed.day == today.day
     ]
-    return {"timeline_items": timeline_items[:300], "on_this_day": anniversaries[:5]}
+    return {
+        "timeline_items": timeline_items[:300],
+        "on_this_day": [
+            serialize_event_for_user(event, current_user)
+            for event in anniversaries[:5]
+        ],
+    }
 
 
 @router.get("/timeline/export")

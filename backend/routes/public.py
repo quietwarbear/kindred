@@ -32,13 +32,18 @@ from itinerary import (
     published_activities,
     replace_respondent_activity_responses,
 )
+from rsvp_integrity import (
+    RSVPWriteConflict,
+    compare_and_swap_event,
+    public_respondent_identity,
+)
 
 router = APIRouter(prefix="/api/public")
 
 
 class PublicRSVPRequest(BaseModel):
     status: Literal["going", "some", "maybe", "not-going"]
-    guests: int = 0
+    guests: int = Field(default=0, ge=0, le=50)
     activity_responses: dict[str, Literal["coming", "not-coming", "maybe"]] = Field(default_factory=dict)
 
 
@@ -53,11 +58,11 @@ async def _find_event_and_invite(token: str):
 def _public_view(event: dict, invite: dict) -> dict:
     fmt = event.get("gathering_format", "in-person")
     summaries = activity_summaries(event)
-    invite_respondent_id = f"invite:{invite.get('id', '')}"
+    invite_respondent_id, respondent_aliases = public_respondent_identity(invite)
     own_activity_responses = {
         response.get("activity_id", ""): response.get("status", "")
         for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") == invite_respondent_id
+        if response.get("respondent_id") in respondent_aliases
     }
     activities = []
     for activity in published_activities(event):
@@ -66,7 +71,11 @@ def _public_view(event: dict, invite: dict) -> dict:
             activity.get("rsvp_deadline", ""),
             activity.get("timezone") or event.get("timezone", "UTC"),
         )
-        response_open = not deadline or datetime.now(timezone.utc) <= deadline
+        deadline_value = activity.get("rsvp_deadline", "")
+        response_open = (
+            not deadline_value
+            or bool(deadline and datetime.now(timezone.utc) <= deadline)
+        )
         activities.append({
             "id": activity_id,
             "title": activity.get("title", ""),
@@ -90,7 +99,6 @@ def _public_view(event: dict, invite: dict) -> dict:
             "my_response": own_activity_responses.get(activity_id, "no-response"),
         })
     return {
-        "invite_id": invite.get("id", ""),
         "invitee_name": invite.get("invitee_name", ""),
         "rsvp_status": invite.get("rsvp_status", "pending"),
         "gathering": {
@@ -137,97 +145,137 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     event, invite = await _find_event_and_invite(token)
     if not event or not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
-
-    rsvp_uid = f"invite:{invite['id']}"
-    next_records = [r for r in event.get("rsvp_records", []) if r.get("user_id") != rsvp_uid]
-    next_records.append({
-        "user_id": rsvp_uid,
-        "user_name": invite.get("invitee_name", "Guest"),
-        "status": payload.status,
-        "guests": max(0, payload.guests),
-        "updated_at": now_iso(),
-        "via": "public-link",
-    })
-
-    invites = event.get("event_invites", [])
-    for i in invites:
-        if i.get("id") == invite["id"]:
-            i["rsvp_status"] = payload.status
-
-    published_by_id = {
-        item.get("id"): item for item in published_activities(event)
-        if item.get("attendance_requested", True)
-    }
-    invalid_activity_ids = [
-        activity_id for activity_id, response in payload.activity_responses.items()
-        if activity_id not in published_by_id or response not in ACTIVITY_RESPONSES
-    ]
-    if invalid_activity_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "invalid_activity_response",
-                "message": "One or more activity responses are unavailable.",
+    resolved_member_id = invite.get("member_id", "")
+    if (
+        not resolved_member_id
+        and invite.get("invite_source") == "member"
+        and invite.get("email")
+    ):
+        member = await users_collection.find_one(
+            {
+                "community_id": event.get("community_id"),
+                "email": str(invite.get("email")).strip().lower(),
             },
+            {"_id": 0, "id": 1},
         )
+        resolved_member_id = (member or {}).get("id", "")
 
-    existing_own_responses = {
-        response.get("activity_id"): response.get("status")
-        for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") == rsvp_uid
-    }
-    closed_activity_ids = []
-    for activity_id, response in payload.activity_responses.items():
-        activity = published_by_id[activity_id]
-        deadline = parse_local_datetime(
-            activity.get("rsvp_deadline", ""),
-            activity.get("timezone") or event.get("timezone", "UTC"),
+    def mutate(current_event: dict) -> dict:
+        current_invite = next(
+            (
+                item for item in current_event.get("event_invites", [])
+                if item.get("id") == token
+            ),
+            None,
         )
-        if (
-            deadline
-            and datetime.now(timezone.utc) > deadline
-            and existing_own_responses.get(activity_id) != response
-        ):
-            closed_activity_ids.append(activity_id)
-    if closed_activity_ids:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "activity_rsvp_closed",
-                "message": "The RSVP deadline has passed for one or more activities.",
-            },
-        )
+        if not current_invite:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+        if resolved_member_id and current_invite.get("invite_source") == "member":
+            current_invite["member_id"] = resolved_member_id
+        rsvp_uid, respondent_aliases = public_respondent_identity(current_invite)
 
-    replacement_activity_responses = []
-    for activity_id, response_status in payload.activity_responses.items():
-        replacement_activity_responses.append({
-            "activity_id": activity_id,
-            "respondent_id": rsvp_uid,
-            "respondent_type": "public-invite",
-            "display_name": invite.get("invitee_name", "Invited guest"),
-            "status": response_status,
-            "party_size": max(1, payload.guests + 1),
+        next_records = [
+            record for record in current_event.get("rsvp_records", [])
+            if record.get("user_id") not in respondent_aliases
+        ]
+        next_records.append({
+            "user_id": rsvp_uid,
+            "user_name": current_invite.get("invitee_name", "Guest"),
+            "status": payload.status,
+            "guests": max(0, payload.guests),
             "updated_at": now_iso(),
             "via": "public-link",
         })
-    activity_responses = replace_respondent_activity_responses(
-        event.get("activity_rsvps", []),
-        rsvp_uid,
-        replacement_activity_responses,
-    )
-    event["event_invites"] = invites
-    event["rsvp_records"] = next_records
-    event["activity_rsvps"] = activity_responses
-    event["activity_rsvp_summaries"] = activity_summaries(event)
+        current_invite["rsvp_status"] = payload.status
 
-    await events_collection.update_one(
-        {"id": event["id"]},
-        {"$set": {
+        published_by_id = {
+            item.get("id"): item for item in published_activities(current_event)
+            if item.get("attendance_requested", True)
+        }
+        invalid_activity_ids = [
+            activity_id for activity_id, response in payload.activity_responses.items()
+            if activity_id not in published_by_id or response not in ACTIVITY_RESPONSES
+        ]
+        if invalid_activity_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_activity_response",
+                    "message": "One or more activity responses are unavailable.",
+                },
+            )
+
+        existing_own_responses = {
+            response.get("activity_id"): response.get("status")
+            for response in current_event.get("activity_rsvps", [])
+            if response.get("respondent_id") in respondent_aliases
+        }
+        for activity_id, response in payload.activity_responses.items():
+            activity = published_by_id[activity_id]
+            deadline_value = activity.get("rsvp_deadline", "")
+            deadline = parse_local_datetime(
+                deadline_value,
+                activity.get("timezone") or current_event.get("timezone", "UTC"),
+            )
+            if deadline_value and (
+                not deadline
+                or (
+                    datetime.now(timezone.utc) > deadline
+                    and existing_own_responses.get(activity_id) != response
+                )
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "activity_rsvp_closed",
+                        "message": "One or more activities are not accepting RSVP changes.",
+                    },
+                )
+
+        replacement_activity_responses = [
+            {
+                "activity_id": activity_id,
+                "respondent_id": rsvp_uid,
+                "respondent_type": "member" if resolved_member_id else "public-invite",
+                "display_name": current_invite.get("invitee_name", "Invited guest"),
+                "status": response_status,
+                "party_size": max(1, payload.guests + 1),
+                "updated_at": now_iso(),
+                "via": "public-link",
+            }
+            for activity_id, response_status in payload.activity_responses.items()
+        ]
+        activity_responses = replace_respondent_activity_responses(
+            current_event.get("activity_rsvps", []),
+            rsvp_uid,
+            replacement_activity_responses,
+            respondent_aliases,
+        )
+        current_event["rsvp_records"] = next_records
+        current_event["activity_rsvps"] = activity_responses
+        summaries = activity_summaries(current_event)
+        return {
             "rsvp_records": next_records,
-            "event_invites": invites,
+            "event_invites": current_event.get("event_invites", []),
             "activity_rsvps": activity_responses,
-            "activity_rsvp_summaries": event["activity_rsvp_summaries"],
-        }},
+            "activity_rsvp_summaries": summaries,
+        }
+
+    try:
+        event = await compare_and_swap_event(
+            events_collection,
+            {"id": event["id"], "event_invites.id": token},
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "rsvp_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+    invite = next(
+        item for item in event.get("event_invites", []) if item.get("id") == token
     )
 
     community = await communities_collection.find_one(

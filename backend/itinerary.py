@@ -9,7 +9,7 @@ response history.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone as datetime_timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -37,9 +37,22 @@ def parse_local_datetime(value: str, timezone: str = "UTC") -> datetime | None:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=ZoneInfo(timezone or "UTC"))
-        return parsed
+        zone = ZoneInfo(timezone or "UTC")
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(zone)
+
+        candidates = []
+        for fold in (0, 1):
+            candidate = parsed.replace(tzinfo=zone, fold=fold)
+            round_trip = candidate.astimezone(datetime_timezone.utc).astimezone(zone)
+            if round_trip.replace(tzinfo=None) == parsed:
+                candidates.append(candidate)
+        unique_offsets = {candidate.utcoffset() for candidate in candidates}
+        if len(unique_offsets) != 1:
+            # No candidates means a nonexistent wall time. Multiple offsets mean
+            # an ambiguous fall-back time; require an explicit ISO offset.
+            return None
+        return candidates[0]
     except (ValueError, ZoneInfoNotFoundError):
         return None
 
@@ -95,7 +108,19 @@ def validate_activity(activity: dict[str, Any], reunion_timezone: str) -> list[s
         errors.append("Activity end date and time are required.")
     if start and end and end <= start:
         errors.append("Activity end must be after its start.")
+    deadline_value = activity.get("rsvp_deadline", "")
+    if deadline_value and not parse_local_datetime(deadline_value, timezone):
+        errors.append(
+            "RSVP deadline must be a valid, unambiguous date and time in the activity timezone."
+        )
     return errors
+
+
+def local_day_key(value: str, timezone_name: str = "UTC") -> str:
+    parsed = parse_local_datetime(value, timezone_name)
+    if not parsed:
+        return ""
+    return parsed.astimezone(ZoneInfo(timezone_name or "UTC")).date().isoformat()
 
 
 def published_activities(event: dict[str, Any]) -> list[dict[str, Any]]:
@@ -128,8 +153,29 @@ def activity_response_summary(
     }
 
 
+def canonical_activity_responses(event: dict[str, Any]) -> list[dict[str, Any]]:
+    alias_map = {
+        f"invite:{invite.get('id')}": invite.get("member_id")
+        for invite in event.get("event_invites", [])
+        if invite.get("id") and invite.get("member_id")
+    }
+    deduplicated: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, response in enumerate(event.get("activity_rsvps", [])):
+        respondent_id = response.get("respondent_id", "")
+        canonical_id = alias_map.get(
+            respondent_id,
+            respondent_id or f"legacy-anonymous:{index}",
+        )
+        key = (response.get("activity_id", ""), canonical_id)
+        candidate = {**response, "respondent_id": canonical_id}
+        existing = deduplicated.get(key)
+        if not existing or candidate.get("updated_at", "") >= existing.get("updated_at", ""):
+            deduplicated[key] = candidate
+    return list(deduplicated.values())
+
+
 def activity_summaries(event: dict[str, Any]) -> dict[str, dict[str, int]]:
-    responses = event.get("activity_rsvps", [])
+    responses = canonical_activity_responses(event)
     invite_count = len(event.get("event_invites", []))
     return {
         activity.get("id", ""): activity_response_summary(
@@ -163,15 +209,17 @@ def replace_respondent_activity_responses(
     responses: list[dict[str, Any]],
     respondent_id: str,
     replacements: list[dict[str, Any]],
+    respondent_aliases: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Atomically replace one respondent's supplied activity choices."""
     replacement_ids = {
         item.get("activity_id") for item in replacements if item.get("activity_id")
     }
+    aliases = {respondent_id, *(respondent_aliases or set())}
     preserved = [
         item for item in responses
         if not (
-            item.get("respondent_id") == respondent_id
+            item.get("respondent_id") in aliases
             and item.get("activity_id") in replacement_ids
         )
     ]

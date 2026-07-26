@@ -173,6 +173,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
 
   // Initialize Apple JS SDK
   useEffect(() => {
+    if (process.env.REACT_APP_DISABLE_PROVIDER_INIT === "true") return undefined;
     const initApple = () => {
       window.AppleID?.auth?.init({
         clientId: APPLE_CLIENT_ID,
@@ -196,6 +197,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   }, []);
 
   useEffect(() => {
+    if (process.env.REACT_APP_DISABLE_PROVIDER_INIT === "true") return undefined;
     if (isNative()) {
       return undefined;
     }

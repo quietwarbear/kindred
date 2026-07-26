@@ -27,7 +27,7 @@ export const GatheringAgenda = ({ event, token, canCreate, onUpdate }) => {
     <div className="soft-panel" data-testid="gatherings-agenda-panel">
       <p className="text-lg font-semibold text-foreground">Agenda builder</p>
       <div className="mt-4 space-y-3">
-        {event.agenda.map((item) => (
+        {(event.agenda || []).map((item) => (
           <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-agenda-item-${item.id}`} key={item.id}>
             <p className="text-sm font-semibold text-foreground">{item.time_label} · {item.title}</p>
             {item.notes ? <p className="mt-2 text-sm text-muted-foreground">{item.notes}</p> : null}
