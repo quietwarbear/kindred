@@ -172,7 +172,9 @@ class TestSubscriptionEndpoints:
         }, headers=headers)
         
         assert response.status_code == 410
-        assert "RevenueCat Billing" in response.json().get("detail", "")
+        detail = response.json().get("detail", {})
+        assert detail.get("code") == "subscription_checkout_migrating"
+        assert "temporarily unavailable" in detail.get("message", "")
 
     def test_checkout_blocks_non_host_users(self, member_token):
         """Verify POST /api/subscriptions/checkout blocks non-host users with 403."""

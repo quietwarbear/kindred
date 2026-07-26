@@ -101,22 +101,19 @@ async def get_current_subscription(current_user: dict[str, Any] = Depends(get_cu
 
 
 # ---------------------------------------------------------------------------
-# Checkout — legacy direct Stripe creation is permanently fail-closed
+# Checkout — temporarily disabled while web billing migrates
 # ---------------------------------------------------------------------------
 
 @router.post("/subscriptions/checkout")
 async def create_subscription_checkout(
-    payload: SubscriptionCheckoutRequest,
-    request: Request,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    _payload: SubscriptionCheckoutRequest,
 ):
-    ensure_minimum_role(current_user, "host")
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
-        detail=(
-            "Direct Stripe subscription checkout is retired. "
-            "Use the verified RevenueCat Billing purchase flow."
-        ),
+        detail={
+            "code": "subscription_checkout_migrating",
+            "message": "New web subscription purchases are temporarily unavailable while billing is being updated.",
+        },
     )
 
 

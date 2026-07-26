@@ -146,7 +146,7 @@ def test_direct_stripe_subscription_prices_are_legacy_only():
             assert resolve_legacy_stripe_subscription_price(price_id) == (tier_id, interval)
 
     subscriptions = read("backend/routes/subscriptions.py")
-    assert "Direct Stripe subscription checkout is retired" in subscriptions
+    assert "subscription_checkout_migrating" in subscriptions
     direct_checkout = subscriptions.split(
         '@router.post("/subscriptions/checkout")',
         1,
@@ -294,7 +294,8 @@ def test_web_subscription_uses_revenuecat_billing_and_fails_closed_on_drift():
         assert invariant in web
     assert "makeRevenueCatWebPurchase" in subscription_page
     assert 'apiRequest("/subscriptions/checkout"' not in subscription_page
-    assert "Direct Stripe subscription checkout is retired" in subscriptions
+    assert "subscription_checkout_migrating" in subscriptions
+    assert "WEB_PURCHASES_ENABLED = false" in subscription_page
 
 
 def test_checkout_interval_and_authenticated_toggle_are_explicit():

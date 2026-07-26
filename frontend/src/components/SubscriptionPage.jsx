@@ -35,6 +35,9 @@ import {
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
 
+const WEB_SUBSCRIPTION_MESSAGE = "Web subscriptions are temporarily unavailable while billing is being updated.";
+const WEB_PURCHASES_ENABLED = false;
+
 const TIER_ICONS = {
   seedling: Leaf,
   sapling: TreePine,
@@ -78,6 +81,7 @@ const PlanCard = ({
   providerPricing,
   providerPricingLoading,
   purchaseAvailable,
+  webPurchaseDisabled,
 }) => {
   const Icon = TIER_ICONS[plan.id] || Leaf;
   const isElderGrove = plan.id === "elder-grove";
@@ -191,7 +195,11 @@ const PlanCard = ({
       ) : (
         <Button
           className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
-          disabled={isLoading || (!isFree && (!displayedBillingOption || !purchaseAvailable))}
+          disabled={isLoading || (!isFree && (
+            !displayedBillingOption
+            || !purchaseAvailable
+            || webPurchaseDisabled
+          ))}
           onClick={() => onSelect(plan.id)}
           data-testid={`plan-select-${plan.id}`}
         >
@@ -200,8 +208,10 @@ const PlanCard = ({
           ) : (
             <ChevronRight className="mr-1 h-4 w-4" />
           )}
-          {!isFree && !purchaseAvailable
-            ? "Purchase unavailable"
+          {!isFree && webPurchaseDisabled
+            ? "Temporarily unavailable"
+            : !isFree && !purchaseAvailable
+              ? "Purchase unavailable"
             : isDowngrade
               ? "Downgrade"
               : isUpgrade
@@ -519,6 +529,10 @@ export const SubscriptionPage = ({ token, user }) => {
         }
       } else {
         // RevenueCat owns the web product and workflow; Stripe is only its gateway.
+        if (!WEB_PURCHASES_ENABLED) {
+          toast.info(WEB_SUBSCRIPTION_MESSAGE);
+          return;
+        }
         if (!webBillingReady) {
           throw new Error(
             "RevenueCat Billing is unavailable because its live catalog does not match Kindred pricing.",
@@ -657,6 +671,16 @@ export const SubscriptionPage = ({ token, user }) => {
         )}
       </div>
 
+      {!isNativePurchasePlatform() && (
+        <div
+          className="archival-card border-amber-500/40 bg-amber-500/10 text-center"
+          data-testid="web-subscription-unavailable"
+          role="status"
+        >
+          <p className="text-sm font-semibold text-foreground">{WEB_SUBSCRIPTION_MESSAGE}</p>
+        </div>
+      )}
+
       {/* Polling overlay */}
       {pollingSessionId && (
         <div className="archival-card flex items-center gap-3 border-primary/30 bg-primary/5" data-testid="payment-processing-banner">
@@ -729,6 +753,7 @@ export const SubscriptionPage = ({ token, user }) => {
             purchaseAvailable={isNativePurchasePlatform() || webBillingReady}
             onSelect={handleSelectPlan}
             plan={plan}
+            webPurchaseDisabled={!isNativePurchasePlatform() && !WEB_PURCHASES_ENABLED}
           />
         ))}
       </div>

@@ -103,6 +103,11 @@ async function assertVisible(page, selector, message) {
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.location.pathname === '/pricing');
     await assertVisible(page, '[data-testid="public-pricing-page"]', 'Public pricing route did not open.');
+    await assertVisible(
+      page,
+      '[data-testid="web-subscription-unavailable"]',
+      'The web subscription suspension notice is missing.',
+    );
     for (const tier of ['seedling', 'sapling', 'oak', 'redwood', 'elder-grove']) {
       await assertVisible(page, `[data-testid="public-plan-${tier}"]`, `Missing ${tier} on public pricing.`);
     }
@@ -117,6 +122,9 @@ async function assertVisible(page, selector, message) {
     }
     if (!pricingText.includes('Billed every month') || !pricingText.includes('Billed once per year')) {
       throw new Error('Public pricing does not disclose both billing intervals.');
+    }
+    if (!pricingText.includes('Web subscriptions are temporarily unavailable while billing is being updated.')) {
+      throw new Error('Public pricing does not explain that web subscription purchasing is unavailable.');
     }
     await page.screenshot({ path: path.join(OUTPUT, 'public-pricing-desktop.png'), fullPage: true });
 
