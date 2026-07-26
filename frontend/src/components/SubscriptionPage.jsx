@@ -28,6 +28,8 @@ import {
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
 
+const WEB_SUBSCRIPTION_MESSAGE = "Web subscriptions are temporarily unavailable while billing is being updated.";
+
 const TIER_ICONS = {
   seedling: Leaf,
   sapling: TreePine,
@@ -70,6 +72,7 @@ const PlanCard = ({
   localizedBillingOption,
   nativePricing,
   nativePricingLoading,
+  webPurchaseDisabled,
 }) => {
   const Icon = TIER_ICONS[plan.id] || Leaf;
   const isElderGrove = plan.id === "elder-grove";
@@ -183,7 +186,7 @@ const PlanCard = ({
       ) : (
         <Button
           className={`w-full rounded-full ${TIER_BTN[plan.id]}`}
-          disabled={isLoading || (!isFree && !displayedBillingOption)}
+          disabled={isLoading || (!isFree && (!displayedBillingOption || webPurchaseDisabled))}
           onClick={() => onSelect(plan.id)}
           data-testid={`plan-select-${plan.id}`}
         >
@@ -192,7 +195,13 @@ const PlanCard = ({
           ) : (
             <ChevronRight className="mr-1 h-4 w-4" />
           )}
-          {isDowngrade ? "Downgrade" : isUpgrade ? "Upgrade" : "Select Plan"}
+          {!isFree && webPurchaseDisabled
+            ? "Temporarily unavailable"
+            : isDowngrade
+              ? "Downgrade"
+              : isUpgrade
+                ? "Upgrade"
+                : "Select Plan"}
         </Button>
       )}
     </div>
@@ -480,15 +489,7 @@ export const SubscriptionPage = ({ token, user }) => {
           }
         }
       } else {
-        // Web: Use existing Stripe backend flow
-        const res = await apiRequest("/subscriptions/checkout", {
-          method: "POST",
-          token,
-          data: { plan_id: planId, billing_cycle: billingCycle, origin_url: window.location.origin },
-        });
-        if (res.url) {
-          window.location.href = res.url;
-        }
+        toast.info(WEB_SUBSCRIPTION_MESSAGE);
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Unable to start checkout.");
@@ -603,6 +604,16 @@ export const SubscriptionPage = ({ token, user }) => {
         )}
       </div>
 
+      {!isIOS() && (
+        <div
+          className="archival-card border-amber-500/40 bg-amber-500/10 text-center"
+          data-testid="web-subscription-unavailable"
+          role="status"
+        >
+          <p className="text-sm font-semibold text-foreground">{WEB_SUBSCRIPTION_MESSAGE}</p>
+        </div>
+      )}
+
       {/* Polling overlay */}
       {pollingSessionId && (
         <div className="archival-card flex items-center gap-3 border-primary/30 bg-primary/5" data-testid="payment-processing-banner">
@@ -663,6 +674,7 @@ export const SubscriptionPage = ({ token, user }) => {
             nativePricingLoading={nativePricingLoading}
             onSelect={handleSelectPlan}
             plan={plan}
+            webPurchaseDisabled={!isIOS()}
           />
         ))}
       </div>
