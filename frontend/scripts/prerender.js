@@ -14,7 +14,7 @@ const path = require('path');
 const BUILD = path.resolve(__dirname, '..', 'build');
 const PORT = 3000;
 const HOST = '127.0.0.1';
-const ROUTES = ['/', '/pricing', '/privacy', '/terms', '/support'];
+const ROUTES = ['/', '/reunion/start', '/pricing', '/privacy', '/terms', '/support'];
 const PLANS_API = `${process.env.REACT_APP_BACKEND_URL || 'https://kindred-production-badd.up.railway.app'}/api/subscriptions/plans`;
 
 const MIME = {

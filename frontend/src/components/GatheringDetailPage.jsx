@@ -16,6 +16,7 @@ import { GatheringRoles } from "@/components/gatherings/GatheringRoles";
 import { GatheringRsvp } from "@/components/gatherings/GatheringRsvp";
 import { GatheringTravel } from "@/components/gatherings/GatheringTravel";
 import { GatheringVolunteers } from "@/components/gatherings/GatheringVolunteers";
+import { ReunionItinerary } from "@/components/reunion/ReunionItinerary";
 
 const formatBadge = {
   "in-person": { icon: MapPin, label: "In-person" },
@@ -87,6 +88,8 @@ export const GatheringDetailPage = ({ token, user }) => {
       title: event.title,
       description: event.description,
       start_at: event.start_at,
+      end_at: event.end_at || "",
+      timezone: event.timezone || "UTC",
       location: event.location,
       gathering_format: event.gathering_format,
       max_attendees: event.max_attendees,
@@ -178,6 +181,14 @@ export const GatheringDetailPage = ({ token, user }) => {
                     <label className="block">
                       <span className="text-xs font-semibold text-muted-foreground">Date & Time</span>
                       <Input className="field-input mt-1" data-testid="gathering-detail-edit-start" onChange={(e) => setEditingEvent((c) => ({ ...c, start_at: e.target.value }))} type="datetime-local" value={editingEvent.start_at} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-muted-foreground">End date & time</span>
+                      <Input className="field-input mt-1" onChange={(e) => setEditingEvent((c) => ({ ...c, end_at: e.target.value }))} type="datetime-local" value={editingEvent.end_at} />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-muted-foreground">Primary timezone</span>
+                      <Input className="field-input mt-1" onChange={(e) => setEditingEvent((c) => ({ ...c, timezone: e.target.value }))} value={editingEvent.timezone} />
                     </label>
                     <label className="block">
                       <span className="text-xs font-semibold text-muted-foreground">Location</span>
@@ -296,7 +307,13 @@ export const GatheringDetailPage = ({ token, user }) => {
 
       {/* Planning sections — 2-column grid */}
       <section className="grid gap-6 lg:grid-cols-2" data-testid="gathering-detail-panels">
-        <GatheringAgenda canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
+        {event.event_template === "reunion" ? (
+          <div className="lg:col-span-2">
+            <ReunionItinerary canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
+          </div>
+        ) : (
+          <GatheringAgenda canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
+        )}
         <GatheringRsvp event={event} onUpdate={mergeEvent} token={token} />
         <GatheringChecklist canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
         <GatheringInvites event={event} members={members} onUpdate={mergeEvent} token={token} />

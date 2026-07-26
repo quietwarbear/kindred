@@ -12,6 +12,8 @@ export function initAnalytics() {
     api_host: POSTHOG_HOST,
     capture_pageview: true,
     autocapture: true,
+    mask_all_text: true,
+    mask_all_element_attributes: true,
   });
   posthog.register({ product: "kindred" });
 }
@@ -31,4 +33,53 @@ export function resetAnalytics() {
 
 export function trackEvent(name, properties = {}) {
   posthog.capture(name, properties);
+}
+
+export const REUNION_EVENTS = Object.freeze([
+  "reunion_start_clicked",
+  "reunion_draft_created",
+  "reunion_preview_viewed",
+  "invite_created",
+  "invite_link_copied",
+  "invite_opened",
+  "rsvp_completed",
+  "guest_account_started",
+  "community_activated",
+  "memory_prompt_completed",
+  "reunion_multiday_enabled",
+  "itinerary_activity_created",
+  "itinerary_activity_published",
+  "activity_rsvp_updated",
+  "itinerary_viewed",
+  "activity_roster_viewed",
+]);
+
+const SAFE_REUNION_PROPERTY_KEYS = new Set([
+  "source",
+  "status",
+  "invite_count",
+  "verified_invite_count",
+  "accepted_count",
+  "days_since_created",
+  "reunion_days",
+  "activity_count",
+  "venue_assigned",
+  "activity_position",
+  "day_number",
+  "response_category",
+  "actor_type",
+]);
+
+// Acquisition events must never contain family content, names, emails,
+// invitation tokens, provider identifiers, or community identifiers.
+export function trackReunionEvent(name, properties = {}) {
+  if (!REUNION_EVENTS.includes(name)) return;
+  const safeProperties = Object.fromEntries(
+    Object.entries(properties).filter(
+      ([key, value]) =>
+        SAFE_REUNION_PROPERTY_KEYS.has(key)
+        && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+    )
+  );
+  posthog.capture(name, safeProperties);
 }

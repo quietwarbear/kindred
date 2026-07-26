@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, LockKeyhole, Users } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api";
+import { trackReunionEvent } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
+import {
+  clearReunionDraft,
+  loadReunionDraft,
+  provisionalCommunityName,
+  reunionDraftIsComplete,
+  reunionDraftToEventPayload,
+} from "@/lib/reunionDraft";
 import { toast } from "@/components/ui/sonner";
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "168719752136-i70p8s13ajg5j8dc8gchm43jb84kv0s5.apps.googleusercontent.com";
@@ -38,9 +46,13 @@ const initialLoginState = {
 
 export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCode, onInviteCodeConsumed }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const intent = new URLSearchParams(location.search).get("intent") || "";
+  const [reunionDraft] = useState(() => loadReunionDraft());
+  const hasReunionIntent = intent === "reunion" && reunionDraftIsComplete(reunionDraft);
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
-  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : "launch");
+  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : intent === "guest" ? "login" : "launch");
 
   // Pre-fill invite code from deep link
   useEffect(() => {
@@ -56,6 +68,36 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!hasReunionIntent) return;
+    setLaunchForm((current) => ({
+      ...current,
+      full_name: current.full_name || reunionDraft.organizer_name,
+    }));
+  }, [hasReunionIntent, reunionDraft.organizer_name]);
+
+  const completeAuthentication = useCallback(async (payload, message) => {
+    onAuthSuccess(payload);
+    toast.success(message);
+    if (hasReunionIntent) {
+      try {
+        const event = await apiRequest("/events", {
+          method: "POST",
+          token: payload.token,
+          data: reunionDraftToEventPayload(reunionDraft),
+        });
+        clearReunionDraft();
+        trackReunionEvent("reunion_draft_created", { source: "account_boundary" });
+        navigate(`/reunion/activate/${event.id}`);
+      } catch (error) {
+        toast.error(error.response?.data?.detail || "Your account is ready, but the reunion draft could not be saved.");
+        navigate("/reunion/start");
+      }
+      return;
+    }
+    navigate(intent === "guest" ? "/home" : "/subscription");
+  }, [hasReunionIntent, intent, navigate, onAuthSuccess, reunionDraft]);
+
   const handleGoogleCredential = useCallback(async (response) => {
     setIsSubmitting(true);
     try {
@@ -63,9 +105,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
         method: "POST",
         data: { credential: response.credential },
       });
-      onAuthSuccess(payload);
-      toast.success("Signed in with Google.");
-      navigate("/subscription");
+      await completeAuthentication(payload, "Signed in with Google.");
     } catch (error) {
       const detail = error.response?.data?.detail;
         const msg = Array.isArray(detail) ? detail.map(e => e.msg).join(", ") : detail;
@@ -73,7 +113,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     } finally {
       setIsSubmitting(false);
     }
-  }, [onAuthSuccess, navigate]);
+  }, [completeAuthentication]);
 
   const handleAppleSignIn = useCallback(async () => {
     setIsSubmitting(true);
@@ -116,9 +156,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
         method: "POST",
         data: { id_token: idToken, full_name: fullName, email },
       });
-      onAuthSuccess(payload);
-      toast.success("Signed in with Apple.");
-      navigate("/subscription");
+      await completeAuthentication(payload, "Signed in with Apple.");
     } catch (error) {
       // Error code 1001 or popup closed = user cancelled
       if (error?.code === "ERR_CANCELED" || error?.message?.includes("cancelled") || error?.code === 1001 || error?.error === "popup_closed_by_user") {
@@ -131,7 +169,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     } finally {
       setIsSubmitting(false);
     }
-  }, [onAuthSuccess, navigate]);
+  }, [completeAuthentication]);
 
   // Initialize Apple JS SDK
   useEffect(() => {
@@ -194,18 +232,24 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     }
   };
 
-  const handleSuccess = (payload, message) => {
-    onAuthSuccess(payload);
-    toast.success(message);
-    navigate("/subscription");
-  };
-
   const handleLaunch = async (event) => {
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = await apiRequest("/auth/bootstrap", { data: launchForm, method: "POST" });
-      handleSuccess(payload, "Your private community has been opened.");
+      const payload = await apiRequest("/auth/bootstrap", {
+        data: hasReunionIntent
+          ? {
+              ...launchForm,
+              community_name: provisionalCommunityName(reunionDraft),
+              community_type: "family reunion",
+              location: reunionDraft.location,
+              description: "A provisional private planning space created for a family reunion.",
+              motto: "",
+            }
+          : launchForm,
+        method: "POST",
+      });
+      await completeAuthentication(payload, hasReunionIntent ? "Your reunion planning account is ready." : "Your private community has been opened.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to launch your community.");
     } finally {
@@ -218,7 +262,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     setIsSubmitting(true);
     try {
       const payload = await apiRequest("/auth/register-with-invite", { data: joinForm, method: "POST" });
-      handleSuccess(payload, "Welcome into the community.");
+      await completeAuthentication(payload, "Welcome into the community.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to accept that invite.");
     } finally {
@@ -231,7 +275,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     setIsSubmitting(true);
     try {
       const payload = await apiRequest("/auth/login", { data: loginForm, method: "POST" });
-      handleSuccess(payload, "Welcome back to your digital hearth.");
+      await completeAuthentication(payload, "Welcome back to your digital hearth.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to sign in.");
     } finally {
@@ -278,16 +322,18 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   };
 
   return (
-    <><div className="app-canvas min-h-screen py-8">
+    <><div className="app-canvas min-h-screen py-8" data-ph-no-capture="true">
       <div className="page-section grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="archival-card flex flex-col justify-between gap-8 bg-stone-950 text-white">
           <div>
             <p className="eyebrow-text text-orange-200">Invitation-only access</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              Welcome to the digital home your community owns.
+              {hasReunionIntent ? "Save the reunion. Keep setup light." : "Welcome to the digital home your community owns."}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
-              Create a host account for your community, join with an invite code, or sign back in to plan events, share memories, and preserve legacy.
+              {hasReunionIntent
+                ? "Your draft stays private until you create this account. We’ll save the gathering first; permanent family-space details can wait."
+                : "Create a host account for your community, join with an invite code, or sign back in to plan events, share memories, and preserve legacy."}
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -308,7 +354,9 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div className="mb-6">
             <p className="eyebrow-text text-orange-700 dark:text-orange-200">Social sign in / sign up</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Use Apple or Google to sign in, join an invited circle, or automatically start your own Kindred space.
+              {hasReunionIntent
+                ? "Use Apple or Google to save the reunion with the organizer identity you already chose."
+                : "Use Apple or Google to sign in, join an invited circle, or automatically start your own Kindred space."}
             </p>
             <button
               className="mt-4 flex w-full items-center justify-center gap-3 rounded-full border border-border/70 bg-background px-6 py-3.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent/60 hover:shadow-md disabled:opacity-50"
@@ -340,13 +388,15 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           </div>
           <div className="border-t border-border/50 pt-6" />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-auto w-full grid-cols-3 rounded-full bg-muted/70 p-1">
+          <TabsList className={`grid h-auto w-full ${hasReunionIntent ? "grid-cols-2" : "grid-cols-3"} rounded-full bg-muted/70 p-1`}>
             <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
-              Launch
+              {hasReunionIntent ? "Create account" : "Launch"}
             </TabsTrigger>
-            <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-join" value="join">
-              Join
-            </TabsTrigger>
+            {!hasReunionIntent ? (
+              <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-join" value="join">
+                Join
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-login" value="login">
               Sign in
             </TabsTrigger>
@@ -364,36 +414,57 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                   <Input className="field-input" data-testid="launch-email-input" onChange={(e) => setLaunchForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={launchForm.email} />
                 </label>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className={hasReunionIntent ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
                 <label>
                   <span className="field-label">Password</span>
                   <Input className="field-input" data-testid="launch-password-input" minLength={8} onChange={(e) => setLaunchForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={launchForm.password} />
                 </label>
-                <label>
-                  <span className="field-label">Community type</span>
-                  <Input className="field-input" data-testid="launch-community-type-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_type: e.target.value }))} required value={launchForm.community_type} />
-                </label>
+                {!hasReunionIntent ? (
+                  <label>
+                    <span className="field-label">Community type</span>
+                    <Input className="field-input" data-testid="launch-community-type-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_type: e.target.value }))} required value={launchForm.community_type} />
+                  </label>
+                ) : null}
               </div>
-              <label>
-                <span className="field-label">Community name</span>
-                <Input className="field-input" data-testid="launch-community-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_name: e.target.value }))} required value={launchForm.community_name} />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label>
-                  <span className="field-label">Location</span>
-                  <Input className="field-input" data-testid="launch-location-input" onChange={(e) => setLaunchForm((current) => ({ ...current, location: e.target.value }))} required value={launchForm.location} />
-                </label>
-                <label>
-                  <span className="field-label">Motto</span>
-                  <Input className="field-input" data-testid="launch-motto-input" onChange={(e) => setLaunchForm((current) => ({ ...current, motto: e.target.value }))} value={launchForm.motto} />
-                </label>
-              </div>
-              <label>
-                <span className="field-label">What brings your people together?</span>
-                <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
-              </label>
+              {!hasReunionIntent ? (
+                <>
+                  <label>
+                    <span className="field-label">Community name</span>
+                    <Input className="field-input" data-testid="launch-community-name-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_name: e.target.value }))} required value={launchForm.community_name} />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label>
+                      <span className="field-label">Location</span>
+                      <Input className="field-input" data-testid="launch-location-input" onChange={(e) => setLaunchForm((current) => ({ ...current, location: e.target.value }))} required value={launchForm.location} />
+                    </label>
+                    <label>
+                      <span className="field-label">Motto</span>
+                      <Input className="field-input" data-testid="launch-motto-input" onChange={(e) => setLaunchForm((current) => ({ ...current, motto: e.target.value }))} value={launchForm.motto} />
+                    </label>
+                  </div>
+                  <label>
+                    <span className="field-label">What brings your people together?</span>
+                    <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
+                  </label>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-testid="reunion-account-summary">
+                  <p className="text-sm font-semibold text-foreground">{reunionDraft.gathering_name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {reunionDraft.approximate_date}
+                    {reunionDraft.end_date ? ` through ${reunionDraft.end_date}` : ""}
+                    {" · "}
+                    {reunionDraft.timezone}
+                    {" · "}
+                    {reunionDraft.location || "Location to be confirmed"}
+                  </p>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    A provisional planning space will be created behind the scenes. You can name the permanent family space after the first shared action.
+                  </p>
+                </div>
+              )}
               <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                {isSubmitting ? "Opening community..." : "Launch Kindred"}
+                {isSubmitting ? "Opening…" : hasReunionIntent ? "Save reunion draft" : "Launch Kindred"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>

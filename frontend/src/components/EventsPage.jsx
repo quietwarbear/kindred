@@ -281,6 +281,7 @@ export const EventsPage = ({ token, user }) => {
                   </div>
                   <select className="field-input w-full" data-testid="events-rsvp-status-select" onChange={(e) => setRsvpStatus(e.target.value)} value={rsvpStatus}>
                     <option value="going">Going</option>
+                    <option value="some">Attending some activities</option>
                     <option value="maybe">Maybe</option>
                     <option value="not-going">Not going</option>
                   </select>

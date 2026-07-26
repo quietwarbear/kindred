@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
+import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
@@ -41,7 +42,7 @@ const ShareMessageButton = ({ text, testId }) => {
   );
 };
 
-const CopyRsvpLinkButton = ({ inviteId }) => {
+const CopyRsvpLinkButton = ({ inviteId, isReunion }) => {
   const [copied, setCopied] = useState(false);
   const link = `${typeof window !== "undefined" ? window.location.origin : "https://heykindred.org"}/rsvp/${inviteId}`;
   const handleCopy = async () => {
@@ -54,6 +55,9 @@ const CopyRsvpLinkButton = ({ inviteId }) => {
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
+    }
+    if (isReunion) {
+      trackReunionEvent("invite_link_copied", { source: "gathering_invites" });
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -96,6 +100,16 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
           note: form.note,
         },
       });
+      const createdCount = Math.max(
+        0,
+        (payload.event_invites?.length || 0) - (event.event_invites?.length || 0)
+      );
+      if (event.event_template === "reunion" && createdCount > 0) {
+        trackReunionEvent("invite_created", {
+          source: "gathering_invites",
+          invite_count: createdCount,
+        });
+      }
       onUpdate(payload);
       setForm(initialInviteForm);
       toast.success("Event invites created.");
@@ -143,7 +157,7 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
                 <ShareMessageButton text={invite.share_message} testId={`gatherings-event-invite-share-${invite.id}`} />
               </div>
             )}
-            <CopyRsvpLinkButton inviteId={invite.id} />
+            <CopyRsvpLinkButton inviteId={invite.id} isReunion={event.event_template === "reunion"} />
           </div>
         ))}
       </div>

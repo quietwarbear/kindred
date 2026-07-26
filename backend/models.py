@@ -182,7 +182,28 @@ class InvitePublic(BaseModel):
 class AgendaItemRequest(BaseModel):
     time_label: str = ""
     title: str = Field(min_length=1)
+    description: str = ""
+    start_at: str = ""
+    end_at: str = ""
+    timezone: str = ""
+    venue_name: str = ""
+    venue_address: str = ""
+    venue_detail: str = ""
+    map_url: str = ""
+    virtual_link: str = ""
+    location_tba: bool = False
+    capacity: int | None = None
+    rsvp_deadline: str = ""
+    attendance_requested: bool = True
     notes: str = ""
+    visibility: Literal["draft", "published"] = "draft"
+    featured: bool = False
+
+
+class ActivityRSVPRequest(BaseModel):
+    activity_id: str = Field(min_length=1)
+    status: Literal["coming", "not-coming", "maybe"]
+    party_size: int = 1
 
 
 class VolunteerSlotRequest(BaseModel):
@@ -203,7 +224,7 @@ class PotluckClaimRequest(BaseModel):
 
 
 class RSVPRequest(BaseModel):
-    status: Literal["going", "maybe", "not-going"]
+    status: Literal["going", "some", "maybe", "not-going"]
     user_email: str = ""
     user_name: str = ""
     guests: int = 0
@@ -214,6 +235,7 @@ class EventCreateRequest(BaseModel):
     description: str = ""
     start_at: str = Field(min_length=1)
     end_at: str = ""
+    timezone: str = "UTC"
     location: str = ""
     event_template: str = "custom"
     gathering_format: str = "in-person"
@@ -265,6 +287,7 @@ class EventPublic(BaseModel):
     description: str = ""
     start_at: str
     end_at: str = ""
+    timezone: str = "UTC"
     location: str = ""
     event_template: str = "custom"
     gathering_format: str = "in-person"
@@ -277,6 +300,7 @@ class EventPublic(BaseModel):
     role_assignments: list[dict[str, Any]] = Field(default_factory=list)
     checklist: list[dict[str, Any]] = Field(default_factory=list)
     agenda: list[dict[str, Any]] = Field(default_factory=list)
+    activity_rsvp_summaries: dict[str, dict[str, int]] = Field(default_factory=dict)
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
     meeting_link: str = ""
@@ -508,6 +532,8 @@ class EventUpdateRequest(BaseModel):
     title: str = ""
     description: str = ""
     start_at: str = ""
+    end_at: str = ""
+    timezone: str = ""
     location: str = ""
     gathering_format: str = ""
     max_attendees: int | None = None

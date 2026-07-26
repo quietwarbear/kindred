@@ -100,6 +100,7 @@ export const HomePage = ({ token }) => {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-3 text-sm text-muted-foreground">
                     <span data-testid={`home-gathering-rsvp-going-${gathering.id}`}>Going: {gathering.rsvp_summary.going}</span>
+                    {gathering.rsvp_summary.some ? <span>Some activities: {gathering.rsvp_summary.some}</span> : null}
                     <span data-testid={`home-gathering-rsvp-maybe-${gathering.id}`}>Maybe: {gathering.rsvp_summary.maybe}</span>
                     <span data-testid={`home-gathering-subyard-${gathering.id}`}>{gathering.subyard_name || gathering.event_template}</span>
                   </div>
