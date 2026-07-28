@@ -295,7 +295,13 @@ def notification_query_for_user(
         **extra_filters,
     }
     if user.get("role") not in {"host", "organizer"}:
-        query["audience_scope"] = {"$ne": "organizer"}
+        # Older RSVP notifications were stored with audience_scope="event".
+        # Exclude the sensitive event type itself so those historical rows cannot
+        # reappear in member feeds, counts, or bulk read mutations.
+        query["$nor"] = [
+            {"audience_scope": "organizer"},
+            {"event_type": "event-rsvp"},
+        ]
     return query
 
 

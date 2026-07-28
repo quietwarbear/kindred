@@ -49,7 +49,11 @@ async def community_health(current_user: dict[str, Any] = Depends(get_current_us
     }
 
     events = await events_collection.find(
-        {"community_id": community_id}, {"_id": 0, "rsvp_records": 1, "volunteer_slots": 1}
+        {
+            "community_id": community_id,
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
+        {"_id": 0, "rsvp_records": 1, "volunteer_slots": 1},
     ).to_list(3000)
     rsvp_participants = set()
     volunteers = set()

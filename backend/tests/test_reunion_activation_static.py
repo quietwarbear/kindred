@@ -78,6 +78,31 @@ def test_invitation_credentials_stay_out_of_new_request_urls_and_worker_caches()
     assert "cache.delete(request)" in worker
     assert '@router.get("/rsvp")' in backend
     assert '@router.post("/rsvp")' in backend
+    assert '@router.get("/rsvp/{token}")' not in backend
+    assert '@router.post("/rsvp/{token}")' not in backend
+
+
+def test_fragment_invitation_blocks_pre_react_third_party_scripts():
+    html = read("frontend/public/index.html")
+    assert "window.__kindredSensitiveInvitationRoute" in html
+    assert r'^\/rsvp\/?$' in html
+    assert "Boolean(window.location.hash)" in html
+    assert html.count("!window.__kindredSensitiveInvitationRoute") == 3
+    for third_party in [
+        "www.googletagmanager.com/gtm.js",
+        "www.googletagmanager.com/gtag/js",
+        "accounts.google.com/gsi/client",
+    ]:
+        assert third_party in html
+
+
+def test_committed_browser_campaign_uses_fragment_and_header_transport():
+    campaign = read("frontend/scripts/verify-commercial-readiness.js")
+    assert "/rsvp#demo-invite" in campaign
+    assert "authorization !== 'Bearer demo-invite'" in campaign
+    assert "requestUrl.pathname === '/api/public/rsvp'" in campaign
+    assert "/api/public/rsvp/demo-invite" not in campaign
+    assert "sensitiveThirdPartyRequests" in campaign
 
 
 def test_incident_qa_cannot_disable_identity_or_subscription_provider_startup():

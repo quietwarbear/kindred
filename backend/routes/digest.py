@@ -207,7 +207,16 @@ async def digest_preview(current_user: dict[str, Any] = Depends(get_current_user
     digest = await _build_digest(current_user["community_id"])
     if not digest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found.")
-    return {"digest": digest, "html_body": build_digest_body(digest)}
+    visible_events = [
+        {k: v for k, v in event.items() if k != "_hidden_from"}
+        for event in digest.get("upcoming_events", [])
+        if current_user["id"] not in (event.get("_hidden_from") or [])
+    ]
+    visible_digest = {**digest, "upcoming_events": visible_events}
+    return {
+        "digest": visible_digest,
+        "html_body": build_digest_body(visible_digest),
+    }
 
 
 @router.post("/digest/send")

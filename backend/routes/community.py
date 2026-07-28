@@ -145,7 +145,11 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
         }
     ]
     for subyard in subyards:
-        subyard_event_count = await events_collection.count_documents({"community_id": community_id, "subyard_id": subyard["id"]})
+        subyard_event_count = await events_collection.count_documents({
+            "community_id": community_id,
+            "subyard_id": subyard["id"],
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        })
         active_courtyards.append(
             {
                 "id": subyard["id"],
@@ -401,7 +405,11 @@ async def kinship_person(user_id: str, current_user: dict[str, Any] = Depends(ge
     ).sort("created_at", -1).to_list(200)
 
     gatherings = await events_collection.find(
-        {"community_id": community_id, "rsvp_records.user_id": user_id},
+        {
+            "community_id": community_id,
+            "rsvp_records.user_id": user_id,
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
         {"_id": 0, "id": 1, "title": 1, "start_at": 1, "location": 1},
     ).sort("start_at", -1).to_list(20)
 

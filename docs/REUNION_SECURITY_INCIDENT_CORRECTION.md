@@ -40,6 +40,9 @@ Generic event responses now pass through role-aware serialization:
   responses.
 - The timeline anniversary surface uses the same serializer, and hidden
   gatherings are excluded for the affected member.
+- Hidden gatherings are also excluded from timeline exports, recurring
+  reminders, member-profile history, digest previews, community health
+  aggregates, memory associations, and subcommunity gathering counts.
 - Public invitation routes continue to return only the held invitation's
   minimal view and aggregate activity attendance.
 
@@ -58,8 +61,11 @@ invitations never inherit a member identity from email alone.
   authorization header to the path-stable `/api/public/rsvp` endpoint.
 - Existing `/rsvp/:token` links remain a controlled transition: the client
   immediately rewrites them to fragment form before subsequent API requests.
+- The backend no longer registers path-token RSVP API routes; both reads and
+  writes require the path-stable endpoint and an authorization header.
 - Secure invitation routes suppress every product-analytics entry point,
-  Google Tag Manager, Google Analytics, and referrer propagation.
+  Google Tag Manager, Google Analytics, Google Identity, and referrer
+  propagation before React starts, including fragment-form invitation URLs.
 - Useful backend access logging remains enabled. Synthetic browser evidence
   confirms invitation API log lines contain `/api/public/rsvp`, not a token.
 - The upgraded service worker treats every RSVP navigation as network-only,
@@ -84,7 +90,9 @@ with `kindred_disposable_`. It verifies:
 
 - Organizer, member, unrelated-user, and anonymous list/detail authorization.
 - Organizer-only named RSVP notification enforcement across activity feed,
-  notification history, unread counts, and mark-read writes.
+  notification history, unread counts, and mark-read writes, including
+  historical event-scoped RSVP rows created before the organizer scope existed.
+- Hidden-event exclusion across every event-derived member surface.
 - Absence of bearer credentials and personal information in unauthorized
   responses.
 - Sixteen simultaneous public respondents without lost overall responses,
@@ -97,7 +105,8 @@ with `kindred_disposable_`. It verifies:
   expired, invalid-stored, and valid-future deadline behavior.
 - Rejection of timezone updates that would make inherited activity starts,
   ends, or deadlines nonexistent or ambiguous.
-- Header-only secure invitation reads/writes and the legacy route transition.
+- Header-only secure invitation reads/writes, rejection of backend path-token
+  API requests, and the legacy web-route transition.
 
 Browser checks use disposable local data. Provider initialization, analytics,
 external delivery, billing, and email calls are disabled for that QA process.
@@ -108,14 +117,15 @@ Current local verification:
   timezone, deadline, index, idempotency, and invitation transport campaign:
   1 passed.
 - Focused backend itinerary, activation, commercial-readiness, and billing
-  kill-switch regressions: 43 passed.
+  kill-switch regressions: 45 passed.
 - Frontend analytics, itinerary, draft/idempotency, pricing, and legacy
   compatibility tests: 28 passed.
 - Backend compilation, production frontend build, and public-route prerender:
   passed.
 - Browser service-worker upgrade from `kindred-v1` to `kindred-v2`: passed;
   the synthetic legacy invitation cache entry was removed.
-- Synthetic desktop and mobile fragment/header invitation checks: passed.
+- Synthetic desktop and mobile fragment/header invitation checks, legacy web
+  transition, and zero analytics/identity scripts on sensitive routes: passed.
 - Android debug build and unsigned iOS generic-device compilation: passed.
 
 ## Invitation-rotation recommendation

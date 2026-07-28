@@ -150,7 +150,13 @@ async def send_gathering_reminders(event_id: str, current_user: dict[str, Any] =
 
 @router.get("/gatherings/reminders")
 async def gatherings_reminders(current_user: dict[str, Any] = Depends(get_current_user)):
-    events = await events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("start_at", 1).to_list(200)
+    events = await events_collection.find(
+        {
+            "community_id": current_user["community_id"],
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
+        {"_id": 0},
+    ).sort("start_at", 1).to_list(200)
     return {"reminders": build_invite_reminders_for_user(current_user, events)}
 
 

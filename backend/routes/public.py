@@ -16,7 +16,8 @@ SECURITY (do not relax without review):
   add member lists, contact info, or other invites here.
 - The POST can only change this single invite's rsvp_status. It creates no
   account and grants no access.
-- Legacy path-token routes remain temporarily for links already in circulation.
+- Legacy web links are rewritten client-side to fragment URLs. The API never
+  accepts invitation credentials in a path or query string.
 """
 
 from datetime import datetime, timezone
@@ -320,15 +321,13 @@ async def secure_public_rsvp_submit(
     return await _public_rsvp_submit(_invitation_token(authorization), payload)
 
 
-@router.get("/rsvp/{token}")
 async def public_rsvp_view(token: str):
-    """Legacy transition route for invitation URLs already in circulation."""
+    """Internal compatibility helper; intentionally not exposed as an API route."""
     return await _public_rsvp_view(token)
 
 
-@router.post("/rsvp/{token}")
 async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
-    """Legacy transition route for invitation URLs already in circulation."""
+    """Internal compatibility helper; intentionally not exposed as an API route."""
     return await _public_rsvp_submit(token, payload)
 
 

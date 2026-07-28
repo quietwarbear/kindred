@@ -136,6 +136,33 @@ async def _run_campaign():
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(sensitive_event.copy())
+    hidden_start = datetime.now(timezone.utc) + timedelta(days=7)
+    hidden_event = {
+        **sensitive_event,
+        "id": "synthetic-hidden-event",
+        "title": "Synthetic Surprise Gathering",
+        "start_at": hidden_start.isoformat(),
+        "end_at": (hidden_start + timedelta(hours=2)).isoformat(),
+        "hidden_from_user_ids": [MEMBER["id"]],
+        "recurrence_frequency": "weekly",
+        "event_invites": [{
+            "id": "synthetic-hidden-invite",
+            "member_id": MEMBER["id"],
+            "invite_source": "member",
+            "invitee_name": MEMBER["full_name"],
+            "email": MEMBER["email"],
+            "rsvp_status": "pending",
+        }],
+        "rsvp_records": [{
+            "user_id": MEMBER["id"],
+            "user_name": MEMBER["full_name"],
+            "status": "going",
+            "guests": 0,
+        }],
+        "activity_rsvps": [],
+        "rsvp_revision": 0,
+    }
+    await events_collection.insert_one(hidden_event.copy())
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -151,11 +178,15 @@ async def _run_campaign():
             headers={"Authorization": "Bearer synthetic-bearer-credential"},
             json={"status": "going", "guests": 1, "activity_responses": {}},
         )
+        legacy_path = await client.get(
+            "/api/public/rsvp/synthetic-bearer-credential"
+        )
     assert missing_header.status_code == 401
     assert secure_view.status_code == 200
     assert secure_view.json()["invitee_name"] == MEMBER["full_name"]
     assert secure_submit.status_code == 200
     assert secure_submit.json()["saved"] is True
+    assert legacy_path.status_code == 404
 
     for path in ("/api/events", f"/api/events/{sensitive_event['id']}"):
         member_response = await _request_as(MEMBER, "GET", path)
@@ -184,8 +215,12 @@ async def _run_campaign():
             if isinstance(organizer_response.json(), list)
             else [organizer_response.json()]
         )
-        assert organizer_events[0]["event_invites"][0]["id"] == "synthetic-bearer-credential"
-        assert organizer_events[0]["rsvp_records"][0]["user_id"] == MEMBER["id"]
+        organizer_event = next(
+            event for event in organizer_events
+            if event["id"] == sensitive_event["id"]
+        )
+        assert organizer_event["event_invites"][0]["id"] == "synthetic-bearer-credential"
+        assert organizer_event["rsvp_records"][0]["user_id"] == MEMBER["id"]
 
     member_timeline = await _request_as(MEMBER, "GET", "/api/timeline/archive")
     assert member_timeline.status_code == 200
@@ -197,6 +232,51 @@ async def _run_campaign():
         assert "event_invites" not in event
         assert "rsvp_records" not in event
         assert "activity_rsvps" not in event
+    assert hidden_event["title"] not in str(member_timeline.json())
+
+    member_events = await _request_as(MEMBER, "GET", "/api/events")
+    assert hidden_event["title"] not in str(member_events.json())
+    hidden_detail = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/events/{hidden_event['id']}",
+    )
+    assert hidden_detail.status_code == 404
+    for export_path in (
+        "/api/timeline/export",
+        "/api/timeline/export?format=csv",
+    ):
+        exported = await _request_as(MEMBER, "GET", export_path)
+        assert exported.status_code == 200
+        assert hidden_event["title"] not in exported.text
+    reminders = await _request_as(MEMBER, "GET", "/api/gatherings/reminders")
+    assert reminders.status_code == 200
+    assert hidden_event["title"] not in str(reminders.json())
+    kinship = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/kinship/person/{MEMBER['id']}",
+    )
+    assert kinship.status_code == 200
+    assert hidden_event["title"] not in str(kinship.json()["gatherings"])
+    digest = await _request_as(MEMBER, "POST", "/api/digest/preview")
+    assert digest.status_code == 200
+    assert hidden_event["title"] not in str(digest.json())
+    assert "_hidden_from" not in str(digest.json())
+    health = await _request_as(MEMBER, "GET", "/api/community/health")
+    assert health.status_code == 200
+    assert health.json()["archive"]["gatherings"] == 1
+    hidden_memory = await _request_as(
+        MEMBER,
+        "POST",
+        "/api/memories",
+        json={
+            "title": "Synthetic private-association check",
+            "event_id": hidden_event["id"],
+        },
+    )
+    assert hidden_memory.status_code == 200
+    assert hidden_memory.json()["event_title"] == ""
 
     outsider_list = await _request_as(OUTSIDER, "GET", "/api/events")
     assert outsider_list.status_code == 200
@@ -236,6 +316,16 @@ async def _run_campaign():
             "read_by_user_ids": [],
             "created_at": "2099-01-01T00:00:00+00:00",
         },
+        {
+            "id": "synthetic-legacy-rsvp-notification",
+            "community_id": COMMUNITY_ID,
+            "event_type": "event-rsvp",
+            "title": "Legacy RSVP updated",
+            "description": f"{MEMBER['full_name']} is attending.",
+            "audience_scope": "event",
+            "read_by_user_ids": [],
+            "created_at": "2099-01-03T00:00:00+00:00",
+        },
     ])
     for path in ("/api/activity-feed", "/api/notifications/history"):
         host_feed = await _request_as(HOST, "GET", path)
@@ -245,14 +335,16 @@ async def _run_campaign():
         assert member_feed.status_code == 200
         assert outsider_feed.status_code == 200
         assert "synthetic-organizer-rsvp-notification" in str(host_feed.json())
+        assert "synthetic-legacy-rsvp-notification" in str(host_feed.json())
         assert "synthetic-organizer-rsvp-notification" not in str(member_feed.json())
+        assert "synthetic-legacy-rsvp-notification" not in str(member_feed.json())
         assert MEMBER["full_name"] not in str(member_feed.json())
         assert "synthetic-organizer-rsvp-notification" not in str(outsider_feed.json())
         assert "synthetic-community-notification" in str(member_feed.json())
 
     host_unread = await _request_as(HOST, "GET", "/api/notifications/unread-count")
     member_unread = await _request_as(MEMBER, "GET", "/api/notifications/unread-count")
-    assert host_unread.json()["unread_count"] == 2
+    assert host_unread.json()["unread_count"] == 3
     assert member_unread.json()["unread_count"] == 1
     marked = await _request_as(MEMBER, "POST", "/api/notifications/mark-read")
     assert marked.json()["marked_count"] == 1
@@ -261,6 +353,11 @@ async def _run_campaign():
         {"_id": 0},
     )
     assert MEMBER["id"] not in organizer_only["read_by_user_ids"]
+    legacy_named = await notification_events_collection.find_one(
+        {"id": "synthetic-legacy-rsvp-notification"},
+        {"_id": 0},
+    )
+    assert MEMBER["id"] not in legacy_named["read_by_user_ids"]
 
     activity = {
         "id": "synthetic-activity",

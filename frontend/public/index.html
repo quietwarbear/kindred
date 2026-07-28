@@ -2,8 +2,16 @@
 <html lang="en">
     <head>
         <meta name="referrer" content="no-referrer" />
+        <script>
+          window.__kindredSensitiveInvitationRoute =
+            /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+            || (
+              /^\/rsvp\/?$/i.test(window.location.pathname)
+              && Boolean(window.location.hash)
+            );
+        </script>
         <!-- Analytics is never initialized on bearer-token RSVP routes. -->
-        <script>if(!/^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)&&! /^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)){(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        <script>if(!window.__kindredSensitiveInvitationRoute&&! /^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)){(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
     j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
@@ -12,7 +20,7 @@
         <!-- Google tag (gtag.js) -->
         <script>
           if (
-            !/^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+            !window.__kindredSensitiveInvitationRoute
             && !/^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
           ) {
             var googleTag = document.createElement('script');
@@ -73,7 +81,10 @@
         <meta name="twitter:image" content="https://www.heykindred.org/og-image.png" />
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
         <script>
-          if (!/^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+          if (
+            !window.__kindredSensitiveInvitationRoute
+            && !/^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+          ) {
             const googleIdentity = document.createElement("script");
             googleIdentity.src = "https://accounts.google.com/gsi/client";
             googleIdentity.async = true;

@@ -97,7 +97,13 @@ async def timeline_export(
     """Export timeline data as JSON or CSV."""
     from fastapi.responses import Response as FastResponse
     community_id = current_user["community_id"]
-    events = await events_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+    events = await events_collection.find(
+        {
+            "community_id": community_id,
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
+        {"_id": 0},
+    ).to_list(500)
     memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
 
@@ -161,7 +167,14 @@ async def list_memories(current_user: dict[str, Any] = Depends(get_current_user)
 async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     event_title = ""
     if payload.event_id:
-        event_doc = await events_collection.find_one({"id": payload.event_id, "community_id": current_user["community_id"]}, {"_id": 0})
+        event_doc = await events_collection.find_one(
+            {
+                "id": payload.event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            {"_id": 0},
+        )
         if event_doc:
             event_title = event_doc.get("title", "")
 
