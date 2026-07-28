@@ -7,6 +7,7 @@ const puppeteer = require('puppeteer-core');
 const BUILD = path.resolve(__dirname, '..', 'build');
 const OUTPUT = path.resolve(__dirname, '..', '..', 'docs', 'screenshots');
 const HOST = '127.0.0.1';
+const SENSITIVE_HOST = 'kindred.localhost';
 const PORT = 4173;
 const API_URL = 'https://kindred-production-badd.up.railway.app/api/subscriptions/plans';
 const API_ORIGIN = new URL(API_URL).origin;
@@ -211,6 +212,42 @@ async function assertVisible(page, selector, message) {
   if (!(await page.$(selector))) throw new Error(message);
 }
 
+async function assertSensitivePageIsolation(page, externalRequests, label) {
+  const evidence = await page.evaluate(async () => {
+    const scriptSources = [...document.scripts]
+      .map((script) => script.src)
+      .filter(Boolean)
+      .filter((src) => new URL(src).origin !== window.location.origin);
+    const cachedRsvpRequests = [];
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName);
+      for (const request of await cache.keys()) {
+        if (new URL(request.url).pathname.startsWith('/rsvp')) {
+          cachedRsvpRequests.push(request.url);
+        }
+      }
+    }
+    return {
+      documentReferrer: document.referrer,
+      referrerPolicy: document.querySelector('meta[name="referrer"]')?.content || '',
+      scriptSources,
+      cachedRsvpRequests,
+    };
+  });
+  if (
+    evidence.documentReferrer
+    || evidence.referrerPolicy !== 'no-referrer'
+    || evidence.scriptSources.length
+    || evidence.cachedRsvpRequests.length
+    || externalRequests.length
+  ) {
+    throw new Error(`${label} isolation regressed: ${JSON.stringify({
+      ...evidence,
+      externalRequests,
+    })}`);
+  }
+}
+
 (async () => {
   const liveResponse = await fetch(API_URL);
   if (!liveResponse.ok) throw new Error(`Live plans API returned ${liveResponse.status}`);
@@ -241,25 +278,38 @@ async function assertVisible(page, selector, message) {
     const page = await browser.newPage();
     const browserErrors = [];
     const anonymousMutationRequests = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
-    });
-    page.on('pageerror', (error) => browserErrors.push(`page: ${error.message}`));
-    await page.setBypassServiceWorker(true);
-    await page.setRequestInterception(true);
-    page.on('request', (request) => {
+    const invitationApiRequests = [];
+    const sensitiveExternalRequests = [];
+    let sensitiveCapturePhase = '';
+    const allowedSensitiveOrigins = new Set([
+      `http://${SENSITIVE_HOST}:${PORT}`,
+      API_ORIGIN,
+    ]);
+    const handleRequest = (request) => {
       const requestUrl = new URL(request.url());
+      const pageOrigin = request.headers().origin || `http://${HOST}:${PORT}`;
       const respondJson = (body) => request.respond({
         status: 200,
         contentType: 'application/json',
         headers: {
-          'access-control-allow-origin': `http://${HOST}:${PORT}`,
+          'access-control-allow-origin': pageOrigin,
           'access-control-allow-credentials': 'true',
           'access-control-allow-headers': 'authorization,content-type',
           'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
         },
         body: JSON.stringify(body),
       });
+      if (
+        sensitiveCapturePhase
+        && ['http:', 'https:'].includes(requestUrl.protocol)
+        && !allowedSensitiveOrigins.has(requestUrl.origin)
+      ) {
+        sensitiveExternalRequests.push({
+          phase: sensitiveCapturePhase,
+          url: request.url(),
+        });
+        return request.abort();
+      }
       if (request.url().startsWith(API_ORIGIN) && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) {
         anonymousMutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
       }
@@ -291,14 +341,48 @@ async function assertVisible(page, selector, message) {
         respondJson(mockOperations);
       } else if (requestUrl.origin === API_ORIGIN && requestUrl.pathname === '/api/community/members') {
         respondJson({ members: [] });
-      } else if (requestUrl.origin === API_ORIGIN && requestUrl.pathname === '/api/public/rsvp/demo-invite') {
+      } else if (requestUrl.origin === API_ORIGIN && requestUrl.pathname === '/api/public/rsvp') {
+        if (request.method() === 'OPTIONS') {
+          return request.respond({
+            status: 204,
+            headers: {
+              'access-control-allow-origin': pageOrigin,
+              'access-control-allow-headers': 'authorization,content-type',
+              'access-control-allow-methods': 'GET,POST,OPTIONS',
+            },
+          });
+        }
+        const authorization = request.headers().authorization || '';
+        invitationApiRequests.push({
+          method: request.method(),
+          pathname: requestUrl.pathname,
+          search: requestUrl.search,
+          authorization,
+        });
+        if (authorization !== 'Bearer demo-invite') {
+          return request.respond({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: 'Missing invitation credential.' }),
+          });
+        }
         respondJson(mockPublicView);
       } else if (requestUrl.pathname === '/sw.js') {
         request.abort();
       } else {
         request.continue();
       }
-    });
+    };
+    const configurePage = async (targetPage) => {
+      targetPage.on('console', (message) => {
+        if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
+      });
+      targetPage.on('pageerror', (error) => browserErrors.push(`page: ${error.message}`));
+      await targetPage.setBypassServiceWorker(true);
+      await targetPage.setRequestInterception(true);
+      targetPage.on('request', handleRequest);
+    };
+    await configurePage(page);
 
     await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
     await page.goto(`http://${HOST}:${PORT}/`, { waitUntil: 'networkidle0' });
@@ -404,7 +488,9 @@ async function assertVisible(page, selector, message) {
     await page.screenshot({ path: path.join(OUTPUT, 'reunion-itinerary-desktop.png'), fullPage: true });
 
     await page.evaluate(() => window.localStorage.removeItem('gathering-cypher-auth'));
-    await page.goto(`http://${HOST}:${PORT}/rsvp/demo-invite`, { waitUntil: 'networkidle0' });
+    sensitiveExternalRequests.length = 0;
+    sensitiveCapturePhase = 'fragment-desktop';
+    await page.goto(`http://${SENSITIVE_HOST}:${PORT}/rsvp#demo-invite`, { waitUntil: 'networkidle0' });
     await assertVisible(page, '[data-testid="public-rsvp-some"]', 'Partial-reunion response is missing.');
     await page.click('[data-testid="public-rsvp-some"]');
     await page.click('[data-testid="public-rsvp-continue"]');
@@ -415,6 +501,40 @@ async function assertVisible(page, selector, message) {
       throw new Error('Public itinerary does not show privacy-safe attendance counts.');
     }
     await page.screenshot({ path: path.join(OUTPUT, 'reunion-public-rsvp-desktop.png'), fullPage: true });
+    await assertSensitivePageIsolation(page, sensitiveExternalRequests, 'Fragment RSVP route');
+    sensitiveCapturePhase = '';
+    if (
+      invitationApiRequests.length < 1
+      || invitationApiRequests.some((request) => (
+        request.pathname !== '/api/public/rsvp'
+        || request.search
+        || request.authorization !== 'Bearer demo-invite'
+      ))
+    ) {
+      throw new Error(`Invitation credential transport regressed: ${JSON.stringify(invitationApiRequests)}`);
+    }
+
+    invitationApiRequests.length = 0;
+    sensitiveExternalRequests.length = 0;
+    sensitiveCapturePhase = 'legacy-desktop';
+    const legacyPage = await browser.newPage();
+    await configurePage(legacyPage);
+    await legacyPage.goto(`http://${SENSITIVE_HOST}:${PORT}/rsvp/demo-invite`, { waitUntil: 'networkidle0' });
+    await legacyPage.waitForFunction(
+      () => window.location.pathname === '/rsvp' && window.location.hash === '#demo-invite',
+    );
+    await assertVisible(legacyPage, '[data-testid="public-rsvp-some"]', 'Legacy invitation transition did not render.');
+    await assertSensitivePageIsolation(legacyPage, sensitiveExternalRequests, 'Legacy RSVP route');
+    sensitiveCapturePhase = '';
+    if (
+      invitationApiRequests.length !== 1
+      || invitationApiRequests[0].pathname !== '/api/public/rsvp'
+      || invitationApiRequests[0].search
+      || invitationApiRequests[0].authorization !== 'Bearer demo-invite'
+    ) {
+      throw new Error(`Legacy invitation did not transition to header transport: ${JSON.stringify(invitationApiRequests)}`);
+    }
+    await legacyPage.close();
 
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
     await page.goto(`http://${HOST}:${PORT}/`, { waitUntil: 'networkidle0' });
@@ -448,10 +568,18 @@ async function assertVisible(page, selector, message) {
     await page.screenshot({ path: path.join(OUTPUT, 'reunion-itinerary-mobile.png'), fullPage: true });
 
     await page.evaluate(() => window.localStorage.removeItem('gathering-cypher-auth'));
-    await page.goto(`http://${HOST}:${PORT}/rsvp/demo-invite`, { waitUntil: 'networkidle0' });
+    invitationApiRequests.length = 0;
+    sensitiveExternalRequests.length = 0;
+    sensitiveCapturePhase = 'fragment-mobile';
+    await page.goto(`http://${SENSITIVE_HOST}:${PORT}/rsvp#demo-invite`, { waitUntil: 'networkidle0' });
     await page.click('[data-testid="public-rsvp-some"]');
     await page.click('[data-testid="public-rsvp-continue"]');
     await assertVisible(page, '[data-testid="public-rsvp-itinerary"]', 'Mobile public activity RSVP did not render.');
+    if (invitationApiRequests.some((request) => request.pathname.includes('demo-invite') || request.search)) {
+      throw new Error(`Mobile invitation credential appeared in an API URL: ${JSON.stringify(invitationApiRequests)}`);
+    }
+    await assertSensitivePageIsolation(page, sensitiveExternalRequests, 'Mobile fragment RSVP route');
+    sensitiveCapturePhase = '';
     await page.screenshot({ path: path.join(OUTPUT, 'reunion-public-rsvp-mobile.png'), fullPage: true });
 
     await page.goto(`http://${HOST}:${PORT}/pricing`, { waitUntil: 'networkidle0' });
@@ -473,7 +601,10 @@ async function assertVisible(page, selector, message) {
     console.log(`Screenshots: ${OUTPUT}`);
   } finally {
     await browser.close();
-    server.close();
+    server.closeAllConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 })().catch((error) => {
   console.error(error);

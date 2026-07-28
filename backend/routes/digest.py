@@ -31,7 +31,7 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import ensure_minimum_role, get_current_user, now_iso
+from dependencies import ensure_minimum_role, get_current_user, hidden_event_ids_for_user, now_iso
 from email_service import build_digest_body, send_community_digest
 
 router = APIRouter(prefix="/api")
@@ -84,7 +84,8 @@ async def _build_digest(community_id: str) -> dict:
     ]
 
     memories = await memories_collection.find(
-        {"community_id": community_id, "created_at": {"$gte": week_ago}}, {"_id": 0, "title": 1}
+        {"community_id": community_id, "created_at": {"$gte": week_ago}},
+        {"_id": 0, "title": 1, "event_id": 1},
     ).sort("created_at", -1).to_list(4)
     threads = await threads_collection.find(
         {"community_id": community_id, "created_at": {"$gte": week_ago}}, {"_id": 0, "title": 1, "category": 1}
@@ -102,9 +103,34 @@ async def _build_digest(community_id: str) -> dict:
         "member_count": member_count,
         "new_members": new_members,
         "upcoming_events": upcoming_events,
-        "recent_memories": memories,
+        "recent_memories": [
+            {
+                "title": memory.get("title", ""),
+                "_event_id": memory.get("event_id", ""),
+            }
+            for memory in memories
+        ],
         "recent_threads": threads,
         "funds_raised": funds_raised,
+    }
+
+
+async def _visible_digest_for_user(digest: dict, user: dict) -> dict:
+    """Strip records derived from events concealed from this recipient."""
+    hidden_ids = set(await hidden_event_ids_for_user(user))
+    return {
+        **digest,
+        "upcoming_events": [
+            {key: value for key, value in event.items() if key != "_hidden_from"}
+            for event in digest.get("upcoming_events", [])
+            if user["id"] not in (event.get("_hidden_from") or [])
+        ],
+        "recent_memories": [
+            {key: value for key, value in memory.items() if key != "_event_id"}
+            for memory in digest.get("recent_memories", [])
+            if not memory.get("_event_id")
+            or memory.get("_event_id") not in hidden_ids
+        ],
     }
 
 
@@ -160,18 +186,14 @@ async def _send_to_members(community_id: str, force: bool = False) -> dict:
                 {"id": member["id"]}, {"$set": {"digest_unsubscribe_token": token}}
             )
 
-        # Drop surprise gatherings this member is the guest of honor for, then strip
-        # the internal hidden-from marker before rendering.
-        visible_events = [
-            {k: v for k, v in e.items() if k != "_hidden_from"}
-            for e in digest.get("upcoming_events", [])
-            if member.get("id") not in (e.get("_hidden_from") or [])
-        ][:5]
         member_digest = {
-            **digest,
-            "upcoming_events": visible_events,
+            **await _visible_digest_for_user(
+                digest,
+                {"id": member["id"], "community_id": community_id},
+            ),
             "unsubscribe_url": f"{BACKEND_PUBLIC_URL}/api/public/digest/unsubscribe/{token}",
         }
+        member_digest["upcoming_events"] = member_digest["upcoming_events"][:5]
         ok = await send_community_digest(email, member_digest)
         sent += 1 if ok else 0
         skipped += 0 if ok else 1
@@ -207,7 +229,11 @@ async def digest_preview(current_user: dict[str, Any] = Depends(get_current_user
     digest = await _build_digest(current_user["community_id"])
     if not digest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found.")
-    return {"digest": digest, "html_body": build_digest_body(digest)}
+    visible_digest = await _visible_digest_for_user(digest, current_user)
+    return {
+        "digest": visible_digest,
+        "html_body": build_digest_body(visible_digest),
+    }
 
 
 @router.post("/digest/send")

@@ -4,10 +4,14 @@ import { useParams } from "react-router-dom";
 
 import { API_URL } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
-import { runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
+import {
+  invitationAuthorization,
+  invitationTokenFromLocation,
+} from "@/lib/invitationTransport";
+import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 
-// Public, no-account RSVP page for https://heykindred.org/rsvp/:token.
-// The bearer token is intentionally used only in the API URL and never analytics.
+// Public, no-account RSVP page for https://heykindred.org/rsvp#token.
+// Fragments stay out of HTTP request URLs; API authentication uses a header.
 
 const APP_STORE_URL = "https://apps.apple.com/app/heykindred/id6760608478";
 
@@ -47,15 +51,22 @@ const dateRange = (gathering) => {
   return end && end !== start ? `${start} through ${end}` : start;
 };
 
-const dayGroups = (activities) => activities.reduce((groups, activity) => {
-  const day = activity.start_at.slice(0, 10);
+const dayGroups = (activities, reunionTimezone) => activities.reduce((groups, activity) => {
+  const day = dayKeyAtTimezone(
+    activity.start_at,
+    activity.timezone || reunionTimezone || "UTC"
+  );
+  if (!day) return groups;
   if (!groups[day]) groups[day] = [];
   groups[day].push(activity);
   return groups;
 }, {});
 
 export const PublicRSVPPage = () => {
-  const { token } = useParams();
+  const { token: legacyToken } = useParams();
+  const [token, setToken] = useState(
+    () => invitationTokenFromLocation(window.location, legacyToken)
+  );
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,12 +78,31 @@ export const PublicRSVPPage = () => {
   const [guests, setGuests] = useState(0);
   const openedTracked = useRef(false);
   const itineraryTracked = useRef(false);
+  const loadRequestId = useRef(0);
+
+  useEffect(() => {
+    const refreshToken = () => {
+      setToken(invitationTokenFromLocation(window.location, legacyToken));
+    };
+    refreshToken();
+    window.addEventListener("hashchange", refreshToken);
+    return () => window.removeEventListener("hashchange", refreshToken);
+  }, [legacyToken]);
 
   const load = useCallback(async () => {
+    const requestId = loadRequestId.current + 1;
+    loadRequestId.current = requestId;
+    setLoading(true);
+    setError("");
+    setData(null);
     try {
-      const response = await fetch(`${API_URL}/public/rsvp/${token}`);
+      if (!token) throw new Error("not found");
+      const response = await fetch(`${API_URL}/public/rsvp`, {
+        headers: invitationAuthorization(token),
+      });
       if (!response.ok) throw new Error("not found");
       const payload = await response.json();
+      if (loadRequestId.current !== requestId) return;
       setData(payload);
       setOverall(payload.rsvp_status === "pending" ? "" : payload.rsvp_status);
       setActivityResponses(Object.fromEntries(
@@ -81,13 +111,23 @@ export const PublicRSVPPage = () => {
           .map((activity) => [activity.id, activity.my_response])
       ));
     } catch {
-      setError("We couldn't find this invitation. Ask whoever invited you for a fresh link.");
+      if (loadRequestId.current === requestId) {
+        setError("We couldn't find this invitation. Ask whoever invited you for a fresh link.");
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === requestId) {
+        setLoading(false);
+      }
     }
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (legacyToken && token) {
+      window.history.replaceState({}, "", `/rsvp#${encodeURIComponent(token)}`);
+    }
+  }, [legacyToken, token]);
 
   useEffect(() => {
     if (data?.gathering?.event_template === "reunion" && !openedTracked.current) {
@@ -111,7 +151,10 @@ export const PublicRSVPPage = () => {
       timezone: gathering.timezone,
     });
   }, [gathering.activities, gathering.timezone]);
-  const groupedActivities = useMemo(() => dayGroups(activities), [activities]);
+  const groupedActivities = useMemo(
+    () => dayGroups(activities, gathering.timezone),
+    [activities, gathering.timezone]
+  );
   const everyActivityDeclined = activities.length > 0
     && activities.every((activity) => activityResponses[activity.id] === "not-coming");
   const comingCount = Object.values(activityResponses).filter((value) => value === "coming").length;
@@ -121,9 +164,12 @@ export const PublicRSVPPage = () => {
     setSaving(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/public/rsvp/${token}`, {
+      const response = await fetch(`${API_URL}/public/rsvp`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...invitationAuthorization(token),
+        },
         body: JSON.stringify({
           status: overall,
           guests: Math.max(0, Number(guests) || 0),

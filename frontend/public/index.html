@@ -1,20 +1,37 @@
 <!doctype html>
 <html lang="en">
     <head>
-        <!-- Google Tag Manager -->
-        <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        <meta name="referrer" content="no-referrer" />
+        <script>
+          window.__kindredSensitiveInvitationRoute =
+            /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+            || (
+              /^\/rsvp\/?$/i.test(window.location.pathname)
+              && Boolean(window.location.hash)
+            );
+        </script>
+        <!-- Analytics is never initialized on bearer-token RSVP routes. -->
+        <script>if(!window.__kindredSensitiveInvitationRoute&&! /^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)){(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
     j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-                                    })(window,document,'script','dataLayer','GTM-K5B32THN');</script>
+                                    })(window,document,'script','dataLayer','GTM-K5B32THN');}</script>
         <!-- End Google Tag Manager -->
         <!-- Google tag (gtag.js) -->
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-K04LMYEJG1"></script>
         <script>
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', 'G-K04LMYEJG1');
+          if (
+            !window.__kindredSensitiveInvitationRoute
+            && !/^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+          ) {
+            var googleTag = document.createElement('script');
+            googleTag.async = true;
+            googleTag.src = 'https://www.googletagmanager.com/gtag/js?id=G-K04LMYEJG1';
+            document.head.appendChild(googleTag);
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = function(){window.dataLayer.push(arguments);};
+            window.gtag('js', new Date());
+            window.gtag('config', 'G-K04LMYEJG1');
+          }
         </script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -28,9 +45,6 @@
         <link rel="icon" type="image/png" sizes="512x512" href="%PUBLIC_URL%/icon-512.png" />
         <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon-192.png" />
         <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
         <link rel="canonical" href="https://www.heykindred.org/" />
         <!--
         manifest.json provides metadata used when your web app is installed on a
@@ -63,12 +77,20 @@
         <meta name="twitter:description" content="Closed, invitation-only. Built for reunions, ministries, and intentional circles. Memory, events, and contributions in one place." />
         <meta name="twitter:image" content="https://www.heykindred.org/og-image.png" />
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        <script>
+          if (
+            !window.__kindredSensitiveInvitationRoute
+            && !/^(?:localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+          ) {
+            const googleIdentity = document.createElement("script");
+            googleIdentity.src = "https://accounts.google.com/gsi/client";
+            googleIdentity.async = true;
+            googleIdentity.defer = true;
+            document.head.appendChild(googleIdentity);
+          }
+        </script>
     </head>
     <body>
-        <!-- Google Tag Manager (noscript) -->
-        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-K5B32THN" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-        <!-- End Google Tag Manager (noscript) -->
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
         <!--

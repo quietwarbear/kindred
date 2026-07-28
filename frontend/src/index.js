@@ -23,7 +23,7 @@ const app = (
 if (rootEl.hasChildNodes()) rootEl.innerHTML = "";
 ReactDOM.createRoot(rootEl).render(app);
 
-// Initialize RevenueCat AFTER first render so it never blocks the UI
+// Initialize RevenueCat AFTER first render so it never blocks the UI.
 setTimeout(() => {
   initializeRevenueCat().catch(() => {
     console.error("[Kindred] RevenueCat initialization failed");

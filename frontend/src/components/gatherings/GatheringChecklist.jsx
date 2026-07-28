@@ -39,7 +39,7 @@ export const GatheringChecklist = ({ event, token, canCreate, onUpdate }) => {
         <p className="text-lg font-semibold text-foreground">Auto-generated planning checklist</p>
       </div>
       <div className="mt-4 space-y-3">
-        {event.planning_checklist.map((item) => (
+        {(event.planning_checklist || []).map((item) => (
           <button
             className={`w-full rounded-2xl border px-4 py-3 text-left ${item.completed ? "border-primary bg-primary/5" : "border-border bg-background/70"}`}
             data-testid={`gatherings-checklist-item-${item.id}`}

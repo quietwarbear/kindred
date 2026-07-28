@@ -7,9 +7,37 @@ import posthog from "posthog-js";
 const POSTHOG_KEY = "phc_m3uewVirngKNvpwdZ6DYkwMaWXjCscBf5iPwCSpJGm68";
 const POSTHOG_HOST = "https://eu.i.posthog.com";
 
+export const isSensitiveInvitationRoute = () => (
+  typeof window !== "undefined"
+  && (
+    /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+    || (
+      /^\/rsvp\/?$/i.test(window.location.pathname)
+      && Boolean(window.location.hash)
+    )
+  )
+);
+
+const analyticsSuppressed = () => (
+  process.env.REACT_APP_DISABLE_ANALYTICS === "true"
+  || (
+    typeof window !== "undefined"
+    && (
+      window.location.hostname === "127.0.0.1"
+      || (
+        window.location.hostname === "localhost"
+        && Boolean(window.location.port)
+      )
+    )
+  )
+  || isSensitiveInvitationRoute()
+);
+
 export const redactInvitationPaths = (value) => {
   if (typeof value === "string") {
-    return value.replace(/(\/rsvp\/)[^/?#\s]+/gi, "$1[redacted]");
+    return value
+      .replace(/(\/rsvp\/)[^/?#\s]+/gi, "$1[redacted]")
+      .replace(/(\/rsvp)#([^?\s]+)/gi, "$1#[redacted]");
   }
   if (Array.isArray(value)) return value.map(redactInvitationPaths);
   if (value && typeof value === "object") {
@@ -29,22 +57,22 @@ export const sanitizeAnalyticsEvent = (event) => {
 };
 
 export function initAnalytics() {
-  const sensitiveInvitePath = typeof window !== "undefined"
-    && /^\/rsvp\/[^/]+/.test(window.location.pathname);
+  if (analyticsSuppressed()) return false;
   posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
-    capture_pageview: !sensitiveInvitePath,
-    autocapture: !sensitiveInvitePath,
+    capture_pageview: true,
+    autocapture: true,
     mask_all_text: true,
     mask_all_element_attributes: true,
     before_send: sanitizeAnalyticsEvent,
   });
   posthog.register({ product: "kindred" });
+  return true;
 }
 
 // Tie events to the backend user id (never email as the identifier).
 export function identifyUser(user) {
-  if (!user?.id) return;
+  if (!user?.id || analyticsSuppressed()) return;
   posthog.identify(String(user.id), {
     auth_provider: user.auth_provider || null,
   });
@@ -52,10 +80,12 @@ export function identifyUser(user) {
 
 // Clear identity on logout so the next login isn't merged.
 export function resetAnalytics() {
+  if (analyticsSuppressed()) return;
   posthog.reset();
 }
 
 export function trackEvent(name, properties = {}) {
+  if (analyticsSuppressed()) return;
   posthog.capture(name, properties);
 }
 
@@ -97,7 +127,7 @@ const SAFE_REUNION_PROPERTY_KEYS = new Set([
 // Acquisition events must never contain family content, names, emails,
 // invitation tokens, provider identifiers, or community identifiers.
 export function trackReunionEvent(name, properties = {}) {
-  if (!REUNION_EVENTS.includes(name)) return;
+  if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
   const safeProperties = Object.fromEntries(
     Object.entries(properties).filter(
       ([key, value]) =>

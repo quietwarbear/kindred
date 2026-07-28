@@ -159,7 +159,9 @@ export const GatheringDetailPage = ({ token, user }) => {
                   {fmt.label}
                 </span>
                 <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-muted-foreground">
-                  {event.recurrence_frequency === "none" ? "One-time" : `${event.recurrence_frequency} recurring`}
+                  {!event.recurrence_frequency || event.recurrence_frequency === "none"
+                    ? "One-time"
+                    : `${event.recurrence_frequency} recurring`}
                 </span>
                 {event.subyard_name && (
                   <span className="rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-muted-foreground">
@@ -316,8 +318,12 @@ export const GatheringDetailPage = ({ token, user }) => {
         )}
         <GatheringRsvp event={event} onUpdate={mergeEvent} token={token} />
         <GatheringChecklist canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
-        <GatheringInvites event={event} members={members} onUpdate={mergeEvent} token={token} />
-        <GatheringRoles event={event} onUpdate={mergeEvent} token={token} />
+        {canCreate ? (
+          <GatheringInvites event={event} members={members} onUpdate={mergeEvent} token={token} />
+        ) : null}
+        {canCreate ? (
+          <GatheringRoles event={event} onUpdate={mergeEvent} token={token} />
+        ) : null}
         <GatheringVolunteers canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
         <GatheringPotluck canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
         <GatheringTravel canCreate={canCreate} event={event} onReload={loadData} token={token} travelPlans={selectedTravelPlans} />

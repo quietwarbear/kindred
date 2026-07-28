@@ -10,7 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { trackReunionEvent } from "@/lib/analytics";
-import { groupActivitiesByDay } from "@/lib/itinerary";
+import { dayKeyAtTimezone, groupActivitiesByDay } from "@/lib/itinerary";
 
 export const ReunionOperations = ({ event, operations }) => {
   const [activityFilter, setActivityFilter] = useState("all");
@@ -21,7 +21,13 @@ export const ReunionOperations = ({ event, operations }) => {
   const filtered = activities.filter(
     (activity) =>
       (activityFilter === "all" || activity.id === activityFilter)
-      && (dayFilter === "all" || activity.start_at?.slice(0, 10) === dayFilter)
+      && (
+        dayFilter === "all"
+        || dayKeyAtTimezone(
+          activity.start_at,
+          activity.timezone || event.timezone || "UTC"
+        ) === dayFilter
+      )
   );
 
   if (!operations) return null;
@@ -118,7 +124,13 @@ export const ReunionOperations = ({ event, operations }) => {
               <span className="field-label">Filter by activity</span>
               <select className="field-input w-full" onChange={(eventChange) => setActivityFilter(eventChange.target.value)} value={activityFilter}>
                 <option value="all">All activities</option>
-                {activities.filter((activity) => dayFilter === "all" || activity.start_at?.slice(0, 10) === dayFilter).map((activity) => <option key={activity.id} value={activity.id}>{activity.title}</option>)}
+                {activities.filter((activity) => (
+                  dayFilter === "all"
+                  || dayKeyAtTimezone(
+                    activity.start_at,
+                    activity.timezone || event.timezone || "UTC"
+                  ) === dayFilter
+                )).map((activity) => <option key={activity.id} value={activity.id}>{activity.title}</option>)}
               </select>
             </label>
           </div>

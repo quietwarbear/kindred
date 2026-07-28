@@ -297,6 +297,7 @@ function App() {
               path="/welcome"
             />
             <Route element={<InviteLandingPage />} path="/invite/:code" />
+            <Route element={<PublicRSVPPage />} path="/rsvp" />
             <Route element={<PublicRSVPPage />} path="/rsvp/:token" />
             <Route element={<SSOHandoffPage onAuthSuccess={handleFreshLogin} />} path="/sso" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />

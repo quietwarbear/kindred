@@ -12,14 +12,19 @@ jest.mock("posthog-js", () => ({
 import posthog from "posthog-js";
 import {
   initAnalytics,
+  identifyUser,
+  isSensitiveInvitationRoute,
   redactInvitationPaths,
   REUNION_EVENTS,
+  resetAnalytics,
   sanitizeAnalyticsEvent,
+  trackEvent,
   trackReunionEvent,
 } from "./analytics";
 
 beforeEach(() => {
-  posthog.capture.mockClear();
+  Object.values(posthog).forEach((mock) => mock.mockClear());
+  window.history.replaceState({}, "", "/");
 });
 
 test("declares every deliberate reunion funnel event", () => {
@@ -132,17 +137,57 @@ test("redacts invitation tokens from analytics URL properties", () => {
   expect(redactInvitationPaths("https://heykindred.org/pricing")).toBe(
     "https://heykindred.org/pricing"
   );
+  expect(redactInvitationPaths("https://heykindred.org/rsvp#fragment-token")).toBe(
+    "https://heykindred.org/rsvp#[redacted]"
+  );
 });
 
-test("disables automatic capture on secure RSVP routes", () => {
-  window.history.replaceState({}, "", "/rsvp/private-token");
-  initAnalytics();
-  expect(posthog.init).toHaveBeenLastCalledWith(
-    expect.any(String),
-    expect.objectContaining({
-      capture_pageview: false,
-      autocapture: false,
-    })
-  );
-  window.history.replaceState({}, "", "/");
+test("fails closed for every analytics entry point on secure RSVP routes", () => {
+  window.history.replaceState({}, "", "/rsvp/synthetic-invitation");
+  expect(isSensitiveInvitationRoute()).toBe(true);
+  expect(initAnalytics()).toBe(false);
+  trackEvent("frontend_error", { message: "synthetic" });
+  trackReunionEvent("invite_opened", { source: "public_rsvp" });
+  trackReunionEvent("rsvp_completed", { status: "going" });
+  identifyUser({ id: "synthetic-user", auth_provider: "test" });
+  resetAnalytics();
+
+  expect(posthog.init).not.toHaveBeenCalled();
+  expect(posthog.register).not.toHaveBeenCalled();
+  expect(posthog.capture).not.toHaveBeenCalled();
+  expect(posthog.identify).not.toHaveBeenCalled();
+  expect(posthog.reset).not.toHaveBeenCalled();
+});
+
+test("secure RSVP analytics guard covers nested paths but not similar public pages", () => {
+  window.history.replaceState({}, "", "/rsvp/synthetic-invitation/confirm");
+  expect(isSensitiveInvitationRoute()).toBe(true);
+  window.history.replaceState({}, "", "/rsvp-help");
+  expect(isSensitiveInvitationRoute()).toBe(false);
+  window.history.replaceState({}, "", "/rsvp#fragment-token");
+  expect(isSensitiveInvitationRoute()).toBe(true);
+});
+
+test("explicit local QA mode suppresses every PostHog entry point", () => {
+  const previous = process.env.REACT_APP_DISABLE_ANALYTICS;
+  process.env.REACT_APP_DISABLE_ANALYTICS = "true";
+  window.history.replaceState({}, "", "/gatherings");
+
+  expect(initAnalytics()).toBe(false);
+  identifyUser({ id: "synthetic-user" });
+  resetAnalytics();
+  trackEvent("synthetic_event", { source: "browser-qa" });
+  trackReunionEvent("itinerary_viewed", { source: "browser-qa" });
+
+  expect(posthog.init).not.toHaveBeenCalled();
+  expect(posthog.register).not.toHaveBeenCalled();
+  expect(posthog.capture).not.toHaveBeenCalled();
+  expect(posthog.identify).not.toHaveBeenCalled();
+  expect(posthog.reset).not.toHaveBeenCalled();
+
+  if (previous === undefined) {
+    delete process.env.REACT_APP_DISABLE_ANALYTICS;
+  } else {
+    process.env.REACT_APP_DISABLE_ANALYTICS = previous;
+  }
 });

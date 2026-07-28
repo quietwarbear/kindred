@@ -1,4 +1,4 @@
-const CACHE_NAME = "kindred-v1";
+const CACHE_NAME = "kindred-v2";
 const STATIC_ASSETS = [
   "/",
   "/icon-192.png",
@@ -17,11 +17,19 @@ self.addEventListener("install", (event) => {
 // Activate: clean up old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+      const cache = await caches.open(CACHE_NAME);
+      const requests = await cache.keys();
+      await Promise.all(
+        requests
+          .filter((request) => new URL(request.url).pathname.startsWith("/rsvp"))
+          .map((request) => cache.delete(request))
+      );
+      await self.clients.claim();
+    })()
   );
-  self.clients.claim();
 });
 
 // Fetch: network-first for API, cache-first for static assets
@@ -34,6 +42,13 @@ self.addEventListener("fetch", (event) => {
 
   // API requests: network only (don't cache)
   if (url.pathname.startsWith("/api")) return;
+
+  // Invitation routes are always network-only. Never serve or store token-bearing
+  // legacy paths from an installed worker's cache.
+  if (url.pathname === "/rsvp" || url.pathname === "/rsvp/" || url.pathname.startsWith("/rsvp/")) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Navigation requests: network first, fall back to offline page
   if (request.mode === "navigate") {

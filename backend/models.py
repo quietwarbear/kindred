@@ -203,7 +203,7 @@ class AgendaItemRequest(BaseModel):
 class ActivityRSVPRequest(BaseModel):
     activity_id: str = Field(min_length=1)
     status: Literal["coming", "not-coming", "maybe"]
-    party_size: int = 1
+    party_size: int = Field(default=1, ge=1, le=51)
 
 
 class VolunteerSlotRequest(BaseModel):
@@ -227,7 +227,7 @@ class RSVPRequest(BaseModel):
     status: Literal["going", "some", "maybe", "not-going"]
     user_email: str = ""
     user_name: str = ""
-    guests: int = 0
+    guests: int = Field(default=0, ge=0, le=50)
 
 
 class EventCreateRequest(BaseModel):
@@ -253,6 +253,7 @@ class EventCreateRequest(BaseModel):
     agenda: list[dict] = Field(default_factory=list)
     volunteer_slots: list[dict] = Field(default_factory=list)
     potluck_items: list[str] = Field(default_factory=list)
+    client_request_id: str = Field(default="", max_length=100)
 
 
 class ChecklistItemRequest(BaseModel):
@@ -301,6 +302,10 @@ class EventPublic(BaseModel):
     checklist: list[dict[str, Any]] = Field(default_factory=list)
     agenda: list[dict[str, Any]] = Field(default_factory=list)
     activity_rsvp_summaries: dict[str, dict[str, int]] = Field(default_factory=dict)
+    rsvp_summary: dict[str, int] = Field(default_factory=dict)
+    my_rsvp_status: str = ""
+    my_rsvp_guests: int = 0
+    my_activity_responses: dict[str, str] = Field(default_factory=dict)
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
     meeting_link: str = ""

@@ -31,6 +31,15 @@ const partsAtEpoch = (epoch, timezone) => {
   );
 };
 
+const sameLocalParts = (left, right) => (
+  left.year === right.year
+  && left.month === right.month
+  && left.day === right.day
+  && left.hour === right.hour
+  && left.minute === right.minute
+  && left.second === right.second
+);
+
 export function zonedDateTimeToEpoch(value, timezone = "UTC") {
   if (!value) return Number.NaN;
   if (/Z$|[+-]\d{2}:\d{2}$/.test(value)) return new Date(value).getTime();
@@ -60,11 +69,30 @@ export function zonedDateTimeToEpoch(value, timezone = "UTC") {
       guess += correction;
       if (correction === 0) break;
     }
-    return guess;
+    const candidates = new Set();
+    for (let offsetMinutes = -180; offsetMinutes <= 180; offsetMinutes += 15) {
+      const candidate = guess + offsetMinutes * 60_000;
+      if (sameLocalParts(partsAtEpoch(candidate, timezone), desired)) {
+        candidates.add(candidate);
+      }
+    }
+    return candidates.size === 1 ? [...candidates][0] : Number.NaN;
   } catch {
-    return new Date(value).getTime();
+    return Number.NaN;
   }
 }
+
+export function dayKeyAtTimezone(value, timezone = "UTC") {
+  const epoch = zonedDateTimeToEpoch(value, timezone);
+  if (Number.isNaN(epoch)) return "";
+  const parts = partsAtEpoch(epoch, timezone);
+  return [
+    String(parts.year).padStart(4, "0"),
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0"),
+  ].join("-");
+}
+
 export function structuredActivities(event) {
   return (event?.agenda || [])
     .filter((activity) => activity.start_at && activity.visibility !== "archived")
@@ -84,7 +112,11 @@ export function structuredActivities(event) {
 export function groupActivitiesByDay(event, { publishedOnly = false } = {}) {
   return structuredActivities(event).reduce((groups, activity) => {
     if (publishedOnly && activity.visibility !== "published") return groups;
-    const day = activity.start_at.slice(0, 10);
+    const day = dayKeyAtTimezone(
+      activity.start_at,
+      activity.timezone || event?.timezone || "UTC"
+    );
+    if (!day) return groups;
     if (!groups[day]) groups[day] = [];
     groups[day].push(activity);
     return groups;
@@ -125,8 +157,8 @@ export function runOfShow(event, now = new Date()) {
       state = "up-next";
       nextAssigned = true;
     } else {
-      const today = partsAtEpoch(nowEpoch, event?.timezone || "UTC");
-      const activityDay = localParts(activity.start_at);
+      const today = partsAtEpoch(nowEpoch, timezone);
+      const activityDay = partsAtEpoch(start, timezone);
       state = activityDay
         && today.year === activityDay.year
         && today.month === activityDay.month

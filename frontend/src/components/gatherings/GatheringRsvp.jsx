@@ -7,8 +7,8 @@ import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
 export const GatheringRsvp = ({ event, token, onUpdate }) => {
-  const [status, setStatus] = useState("going");
-  const [guests, setGuests] = useState(0);
+  const [status, setStatus] = useState(event.my_rsvp_status || "going");
+  const [guests, setGuests] = useState(event.my_rsvp_guests || 0);
 
   const handleRsvp = async () => {
     try {
@@ -37,8 +37,11 @@ export const GatheringRsvp = ({ event, token, onUpdate }) => {
         <Button className="w-full rounded-full" data-testid="gatherings-rsvp-submit-button" onClick={handleRsvp} type="button">
           Save RSVP
         </Button>
+        <p className="text-sm text-muted-foreground">
+          {(event.rsvp_summary?.going || 0) + (event.rsvp_summary?.some || 0)} attending · {event.rsvp_summary?.maybe || 0} maybe
+        </p>
         <div className="space-y-2">
-          {event.rsvp_records.map((record) => (
+          {(event.rsvp_records || []).map((record) => (
             <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground" data-testid={`gatherings-rsvp-record-${record.user_id}`} key={record.user_id}>
               {record.user_name}: {record.status} {record.guests ? `(+${record.guests})` : ""}
             </div>

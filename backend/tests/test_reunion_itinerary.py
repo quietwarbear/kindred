@@ -3,7 +3,9 @@ from pathlib import Path
 from itinerary import (
     activity_response_summary,
     activity_summaries,
+    canonical_activity_responses,
     derive_overall_suggestion,
+    local_day_key,
     normalize_activity,
     overlap_pairs,
     parse_local_datetime,
@@ -36,6 +38,18 @@ def test_existing_single_day_event_payload_requires_no_migration_fields():
     assert 'end_at: str = ""' in models
     assert 'timezone: str = "UTC"' in models
     assert "agenda: list[dict] = Field(default_factory=list)" in models
+    gathering_components = (
+        ROOT.parent / "frontend" / "src" / "components" / "gatherings"
+    )
+    legacy_array_fallbacks = {
+        "GatheringAgenda.jsx": "(event.agenda || []).map",
+        "GatheringChecklist.jsx": "(event.planning_checklist || []).map",
+        "GatheringPotluck.jsx": "(event.potluck_items || []).map",
+        "GatheringRsvp.jsx": "(event.rsvp_records || []).map",
+        "GatheringVolunteers.jsx": "(event.volunteer_slots || []).map",
+    }
+    for filename, fallback in legacy_array_fallbacks.items():
+        assert fallback in (gathering_components / filename).read_text()
 
 
 def test_legacy_agenda_item_remains_valid_and_unstructured():
@@ -101,6 +115,37 @@ def test_dst_boundary_uses_primary_timezone():
     assert not valid_timezone("Mars/Olympus")
 
 
+def test_nonexistent_and_ambiguous_wall_times_require_an_explicit_offset():
+    assert parse_local_datetime(
+        "2027-03-14T02:30:00",
+        "America/New_York",
+    ) is None
+    assert parse_local_datetime(
+        "2027-11-07T01:30:00",
+        "America/New_York",
+    ) is None
+    assert parse_local_datetime(
+        "2027-11-07T01:30:00-05:00",
+        "America/New_York",
+    ) is not None
+
+
+def test_deadline_validation_fails_closed_and_day_keys_use_the_intended_zone():
+    invalid_deadline = activity(
+        "deadline",
+        "2027-07-18T18:00:00",
+        "2027-07-18T19:00:00",
+        rsvp_deadline="2027-03-14T02:30:00",
+    )
+    assert validate_activity(invalid_deadline, "America/New_York") == [
+        "RSVP deadline must be a valid, unambiguous date and time in the activity timezone."
+    ]
+    assert local_day_key(
+        "2027-07-19T01:00:00Z",
+        "America/New_York",
+    ) == "2027-07-18"
+
+
 def test_only_published_structured_activities_reach_public_itinerary():
     visible = activity("visible", "2027-07-18T10:00:00", "2027-07-18T11:00:00")
     draft = {**activity("draft", "2027-07-18T12:00:00", "2027-07-18T13:00:00"), "visibility": "draft"}
@@ -131,6 +176,36 @@ def test_activity_counts_party_size_capacity_and_no_response():
         "event_invites": [{}, {}, {}, {}, {}, {}],
     }
     assert activity_summaries(event)["dinner"]["party_size"] == 4
+
+
+def test_member_and_public_aliases_are_counted_once_after_safe_reconciliation():
+    event = {
+        "event_invites": [{
+            "id": "synthetic-invite",
+            "member_id": "member-1",
+            "invite_source": "member",
+        }],
+        "activity_rsvps": [
+            {
+                "activity_id": "dinner",
+                "respondent_id": "invite:synthetic-invite",
+                "status": "maybe",
+                "party_size": 1,
+                "updated_at": "2027-01-01T00:00:00+00:00",
+            },
+            {
+                "activity_id": "dinner",
+                "respondent_id": "member-1",
+                "status": "coming",
+                "party_size": 2,
+                "updated_at": "2027-01-02T00:00:00+00:00",
+            },
+        ],
+    }
+    reconciled = canonical_activity_responses(event)
+    assert len(reconciled) == 1
+    assert reconciled[0]["respondent_id"] == "member-1"
+    assert reconciled[0]["status"] == "coming"
 
 
 def test_activity_choices_suggest_but_do_not_overwrite_explicit_overall_response():
@@ -179,6 +254,11 @@ def test_routes_preserve_history_and_keep_public_rosters_aggregate_only():
     assert '"attendance": summaries.get(activity_id, {})' in public_route
     assert '"activity_rosters"' not in public_route
     assert '"activity_rsvps": activity_responses' in public_route
+    detail_page = (
+        ROOT.parent / "frontend" / "src" / "components" / "GatheringDetailPage.jsx"
+    ).read_text()
+    assert "canCreate ? (\n          <GatheringInvites" in detail_page
+    assert "canCreate ? (\n          <GatheringRoles" in detail_page
 
 
 def test_billing_and_contribution_routes_are_not_part_of_itinerary_implementation():

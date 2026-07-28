@@ -15,7 +15,9 @@ from dependencies import (
     CONTRIBUTION_PACKAGES,
     SUBSCRIPTION_TIERS,
     ensure_minimum_role,
+    event_derived_query_for_user,
     get_current_user,
+    get_event_for_user,
     now_iso,
     require_feature,
 )
@@ -94,9 +96,10 @@ async def list_travel_plans(
     event_id: str = "",
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    query = {"community_id": current_user["community_id"]}
-    if event_id:
-        query["event_id"] = event_id
+    query = await event_derived_query_for_user(
+        current_user,
+        **({"event_id": event_id} if event_id else {}),
+    )
     plans = await travel_plans_collection.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
     return {"travel_plans": plans}
 
@@ -104,6 +107,8 @@ async def list_travel_plans(
 @router.post("/travel-plans")
 async def create_travel_plan(payload: TravelPlanCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     await require_feature(current_user, "travel_coordination")
+    if payload.event_id:
+        await get_event_for_user(payload.event_id, current_user)
     plan_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -132,7 +137,10 @@ async def create_travel_plan(payload: TravelPlanCreateRequest, current_user: dic
 
 @router.post("/travel-plans/{plan_id}/assign-self")
 async def assign_self_to_travel(plan_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
-    plan_doc = await travel_plans_collection.find_one({"id": plan_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    plan_doc = await travel_plans_collection.find_one(
+        await event_derived_query_for_user(current_user, id=plan_id),
+        {"_id": 0},
+    )
     if not plan_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Travel plan not found.")
     travelers = plan_doc.get("travelers", [])
@@ -146,7 +154,10 @@ async def assign_self_to_travel(plan_id: str, current_user: dict[str, Any] = Dep
 
 @router.put("/travel-plans/{plan_id}")
 async def update_travel_plan(plan_id: str, payload: TravelPlanCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
-    plan_doc = await travel_plans_collection.find_one({"id": plan_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    plan_doc = await travel_plans_collection.find_one(
+        await event_derived_query_for_user(current_user, id=plan_id),
+        {"_id": 0},
+    )
     if not plan_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Travel plan not found.")
     updates = {
@@ -171,7 +182,9 @@ async def update_travel_plan(plan_id: str, payload: TravelPlanCreateRequest, cur
 
 @router.delete("/travel-plans/{plan_id}")
 async def delete_travel_plan(plan_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
-    result = await travel_plans_collection.delete_one({"id": plan_id, "community_id": current_user["community_id"]})
+    result = await travel_plans_collection.delete_one(
+        await event_derived_query_for_user(current_user, id=plan_id)
+    )
     if result.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Travel plan not found.")
     return {"ok": True}
@@ -179,7 +192,10 @@ async def delete_travel_plan(plan_id: str, current_user: dict[str, Any] = Depend
 
 @router.get("/budget-plans")
 async def list_budget_plans(current_user: dict[str, Any] = Depends(get_current_user)):
-    budgets = await budget_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    budgets = await budget_plans_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
     return {"budgets": budgets}
 
 
@@ -187,6 +203,8 @@ async def list_budget_plans(current_user: dict[str, Any] = Depends(get_current_u
 async def create_budget_plan(payload: BudgetCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
     await require_feature(current_user, "shared_funds")
+    if payload.event_id:
+        await get_event_for_user(payload.event_id, current_user)
     budget_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -209,7 +227,10 @@ async def create_budget_plan(payload: BudgetCreateRequest, current_user: dict[st
 @router.put("/budget-plans/{budget_id}")
 async def update_budget_plan(budget_id: str, payload: BudgetCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
-    doc = await budget_plans_collection.find_one({"id": budget_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    doc = await budget_plans_collection.find_one(
+        await event_derived_query_for_user(current_user, id=budget_id),
+        {"_id": 0},
+    )
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Budget plan not found.")
     updates = {
@@ -229,7 +250,9 @@ async def update_budget_plan(budget_id: str, payload: BudgetCreateRequest, curre
 @router.delete("/budget-plans/{budget_id}")
 async def delete_budget_plan(budget_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
-    result = await budget_plans_collection.delete_one({"id": budget_id, "community_id": current_user["community_id"]})
+    result = await budget_plans_collection.delete_one(
+        await event_derived_query_for_user(current_user, id=budget_id)
+    )
     if result.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Budget plan not found.")
     return {"ok": True}
@@ -251,8 +274,15 @@ async def payment_summary(current_user: dict[str, Any] = Depends(get_current_use
 @router.get("/funds-travel/overview")
 async def funds_travel_overview(current_user: dict[str, Any] = Depends(get_current_user)):
     payment_summary_payload = await payment_summary(current_user)
-    budgets = await budget_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    travel_plans = await travel_plans_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    derived_query = await event_derived_query_for_user(current_user)
+    budgets = await budget_plans_collection.find(
+        derived_query,
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    travel_plans = await travel_plans_collection.find(
+        derived_query,
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
     pending_travel_total = round(sum(item.get("amount_estimate", 0) for item in travel_plans), 2)
     return {**payment_summary_payload, "budgets": budgets, "travel_plans": travel_plans, "pending_travel_total": pending_travel_total}
 

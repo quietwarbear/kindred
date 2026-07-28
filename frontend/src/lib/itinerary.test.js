@@ -1,4 +1,5 @@
 import {
+  dayKeyAtTimezone,
   findActivityOverlaps,
   groupActivitiesByDay,
   reunionDayCountFromEvent,
@@ -60,4 +61,37 @@ test("resolves local times across a daylight-saving boundary", () => {
   const before = zonedDateTimeToEpoch("2027-03-14T01:30:00", "America/New_York");
   const after = zonedDateTimeToEpoch("2027-03-14T03:30:00", "America/New_York");
   expect((after - before) / 3_600_000).toBe(1);
+});
+
+test("rejects nonexistent and ambiguous wall times without an explicit offset", () => {
+  expect(zonedDateTimeToEpoch(
+    "2027-03-14T02:30:00",
+    "America/New_York"
+  )).toBeNaN();
+  expect(zonedDateTimeToEpoch(
+    "2027-11-07T01:30:00",
+    "America/New_York"
+  )).toBeNaN();
+  expect(zonedDateTimeToEpoch(
+    "2027-11-07T01:30:00-05:00",
+    "America/New_York"
+  )).not.toBeNaN();
+});
+
+test("derives day keys from the activity instant and intended timezone", () => {
+  expect(dayKeyAtTimezone(
+    "2027-07-19T01:00:00Z",
+    "America/New_York"
+  )).toBe("2027-07-18");
+  const offsetEvent = {
+    ...event,
+    agenda: [{
+      id: "late",
+      title: "Late gathering",
+      start_at: "2027-07-19T01:00:00Z",
+      end_at: "2027-07-19T02:00:00Z",
+      visibility: "published",
+    }],
+  };
+  expect(Object.keys(groupActivitiesByDay(offsetEvent))).toEqual(["2027-07-18"]);
 });

@@ -55,7 +55,7 @@ export const PrivacyPolicyPage = () => (
             <li><strong>MongoDB and the configured hosting provider:</strong> application records, content, media stored as data URLs, and operational metadata.</li>
             <li><strong>Stripe:</strong> web checkout, billing, customer, payment, and subscription data.</li>
             <li><strong>RevenueCat, Apple, and Google Play:</strong> mobile purchase identifiers, entitlements, store, status, and subscription dates.</li>
-            <li><strong>Google:</strong> Google Sign-In identity data; Google Analytics and Tag Manager usage data; Google Fonts requests; and, when the configured AI model uses Gemini, content supplied to that model.</li>
+            <li><strong>Google:</strong> Google Sign-In identity data; Google Analytics and Tag Manager usage data; and, when the configured AI model uses Gemini, content supplied to that model.</li>
             <li><strong>PostHog (EU ingestion endpoint):</strong> product analytics, autocaptured interactions, page views, a Kindred user ID after sign-in, and authentication-provider label.</li>
             <li><strong>OpenAI or another LiteLLM-routed model provider:</strong> text, images, or audio submitted to enabled AI features. Whisper is used for voice transcription when configured. The actual provider is controlled by server model configuration.</li>
             <li><strong>Resend:</strong> recipient email address and the content of subscription notices and community digests.</li>

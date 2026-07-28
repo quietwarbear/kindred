@@ -25,7 +25,8 @@ afterEach(() => {
 
 test("keeps the pre-account draft local and limits stored fields", () => {
   saveReunionDraft({ ...completeDraft, email: "private@example.com", invitation_token: "secret" });
-  expect(loadReunionDraft()).toEqual(completeDraft);
+  expect(loadReunionDraft()).toEqual(expect.objectContaining(completeDraft));
+  expect(loadReunionDraft().client_request_id).toEqual(expect.any(String));
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("private@example.com");
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("secret");
 });
@@ -51,9 +52,16 @@ test("creates a useful reunion event without billing or community setup fields",
   expect(payload.agenda[0].visibility).toBe("draft");
   expect(payload.timezone).toBe("America/Los_Angeles");
   expect(payload.end_at).toBe("2027-07-18T18:00:00");
+  expect(payload.client_request_id).toEqual(expect.any(String));
   expect(payload).not.toHaveProperty("price");
   expect(payload).not.toHaveProperty("subscription");
   expect(payload).not.toHaveProperty("community_name");
+});
+
+test("keeps one idempotency key across save and retry", () => {
+  const first = saveReunionDraft(completeDraft);
+  const retry = reunionDraftToEventPayload(loadReunionDraft());
+  expect(retry.client_request_id).toBe(first.client_request_id);
 });
 
 test("supports a one-day default and an optional multiday range", () => {

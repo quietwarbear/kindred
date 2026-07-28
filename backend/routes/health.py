@@ -17,7 +17,7 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import get_current_user
+from dependencies import event_derived_query_for_user, get_current_user
 
 router = APIRouter(prefix="/api")
 
@@ -35,7 +35,8 @@ async def community_health(current_user: dict[str, Any] = Depends(get_current_us
     member_ids = {m["id"] for m in members}
 
     memories = await memories_collection.find(
-        {"community_id": community_id}, {"_id": 0, "created_by": 1, "created_at": 1}
+        await event_derived_query_for_user(current_user),
+        {"_id": 0, "created_by": 1, "created_at": 1},
     ).to_list(3000)
     threads = await threads_collection.find(
         {"community_id": community_id}, {"_id": 0, "created_by": 1, "created_at": 1, "category": 1, "elder_name": 1}
@@ -49,7 +50,11 @@ async def community_health(current_user: dict[str, Any] = Depends(get_current_us
     }
 
     events = await events_collection.find(
-        {"community_id": community_id}, {"_id": 0, "rsvp_records": 1, "volunteer_slots": 1}
+        {
+            "community_id": community_id,
+            "hidden_from_user_ids": {"$ne": current_user["id"]},
+        },
+        {"_id": 0, "rsvp_records": 1, "volunteer_slots": 1},
     ).to_list(3000)
     rsvp_participants = set()
     volunteers = set()
