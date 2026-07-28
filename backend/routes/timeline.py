@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from db import communities_collection, events_collection, memories_collection, threads_collection
-from dependencies import get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
+from dependencies import event_derived_query_for_user, get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
 from event_privacy import serialize_event_for_user
 from models import CommentRequest, MemoryCreateRequest, MemoryPublic, MemoryUpdateRequest, ThreadCreateRequest, ThreadPublic
 from ai_tagging import generate_memory_tags
@@ -28,7 +28,10 @@ async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_us
         },
         {"_id": 0},
     ).to_list(300)
-    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+    memories = await memories_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).to_list(300)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
 
     timeline_items = []
@@ -104,7 +107,10 @@ async def timeline_export(
         },
         {"_id": 0},
     ).to_list(500)
-    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+    memories = await memories_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).to_list(500)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
 
     rows = []
@@ -146,7 +152,10 @@ async def memory_search(q: str = "", current_user: dict[str, Any] = Depends(get_
 
     rx = {"$regex": re.escape(query), "$options": "i"}
     memories = await memories_collection.find(
-        {"community_id": community_id, "$or": [{"title": rx}, {"description": rx}, {"ai_summary": rx}, {"tags": rx}]},
+        await event_derived_query_for_user(
+            current_user,
+            **{"$or": [{"title": rx}, {"description": rx}, {"ai_summary": rx}, {"tags": rx}]},
+        ),
         {"_id": 0, "id": 1, "title": 1, "ai_summary": 1, "description": 1, "created_at": 1, "tags": 1},
     ).sort("created_at", -1).to_list(40)
     threads = await threads_collection.find(
@@ -159,7 +168,10 @@ async def memory_search(q: str = "", current_user: dict[str, Any] = Depends(get_
 
 @router.get("/memories", response_model=list[MemoryPublic])
 async def list_memories(current_user: dict[str, Any] = Depends(get_current_user)):
-    memories = await memories_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    memories = await memories_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
     return memories
 
 
@@ -339,7 +351,8 @@ async def batch_retag(current_user: dict[str, Any] = Depends(get_current_user)):
 
     community_doc = await get_community_for_user(current_user)
     memories = await memories_collection.find(
-        {"community_id": current_user["community_id"]}, {"_id": 0}
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
     ).to_list(200)
 
     if not memories:

@@ -42,13 +42,21 @@ Generic event responses now pass through role-aware serialization:
   gatherings are excluded for the affected member.
 - Hidden gatherings are also excluded from timeline exports, recurring
   reminders, member-profile history, digest previews, community health
-  aggregates, memory associations, and subcommunity gathering counts.
+  aggregates, memory associations, travel and budget records, community
+  overview/courtyard projections, legacy previews, and subcommunity gathering
+  counts.
+- Notifications tied to hidden gatherings are excluded from member reads,
+  unread counts, and mark-read writes. New hidden-event invitation and reminder
+  notifications are organizer-scoped.
 - Public invitation routes continue to return only the held invitation's
   minimal view and aggregate activity attendance.
 
 RSVP writes use a revision-guarded compare-and-swap loop with bounded retry.
 Concurrent public and authenticated updates can no longer replace a newer
-whole-event RSVP snapshot.
+whole-event RSVP snapshot. Authenticated member visibility is part of the
+atomic write predicate, and member-linked public invitations recheck visibility
+inside that same write boundary, so an organizer hiding a gathering during an
+RSVP request prevents the write.
 
 Member-linked invitations now carry `member_id`. Existing member invitations
 without that field reconcile only when both the invitation source is `member`
@@ -66,6 +74,10 @@ invitations never inherit a member identity from email alone.
 - Secure invitation routes suppress every product-analytics entry point,
   Google Tag Manager, Google Analytics, Google Identity, and referrer
   propagation before React starts, including fragment-form invitation URLs.
+- Sensitive RSVP pages load no third-party fonts, images, scripts, or other
+  external resources. The committed browser campaign enforces a first-party
+  origin allowlist and repeats the complete isolation check for the legacy URL
+  in a fresh page.
 - Useful backend access logging remains enabled. Synthetic browser evidence
   confirms invitation API log lines contain `/api/public/rsvp`, not a token.
 - The upgraded service worker treats every RSVP navigation as network-only,
@@ -91,8 +103,13 @@ with `kindred_disposable_`. It verifies:
 - Organizer, member, unrelated-user, and anonymous list/detail authorization.
 - Organizer-only named RSVP notification enforcement across activity feed,
   notification history, unread counts, and mark-read writes, including
-  historical event-scoped RSVP rows created before the organizer scope existed.
-- Hidden-event exclusion across every event-derived member surface.
+  actual historical `rsvp-update` event-scoped rows created before the
+  organizer scope existed.
+- Hidden-event exclusion across pre-existing linked memories, travel plans,
+  budgets, notifications, searches, exports, digests, profiles, community
+  projections, health aggregates, and legacy previews.
+- Hide-versus-write race rejection for authenticated overall/activity RSVP and
+  member-linked public invitation RSVP.
 - Absence of bearer credentials and personal information in unauthorized
   responses.
 - Sixteen simultaneous public respondents without lost overall responses,
@@ -125,7 +142,9 @@ Current local verification:
 - Browser service-worker upgrade from `kindred-v1` to `kindred-v2`: passed;
   the synthetic legacy invitation cache entry was removed.
 - Synthetic desktop and mobile fragment/header invitation checks, legacy web
-  transition, and zero analytics/identity scripts on sensitive routes: passed.
+  transition, zero third-party resources on sensitive routes, empty referrer,
+  and absence of cached or outbound token-bearing requests: passed. The
+  campaign exits cleanly after closing all browser and server handles.
 - Android debug build and unsigned iOS generic-device compilation: passed.
 
 ## Invitation-rotation recommendation

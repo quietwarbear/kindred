@@ -57,6 +57,17 @@ async def _find_event_and_invite(token: str):
     if not event:
         return None, None
     invite = next((i for i in event.get("event_invites", []) if i.get("id") == token), None)
+    if invite and invite.get("invite_source") == "member":
+        member_id = invite.get("member_id", "")
+        if not member_id and invite.get("email"):
+            member = await find_community_member_by_email(
+                users_collection,
+                event.get("community_id", ""),
+                invite.get("email", ""),
+            )
+            member_id = (member or {}).get("id", "")
+        if member_id in (event.get("hidden_from_user_ids") or []):
+            return None, None
     return event, invite
 
 
@@ -273,9 +284,12 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
         }
 
     try:
+        write_query = {"id": event["id"], "event_invites.id": token}
+        if resolved_member_id:
+            write_query["hidden_from_user_ids"] = {"$ne": resolved_member_id}
         event = await compare_and_swap_event(
             events_collection,
-            {"id": event["id"], "event_invites.id": token},
+            write_query,
             mutate,
         )
     except RSVPWriteConflict as exc:

@@ -25,6 +25,7 @@ from dependencies import (
     build_notifications,
     ensure_chat_rooms_for_community,
     ensure_minimum_role,
+    event_derived_query_for_user,
     enforce_member_limit,
     enforce_subyard_limit,
     get_community_for_user,
@@ -34,6 +35,7 @@ from dependencies import (
     normalize_email,
     now_iso,
     sanitize_doc,
+    visible_event_query_for_user,
 )
 from event_privacy import serialize_event_for_user
 from models import (
@@ -80,8 +82,11 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
     community_doc = await get_community_for_user(current_user)
     community_id = current_user["community_id"]
     member_count = await users_collection.count_documents({"community_id": community_id})
-    event_count = await events_collection.count_documents({"community_id": community_id})
-    memory_count = await memories_collection.count_documents({"community_id": community_id})
+    event_count = await events_collection.count_documents(
+        visible_event_query_for_user(current_user)
+    )
+    memory_query = await event_derived_query_for_user(current_user)
+    memory_count = await memories_collection.count_documents(memory_query)
     thread_count = await threads_collection.count_documents({"community_id": community_id})
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
     funds_agg = await payments_collection.aggregate([
@@ -90,7 +95,10 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
     ]).to_list(1)
     funds_raised = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
     upcoming_events = await events_collection.find({"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0}).sort("start_at", 1).to_list(5)
-    recent_memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
+    recent_memories = await memories_collection.find(
+        memory_query,
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(6)
     recent_threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
 
     return {
@@ -120,7 +128,10 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
     members = await users_collection.find({"community_id": community_id}, {"_id": 0, "password_hash": 0}).to_list(500)
     subyards = await subyards_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", 1).to_list(50)
     upcoming_events = await events_collection.find({"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0}).sort("start_at", 1).to_list(5)
-    memories = await memories_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
+    memories = await memories_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(6)
     threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(6)
     pending_invites = await invites_collection.find({"community_id": community_id, "status": "pending"}, {"_id": 0}).to_list(20)
     funds_agg = await payments_collection.aggregate([
@@ -128,7 +139,10 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
     ]).to_list(1)
     funds_total = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
-    budgets = await budget_plans_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    budgets = await budget_plans_collection.find(
+        await event_derived_query_for_user(current_user),
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(20)
     kinships = await kinships_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     announcements = await announcements_collection.find({"community_id": community_id}, {"_id": 0}).sort("created_at", -1).to_list(10)
     invite_reminders = build_invite_reminders_for_user(current_user, upcoming_events)
@@ -414,7 +428,7 @@ async def kinship_person(user_id: str, current_user: dict[str, Any] = Depends(ge
     ).sort("start_at", -1).to_list(20)
 
     memories = await memories_collection.find(
-        {"community_id": community_id, "created_by": user_id},
+        await event_derived_query_for_user(current_user, created_by=user_id),
         {"_id": 0, "id": 1, "title": 1, "created_at": 1},
     ).sort("created_at", -1).to_list(20)
 

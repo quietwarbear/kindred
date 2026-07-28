@@ -143,7 +143,11 @@ async def send_gathering_reminders(event_id: str, current_user: dict[str, Any] =
         title=f"Reminder batch created for {event_doc['title']}",
         description=f"{len(pending_invites)} recurring invite reminder(s) prepared.",
         related_id=event_id,
-        audience_scope="event",
+        audience_scope=(
+            "organizer"
+            if event_doc.get("hidden_from_user_ids")
+            else "event"
+        ),
     )
     return {"sent_count": len(pending_invites), "delivery_status": delivery_status, "event": event_doc}
 
@@ -510,7 +514,11 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
     try:
         event_doc = await compare_and_swap_event(
             events_collection,
-            {"id": event_id, "community_id": current_user["community_id"]},
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
             mutate,
         )
     except RSVPWriteConflict as exc:
@@ -643,7 +651,11 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         title=f"Gathering invites prepared for {event_doc['title']}",
         description=f"{len(invite_records)} invite record(s) currently attached to this gathering.",
         related_id=event_id,
-        audience_scope="event",
+        audience_scope=(
+            "organizer"
+            if event_doc.get("hidden_from_user_ids")
+            else "event"
+        ),
     )
     return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
 
@@ -914,7 +926,11 @@ async def update_activity_rsvp(
     try:
         event_doc = await compare_and_swap_event(
             events_collection,
-            {"id": event_id, "community_id": current_user["community_id"]},
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
             mutate,
         )
     except RSVPWriteConflict as exc:

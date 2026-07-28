@@ -22,13 +22,19 @@ if not os.environ.get("DB_NAME", "").startswith("kindred_disposable_"):
     raise RuntimeError("Disposable database name must start with kindred_disposable_.")
 
 from db import (  # noqa: E402
+    budget_plans_collection,
     communities_collection,
     events_collection,
+    legacy_table_collection,
+    memories_collection,
     notification_events_collection,
+    travel_plans_collection,
     users_collection,
 )
 from dependencies import get_current_user  # noqa: E402
 from models import AgendaItemRequest, EventCreateRequest, RSVPRequest  # noqa: E402
+import routes.events as events_routes  # noqa: E402
+import routes.public as public_routes  # noqa: E402
 from routes.events import create_event, update_rsvp  # noqa: E402
 from routes.public import PublicRSVPRequest, public_rsvp_submit  # noqa: E402
 from server import app, ensure_indexes  # noqa: E402
@@ -87,10 +93,25 @@ async def _run_campaign():
     await notification_events_collection.database.drop_collection(
         notification_events_collection.name
     )
+    await memories_collection.database.drop_collection(memories_collection.name)
+    await travel_plans_collection.database.drop_collection(
+        travel_plans_collection.name
+    )
+    await budget_plans_collection.database.drop_collection(
+        budget_plans_collection.name
+    )
+    await legacy_table_collection.database.drop_collection(
+        legacy_table_collection.name
+    )
     await ensure_indexes()
     await communities_collection.insert_one({
         "id": COMMUNITY_ID,
         "name": "Synthetic Community",
+    })
+    await legacy_table_collection.insert_one({
+        "id": "synthetic-legacy-config",
+        "community_id": COMMUNITY_ID,
+        "base_url": "https://example.invalid",
     })
     await users_collection.insert_many([HOST.copy(), MEMBER.copy(), OUTSIDER.copy()])
 
@@ -163,6 +184,33 @@ async def _run_campaign():
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(hidden_event.copy())
+    await memories_collection.insert_one({
+        "id": "synthetic-hidden-memory",
+        "community_id": COMMUNITY_ID,
+        "event_id": hidden_event["id"],
+        "event_title": hidden_event["title"],
+        "title": "Synthetic Surprise Memory",
+        "description": "Synthetic hidden-event memory details",
+        "created_by": HOST["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await travel_plans_collection.insert_one({
+        "id": "synthetic-hidden-travel",
+        "community_id": COMMUNITY_ID,
+        "event_id": hidden_event["id"],
+        "title": "Synthetic Surprise Travel",
+        "details": "Synthetic hidden travel details",
+        "amount_estimate": 100,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await budget_plans_collection.insert_one({
+        "id": "synthetic-hidden-budget",
+        "community_id": COMMUNITY_ID,
+        "event_id": hidden_event["id"],
+        "title": "Synthetic Surprise Budget",
+        "target_amount": 500,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -181,12 +229,23 @@ async def _run_campaign():
         legacy_path = await client.get(
             "/api/public/rsvp/synthetic-bearer-credential"
         )
+        hidden_public_view = await client.get(
+            "/api/public/rsvp",
+            headers={"Authorization": "Bearer synthetic-hidden-invite"},
+        )
+        hidden_public_submit = await client.post(
+            "/api/public/rsvp",
+            headers={"Authorization": "Bearer synthetic-hidden-invite"},
+            json={"status": "going", "guests": 0, "activity_responses": {}},
+        )
     assert missing_header.status_code == 401
     assert secure_view.status_code == 200
     assert secure_view.json()["invitee_name"] == MEMBER["full_name"]
     assert secure_submit.status_code == 200
     assert secure_submit.json()["saved"] is True
     assert legacy_path.status_code == 404
+    assert hidden_public_view.status_code == 404
+    assert hidden_public_submit.status_code == 404
 
     for path in ("/api/events", f"/api/events/{sensitive_event['id']}"):
         member_response = await _request_as(MEMBER, "GET", path)
@@ -262,7 +321,9 @@ async def _run_campaign():
     digest = await _request_as(MEMBER, "POST", "/api/digest/preview")
     assert digest.status_code == 200
     assert hidden_event["title"] not in str(digest.json())
+    assert "Synthetic Surprise Memory" not in str(digest.json())
     assert "_hidden_from" not in str(digest.json())
+    assert "_event_id" not in str(digest.json())
     health = await _request_as(MEMBER, "GET", "/api/community/health")
     assert health.status_code == 200
     assert health.json()["archive"]["gatherings"] == 1
@@ -277,6 +338,140 @@ async def _run_campaign():
     )
     assert hidden_memory.status_code == 200
     assert hidden_memory.json()["event_title"] == ""
+    for path in (
+        "/api/memories",
+        "/api/memory/search?q=Surprise",
+        "/api/community/overview",
+        "/api/courtyard/home",
+        "/api/travel-plans",
+        "/api/budget-plans",
+        "/api/funds-travel/overview",
+    ):
+        response = await _request_as(MEMBER, "GET", path)
+        assert response.status_code == 200
+        serialized = str(response.json())
+        assert "Synthetic Surprise Memory" not in serialized
+        assert "Synthetic Surprise Travel" not in serialized
+        assert "Synthetic Surprise Budget" not in serialized
+        assert hidden_event["title"] not in serialized
+    overview = await _request_as(MEMBER, "GET", "/api/community/overview")
+    assert overview.json()["stats"]["events"] == 1
+    legacy_member = await _request_as(
+        MEMBER,
+        "POST",
+        "/api/legacy-table/sync-preview",
+    )
+    assert legacy_member.status_code == 403
+    legacy_host = await _request_as(
+        HOST,
+        "POST",
+        "/api/legacy-table/sync-preview",
+    )
+    assert legacy_host.status_code == 200
+    assert legacy_host.json()["preview_counts"]["events"] == 2
+
+    race_event = {
+        **sensitive_event,
+        "id": "synthetic-hide-write-race",
+        "title": "Synthetic Race Gathering",
+        "event_invites": [{
+            "id": "synthetic-race-public",
+            "member_id": MEMBER["id"],
+            "invite_source": "member",
+            "invitee_name": MEMBER["full_name"],
+            "email": MEMBER["email"],
+            "rsvp_status": "pending",
+        }],
+        "rsvp_records": [],
+        "activity_rsvps": [],
+        "agenda": [{
+            "id": "synthetic-race-activity",
+            "title": "Synthetic Race Activity",
+            "start_at": (hidden_start + timedelta(hours=1)).isoformat(),
+            "end_at": (hidden_start + timedelta(hours=2)).isoformat(),
+            "timezone": "UTC",
+            "visibility": "published",
+            "attendance_requested": True,
+        }],
+        "hidden_from_user_ids": [],
+        "rsvp_revision": 0,
+    }
+    await events_collection.insert_one(race_event.copy())
+    original_compare_and_swap = events_routes.compare_and_swap_event
+
+    async def hide_before_compare(collection, query, mutate):
+        await events_collection.update_one(
+            {"id": race_event["id"]},
+            {"$set": {"hidden_from_user_ids": [MEMBER["id"]]}},
+        )
+        return await original_compare_and_swap(collection, query, mutate)
+
+    events_routes.compare_and_swap_event = hide_before_compare
+    try:
+        raced_overall = await _request_as(
+            MEMBER,
+            "POST",
+            f"/api/events/{race_event['id']}/rsvp",
+            json={"status": "going", "guests": 0},
+        )
+    finally:
+        events_routes.compare_and_swap_event = original_compare_and_swap
+    assert raced_overall.status_code == 404
+    raced_doc = await events_collection.find_one(
+        {"id": race_event["id"]},
+        {"_id": 0},
+    )
+    assert raced_doc["rsvp_records"] == []
+
+    await events_collection.update_one(
+        {"id": race_event["id"]},
+        {"$set": {"hidden_from_user_ids": []}},
+    )
+    events_routes.compare_and_swap_event = hide_before_compare
+    try:
+        raced_activity = await _request_as(
+            MEMBER,
+            "POST",
+            f"/api/events/{race_event['id']}/activity-rsvp",
+            json={
+                "activity_id": "synthetic-race-activity",
+                "status": "coming",
+                "party_size": 1,
+            },
+        )
+    finally:
+        events_routes.compare_and_swap_event = original_compare_and_swap
+    assert raced_activity.status_code == 404
+    raced_doc = await events_collection.find_one(
+        {"id": race_event["id"]},
+        {"_id": 0},
+    )
+    assert raced_doc["activity_rsvps"] == []
+
+    await events_collection.update_one(
+        {"id": race_event["id"]},
+        {"$set": {"hidden_from_user_ids": []}},
+    )
+    original_public_compare = public_routes.compare_and_swap_event
+    public_routes.compare_and_swap_event = hide_before_compare
+    try:
+        with pytest.raises(HTTPException) as hidden_public_race:
+            await public_rsvp_submit(
+                "synthetic-race-public",
+                PublicRSVPRequest(
+                    status="going",
+                    guests=0,
+                    activity_responses={},
+                ),
+            )
+    finally:
+        public_routes.compare_and_swap_event = original_public_compare
+    assert hidden_public_race.value.status_code == 404
+    raced_doc = await events_collection.find_one(
+        {"id": race_event["id"]},
+        {"_id": 0},
+    )
+    assert raced_doc["rsvp_records"] == []
 
     outsider_list = await _request_as(OUTSIDER, "GET", "/api/events")
     assert outsider_list.status_code == 200
@@ -319,12 +514,34 @@ async def _run_campaign():
         {
             "id": "synthetic-legacy-rsvp-notification",
             "community_id": COMMUNITY_ID,
-            "event_type": "event-rsvp",
+            "event_type": "rsvp-update",
             "title": "Legacy RSVP updated",
             "description": f"{MEMBER['full_name']} is attending.",
             "audience_scope": "event",
             "read_by_user_ids": [],
             "created_at": "2099-01-03T00:00:00+00:00",
+        },
+        {
+            "id": "synthetic-hidden-invite-notification",
+            "community_id": COMMUNITY_ID,
+            "event_type": "event-invite",
+            "title": f"Invites prepared for {hidden_event['title']}",
+            "description": "Synthetic hidden invitation details.",
+            "related_id": hidden_event["id"],
+            "audience_scope": "event",
+            "read_by_user_ids": [],
+            "created_at": "2099-01-04T00:00:00+00:00",
+        },
+        {
+            "id": "synthetic-hidden-reminder-notification",
+            "community_id": COMMUNITY_ID,
+            "event_type": "reminder-send",
+            "title": f"Reminders prepared for {hidden_event['title']}",
+            "description": "Synthetic hidden reminder details.",
+            "related_id": hidden_event["id"],
+            "audience_scope": "event",
+            "read_by_user_ids": [],
+            "created_at": "2099-01-05T00:00:00+00:00",
         },
     ])
     for path in ("/api/activity-feed", "/api/notifications/history"):
@@ -338,13 +555,16 @@ async def _run_campaign():
         assert "synthetic-legacy-rsvp-notification" in str(host_feed.json())
         assert "synthetic-organizer-rsvp-notification" not in str(member_feed.json())
         assert "synthetic-legacy-rsvp-notification" not in str(member_feed.json())
+        assert "synthetic-hidden-invite-notification" not in str(member_feed.json())
+        assert "synthetic-hidden-reminder-notification" not in str(member_feed.json())
+        assert hidden_event["title"] not in str(member_feed.json())
         assert MEMBER["full_name"] not in str(member_feed.json())
         assert "synthetic-organizer-rsvp-notification" not in str(outsider_feed.json())
         assert "synthetic-community-notification" in str(member_feed.json())
 
     host_unread = await _request_as(HOST, "GET", "/api/notifications/unread-count")
     member_unread = await _request_as(MEMBER, "GET", "/api/notifications/unread-count")
-    assert host_unread.json()["unread_count"] == 3
+    assert host_unread.json()["unread_count"] == 5
     assert member_unread.json()["unread_count"] == 1
     marked = await _request_as(MEMBER, "POST", "/api/notifications/mark-read")
     assert marked.json()["marked_count"] == 1
@@ -358,6 +578,15 @@ async def _run_campaign():
         {"_id": 0},
     )
     assert MEMBER["id"] not in legacy_named["read_by_user_ids"]
+    for notification_id in (
+        "synthetic-hidden-invite-notification",
+        "synthetic-hidden-reminder-notification",
+    ):
+        hidden_notification = await notification_events_collection.find_one(
+            {"id": notification_id},
+            {"_id": 0},
+        )
+        assert MEMBER["id"] not in hidden_notification["read_by_user_ids"]
 
     activity = {
         "id": "synthetic-activity",

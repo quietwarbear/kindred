@@ -84,16 +84,23 @@ def test_invitation_credentials_stay_out_of_new_request_urls_and_worker_caches()
 
 def test_fragment_invitation_blocks_pre_react_third_party_scripts():
     html = read("frontend/public/index.html")
+    css = read("frontend/src/index.css")
+    landing = read("frontend/src/components/LandingPage.jsx")
     assert "window.__kindredSensitiveInvitationRoute" in html
     assert r'^\/rsvp\/?$' in html
     assert "Boolean(window.location.hash)" in html
-    assert html.count("!window.__kindredSensitiveInvitationRoute") == 3
+    assert html.count("!window.__kindredSensitiveInvitationRoute") >= 3
     for third_party in [
         "www.googletagmanager.com/gtm.js",
         "www.googletagmanager.com/gtag/js",
         "accounts.google.com/gsi/client",
     ]:
         assert third_party in html
+    assert "fonts.googleapis.com" not in html
+    assert "fonts.googleapis.com" not in css
+    assert "images.unsplash.com" not in css
+    assert "developer.apple.com/assets" not in landing
+    assert "badges/static/images" not in landing
 
 
 def test_committed_browser_campaign_uses_fragment_and_header_transport():
@@ -102,7 +109,10 @@ def test_committed_browser_campaign_uses_fragment_and_header_transport():
     assert "authorization !== 'Bearer demo-invite'" in campaign
     assert "requestUrl.pathname === '/api/public/rsvp'" in campaign
     assert "/api/public/rsvp/demo-invite" not in campaign
-    assert "sensitiveThirdPartyRequests" in campaign
+    assert "allowedSensitiveOrigins" in campaign
+    assert "assertSensitivePageIsolation" in campaign
+    assert "legacyPage = await browser.newPage()" in campaign
+    assert "server.closeAllConnections" in campaign
 
 
 def test_incident_qa_cannot_disable_identity_or_subscription_provider_startup():

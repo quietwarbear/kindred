@@ -28,7 +28,7 @@ async def get_activity_feed(
 ):
     """Return a paginated activity feed for the community."""
     community_id = current_user["community_id"]
-    query = notification_query_for_user(
+    query = await notification_query_for_user(
         current_user,
         **({"event_type": event_type} if event_type else {}),
     )

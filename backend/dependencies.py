@@ -285,24 +285,77 @@ async def log_notification_event(
     await notification_events_collection.insert_one(event_doc.copy())
 
 
-def notification_query_for_user(
+SENSITIVE_NAMED_RSVP_EVENT_TYPES = {"event-rsvp", "rsvp-update"}
+
+
+def visible_event_query_for_user(
     user: dict[str, Any],
     **extra_filters: Any,
 ) -> dict[str, Any]:
-    """Scope notification reads to the authenticated user's permitted audience."""
-    query: dict[str, Any] = {
+    """Scope an event query to records the authenticated user may know exist."""
+    return {
+        "community_id": user["community_id"],
+        "hidden_from_user_ids": {"$ne": user["id"]},
+        **extra_filters,
+    }
+
+
+async def hidden_event_ids_for_user(user: dict[str, Any]) -> list[str]:
+    """Return event ids concealed from this user in their current community."""
+    from db import events_collection
+
+    events = await events_collection.find(
+        {
+            "community_id": user["community_id"],
+            "hidden_from_user_ids": user["id"],
+        },
+        {"_id": 0, "id": 1},
+    ).to_list(length=None)
+    return [event["id"] for event in events if event.get("id")]
+
+
+async def event_derived_query_for_user(
+    user: dict[str, Any],
+    **extra_filters: Any,
+) -> dict[str, Any]:
+    """Scope records carrying event_id to events visible to this user."""
+    base_query: dict[str, Any] = {
         "community_id": user["community_id"],
         **extra_filters,
     }
-    if user.get("role") not in {"host", "organizer"}:
-        # Older RSVP notifications were stored with audience_scope="event".
-        # Exclude the sensitive event type itself so those historical rows cannot
-        # reappear in member feeds, counts, or bulk read mutations.
-        query["$nor"] = [
-            {"audience_scope": "organizer"},
-            {"event_type": "event-rsvp"},
+    hidden_ids = await hidden_event_ids_for_user(user)
+    if not hidden_ids:
+        return base_query
+    return {
+        "$and": [
+            base_query,
+            {"event_id": {"$nin": hidden_ids}},
         ]
-    return query
+    }
+
+
+async def notification_query_for_user(
+    user: dict[str, Any],
+    **extra_filters: Any,
+) -> dict[str, Any]:
+    """Scope notification reads and mutations by audience and event visibility."""
+    base_query: dict[str, Any] = {
+        "community_id": user["community_id"],
+        **extra_filters,
+    }
+    conditions: list[dict[str, Any]] = [base_query]
+    if user.get("role") not in {"host", "organizer"}:
+        # Historical named RSVP rows used rsvp-update + audience_scope=event.
+        # Newer rows use an organizer audience and may use event-rsvp. Enforce
+        # both semantics so old rows cannot reappear or be marked read.
+        conditions.extend([
+            {"audience_scope": {"$ne": "organizer"}},
+            {"event_type": {"$nin": sorted(SENSITIVE_NAMED_RSVP_EVENT_TYPES)}},
+        ])
+        hidden_ids = await hidden_event_ids_for_user(user)
+        if hidden_ids:
+            conditions.append({"related_id": {"$nin": hidden_ids}})
+    return conditions[0] if len(conditions) == 1 else {"$and": conditions}
 
 
 def build_notifications(
@@ -475,7 +528,10 @@ async def get_event_for_user(event_id: str, user: dict[str, Any]) -> dict[str, A
 async def get_memory_for_user(memory_id: str, user: dict[str, Any]) -> dict[str, Any]:
     from db import memories_collection
 
-    memory_doc = await memories_collection.find_one({"id": memory_id, "community_id": user["community_id"]}, {"_id": 0})
+    memory_doc = await memories_collection.find_one(
+        await event_derived_query_for_user(user, id=memory_id),
+        {"_id": 0},
+    )
     if not memory_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found.")
     return memory_doc

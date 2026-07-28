@@ -277,10 +277,14 @@ export const LandingPage = ({ isAuthenticated }) => {
           {showStoreBadges ? (
             <div className="flex flex-wrap items-center justify-center gap-3">
               <a className="inline-block transition-opacity hover:opacity-80" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">
-                <img alt="Download on the App Store" src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" style={{ height: "40px" }} />
+                <span className="inline-flex min-h-10 items-center rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground">
+                  Download on the App Store
+                </span>
               </a>
               <a className="inline-block transition-opacity hover:opacity-80" href={PLAY_STORE_URL} rel="noopener noreferrer" target="_blank">
-                <img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" style={{ height: "58px" }} />
+                <span className="inline-flex min-h-10 items-center rounded-lg border border-border bg-background px-4 text-sm font-semibold text-foreground">
+                  Get it on Google Play
+                </span>
               </a>
             </div>
           ) : null}

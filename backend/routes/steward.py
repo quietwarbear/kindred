@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends
 from ai_steward import generate_steward_notes
 from ai_gathering import generate_community_history
 from db import events_collection, memories_collection, threads_collection, users_collection
-from dependencies import get_community_for_user, get_current_user, now_iso
+from dependencies import event_derived_query_for_user, get_community_for_user, get_current_user, now_iso
 
 router = APIRouter(prefix="/api")
 
@@ -50,7 +50,8 @@ async def steward_briefing(current_user: dict[str, Any] = Depends(get_current_us
             newest = dated[0]
 
     # --- Contributors vs. quiet members (deterministic) ---
-    mem_authors = await memories_collection.distinct("created_by", {"community_id": community_id})
+    memory_query = await event_derived_query_for_user(current_user)
+    mem_authors = await memories_collection.distinct("created_by", memory_query)
     thr_authors = await threads_collection.distinct("created_by", {"community_id": community_id})
     contributors = {a for a in (mem_authors + thr_authors) if a}
 
@@ -69,7 +70,11 @@ async def steward_briefing(current_user: dict[str, Any] = Depends(get_current_us
     # --- A memory or story worth resurfacing (oldest with a title) ---
     rediscover = None
     oldest_mem = await memories_collection.find(
-        {"community_id": community_id, "title": {"$nin": ["", None]}}, {"_id": 0, "id": 1, "title": 1}
+        await event_derived_query_for_user(
+            current_user,
+            title={"$nin": ["", None]},
+        ),
+        {"_id": 0, "id": 1, "title": 1},
     ).sort("created_at", 1).to_list(1)
     if oldest_mem:
         rediscover = {"type": "memory", "id": oldest_mem[0]["id"], "title": oldest_mem[0].get("title", "")}
@@ -123,7 +128,8 @@ async def steward_history(current_user: dict[str, Any] = Depends(get_current_use
         {"community_id": community_id, "hidden_from_user_ids": {"$ne": current_user["id"]}}, {"_id": 0, "title": 1}
     ).sort("start_at", -1).to_list(20)
     memories = await memories_collection.find(
-        {"community_id": community_id}, {"_id": 0, "title": 1}
+        await event_derived_query_for_user(current_user),
+        {"_id": 0, "title": 1},
     ).sort("created_at", -1).to_list(30)
     threads = await threads_collection.find(
         {"community_id": community_id}, {"_id": 0, "title": 1}

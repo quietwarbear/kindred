@@ -14,7 +14,14 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import ensure_minimum_role, get_current_user, get_thread_for_user, now_iso
+from dependencies import (
+    ensure_minimum_role,
+    event_derived_query_for_user,
+    get_current_user,
+    get_thread_for_user,
+    now_iso,
+    visible_event_query_for_user,
+)
 from legacy_table_sync import DEFAULT_BASE_URL, push_recipe, sso_secret
 from models import LegacyTableConfigRequest
 
@@ -134,6 +141,7 @@ async def sync_recipe_to_legacy_table(thread_id: str, current_user: dict[str, An
 
 @router.post("/legacy-table/sync-preview")
 async def legacy_table_sync_preview(current_user: dict[str, Any] = Depends(get_current_user)):
+    ensure_minimum_role(current_user, "organizer")
     community_id = current_user["community_id"]
     config = await legacy_table_collection.find_one({"community_id": community_id}, {"_id": 0})
     if not config:
@@ -142,8 +150,12 @@ async def legacy_table_sync_preview(current_user: dict[str, Any] = Depends(get_c
     preview = {
         "members": await users_collection.count_documents({"community_id": community_id}),
         "kinships": await kinships_collection.count_documents({"community_id": community_id}),
-        "events": await events_collection.count_documents({"community_id": community_id}),
-        "memories": await memories_collection.count_documents({"community_id": community_id}),
+        "events": await events_collection.count_documents(
+            visible_event_query_for_user(current_user)
+        ),
+        "memories": await memories_collection.count_documents(
+            await event_derived_query_for_user(current_user)
+        ),
         "threads": await threads_collection.count_documents({"community_id": community_id}),
     }
     updated = {
