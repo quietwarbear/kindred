@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
+import { fragmentInvitationUrl } from "@/lib/invitationTransport";
 import { toast } from "@/components/ui/sonner";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
@@ -44,7 +45,10 @@ const ShareMessageButton = ({ text, testId }) => {
 
 const CopyRsvpLinkButton = ({ inviteId, isReunion }) => {
   const [copied, setCopied] = useState(false);
-  const link = `${typeof window !== "undefined" ? window.location.origin : "https://heykindred.org"}/rsvp/${inviteId}`;
+  const link = fragmentInvitationUrl(
+    typeof window !== "undefined" ? window.location.origin : "https://heykindred.org",
+    inviteId
+  );
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(link);

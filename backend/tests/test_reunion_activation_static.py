@@ -22,7 +22,9 @@ def test_reunion_flow_preserves_the_existing_security_boundary():
 def test_public_rsvp_remains_minimal_and_identifies_the_organizer():
     public = read("backend/routes/public.py")
     events = read("backend/routes/events.py")
-    public_view = public.split("def _public_view", 1)[1].split("@router.get", 1)[0]
+    public_view = public.split("def _public_view", 1)[1].split(
+        "async def _public_rsvp_view", 1
+    )[0]
     assert '"created_by_name": current_user["full_name"]' in events
     assert '"event_template": event.get("event_template", "custom")' in public_view
     assert 'view["invited_by_name"]' in public
@@ -58,3 +60,30 @@ def test_activation_requires_evidence_stronger_than_invite_creation_or_copying()
     assert "evidencedInvites >= 3" in activation
     assert "invites.length >= 3" not in activation
     assert "invite_link_copied" not in activation
+
+
+def test_invitation_credentials_stay_out_of_new_request_urls_and_worker_caches():
+    app = read("frontend/src/App.js")
+    page = read("frontend/src/components/PublicRSVPPage.jsx")
+    transport = read("frontend/src/lib/invitationTransport.js")
+    worker = read("frontend/public/sw.js")
+    backend = read("backend/routes/public.py")
+    assert 'path="/rsvp"' in app
+    assert 'fetch(`${API_URL}/public/rsvp`' in page
+    assert "/public/rsvp/${token}" not in page
+    assert "/rsvp#${encodeURIComponent(invitationId)}" in transport
+    assert "Authorization: `Bearer ${token}`" in transport
+    assert 'const CACHE_NAME = "kindred-v2"' in worker
+    assert 'url.pathname.startsWith("/rsvp/")' in worker
+    assert "cache.delete(request)" in worker
+    assert '@router.get("/rsvp")' in backend
+    assert '@router.post("/rsvp")' in backend
+
+
+def test_incident_qa_cannot_disable_identity_or_subscription_provider_startup():
+    index = read("frontend/src/index.js")
+    auth = read("frontend/src/components/AuthPage.jsx")
+    railway = read("backend/railway.json")
+    assert "REACT_APP_DISABLE_PROVIDER_INIT" not in index
+    assert "REACT_APP_DISABLE_PROVIDER_INIT" not in auth
+    assert "--no-access-log" not in railway

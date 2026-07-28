@@ -1,12 +1,14 @@
 """Public, unauthenticated RSVP-by-link routes (the elder-friendly path).
 
 An invited person can RSVP to a gathering from a shared link without an account
-or the app. The link carries the invite's own uuid4 `id` as an unguessable token.
-Holding a valid token lets the bearer view MINIMAL gathering details and set the
-RSVP for that ONE invite — nothing else is exposed or mutable.
+or the app. New links carry the invite's uuid4 `id` in the browser fragment and
+send it to this API in an Authorization header. Holding a valid token lets the
+bearer view MINIMAL gathering details and set the RSVP for that ONE invite —
+nothing else is exposed or mutable.
 
 SECURITY (do not relax without review):
-- No auth dependency here on purpose. Keep these endpoints dependency-free.
+- No account-session dependency here on purpose. Invitation authorization is
+  bearer-token based.
 - The token is a uuid4 (122 bits random); it is only ever shown to the
   authenticated organizer/members who send the invite. Treat it like a
   shared calendar link (Evite-style).
@@ -14,12 +16,13 @@ SECURITY (do not relax without review):
   add member lists, contact info, or other invites here.
 - The POST can only change this single invite's rsvp_status. It creates no
   account and grants no access.
+- Legacy path-token routes remain temporarily for links already in circulation.
 """
 
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -35,6 +38,7 @@ from itinerary import (
 from rsvp_integrity import (
     RSVPWriteConflict,
     compare_and_swap_event,
+    find_community_member_by_email,
     public_respondent_identity,
 )
 
@@ -53,6 +57,16 @@ async def _find_event_and_invite(token: str):
         return None, None
     invite = next((i for i in event.get("event_invites", []) if i.get("id") == token), None)
     return event, invite
+
+
+def _invitation_token(authorization: str | None) -> str:
+    scheme, _, token = str(authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This invitation requires a private link.",
+        )
+    return token.strip()
 
 
 def _public_view(event: dict, invite: dict) -> dict:
@@ -117,9 +131,8 @@ def _public_view(event: dict, invite: dict) -> dict:
     }
 
 
-@router.get("/rsvp/{token}")
-async def public_rsvp_view(token: str):
-    """Minimal gathering + invite info for a held token. No auth."""
+async def _public_rsvp_view(token: str):
+    """Minimal gathering + invite info for a held invitation token."""
     event, invite = await _find_event_and_invite(token)
     if not event or not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
@@ -139,9 +152,8 @@ async def public_rsvp_view(token: str):
     return view
 
 
-@router.post("/rsvp/{token}")
-async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
-    """Set the RSVP for this one invite. No auth, no account creation."""
+async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
+    """Set the RSVP for this one invitation token."""
     event, invite = await _find_event_and_invite(token)
     if not event or not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
@@ -151,12 +163,10 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
         and invite.get("invite_source") == "member"
         and invite.get("email")
     ):
-        member = await users_collection.find_one(
-            {
-                "community_id": event.get("community_id"),
-                "email": str(invite.get("email")).strip().lower(),
-            },
-            {"_id": 0, "id": 1},
+        member = await find_community_member_by_email(
+            users_collection,
+            event.get("community_id", ""),
+            invite.get("email", ""),
         )
         resolved_member_id = (member or {}).get("id", "")
 
@@ -293,6 +303,33 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     )
     view["saved"] = True
     return view
+
+
+@router.get("/rsvp")
+async def secure_public_rsvp_view(authorization: str | None = Header(default=None)):
+    """Read an invitation using an Authorization header, never a request URL."""
+    return await _public_rsvp_view(_invitation_token(authorization))
+
+
+@router.post("/rsvp")
+async def secure_public_rsvp_submit(
+    payload: PublicRSVPRequest,
+    authorization: str | None = Header(default=None),
+):
+    """Update an invitation using an Authorization header, never a request URL."""
+    return await _public_rsvp_submit(_invitation_token(authorization), payload)
+
+
+@router.get("/rsvp/{token}")
+async def public_rsvp_view(token: str):
+    """Legacy transition route for invitation URLs already in circulation."""
+    return await _public_rsvp_view(token)
+
+
+@router.post("/rsvp/{token}")
+async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
+    """Legacy transition route for invitation URLs already in circulation."""
+    return await _public_rsvp_submit(token, payload)
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from dependencies import (
     get_notification_preferences_for_user,
     get_subyard_for_user,
     log_notification_event,
+    notification_query_for_user,
     now_iso,
 )
 from models import (
@@ -271,7 +272,10 @@ async def communications_unread_summary(current_user: dict[str, Any] = Depends(g
 
 @router.get("/notifications/history")
 async def notification_history(current_user: dict[str, Any] = Depends(get_current_user)):
-    items = await notification_events_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    items = await notification_events_collection.find(
+        notification_query_for_user(current_user),
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
     for item in items:
         item["is_read"] = current_user["id"] in item.get("read_by_user_ids", [])
         item.pop("read_by_user_ids", None)
@@ -307,20 +311,22 @@ async def update_notification_preferences(payload: NotificationPreferencesUpdate
 
 @router.get("/notifications/unread-count")
 async def notification_unread_count(current_user: dict[str, Any] = Depends(get_current_user)):
-    count = await notification_events_collection.count_documents({
-        "community_id": current_user["community_id"],
-        "read_by_user_ids": {"$nin": [current_user["id"]]},
-    })
+    count = await notification_events_collection.count_documents(
+        notification_query_for_user(
+            current_user,
+            read_by_user_ids={"$nin": [current_user["id"]]},
+        )
+    )
     return {"unread_count": count}
 
 
 @router.post("/notifications/mark-read")
 async def mark_notifications_read(current_user: dict[str, Any] = Depends(get_current_user)):
     result = await notification_events_collection.update_many(
-        {
-            "community_id": current_user["community_id"],
-            "read_by_user_ids": {"$nin": [current_user["id"]]},
-        },
+        notification_query_for_user(
+            current_user,
+            read_by_user_ids={"$nin": [current_user["id"]]},
+        ),
         {"$addToSet": {"read_by_user_ids": current_user["id"]}},
     )
     return {"marked_count": result.modified_count}

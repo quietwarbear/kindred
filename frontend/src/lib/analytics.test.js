@@ -137,6 +137,9 @@ test("redacts invitation tokens from analytics URL properties", () => {
   expect(redactInvitationPaths("https://heykindred.org/pricing")).toBe(
     "https://heykindred.org/pricing"
   );
+  expect(redactInvitationPaths("https://heykindred.org/rsvp#fragment-token")).toBe(
+    "https://heykindred.org/rsvp#[redacted]"
+  );
 });
 
 test("fails closed for every analytics entry point on secure RSVP routes", () => {
@@ -161,6 +164,8 @@ test("secure RSVP analytics guard covers nested paths but not similar public pag
   expect(isSensitiveInvitationRoute()).toBe(true);
   window.history.replaceState({}, "", "/rsvp-help");
   expect(isSensitiveInvitationRoute()).toBe(false);
+  window.history.replaceState({}, "", "/rsvp#fragment-token");
+  expect(isSensitiveInvitationRoute()).toBe(true);
 });
 
 test("explicit local QA mode suppresses every PostHog entry point", () => {

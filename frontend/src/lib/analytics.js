@@ -9,7 +9,13 @@ const POSTHOG_HOST = "https://eu.i.posthog.com";
 
 export const isSensitiveInvitationRoute = () => (
   typeof window !== "undefined"
-  && /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+  && (
+    /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
+    || (
+      /^\/rsvp\/?$/i.test(window.location.pathname)
+      && Boolean(window.location.hash)
+    )
+  )
 );
 
 const analyticsSuppressed = () => (
@@ -29,7 +35,9 @@ const analyticsSuppressed = () => (
 
 export const redactInvitationPaths = (value) => {
   if (typeof value === "string") {
-    return value.replace(/(\/rsvp\/)[^/?#\s]+/gi, "$1[redacted]");
+    return value
+      .replace(/(\/rsvp\/)[^/?#\s]+/gi, "$1[redacted]")
+      .replace(/(\/rsvp)#([^?\s]+)/gi, "$1#[redacted]");
   }
   if (Array.isArray(value)) return value.map(redactInvitationPaths);
   if (value && typeof value === "object") {

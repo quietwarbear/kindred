@@ -1,14 +1,20 @@
 # Reunion security and integrity correction
 
-Status: corrective branch prepared after the external merge of PR #14. This
-document does not declare the correction deployed or the incident contained.
+Status: corrective branch amended after the external merge of PR #14. The
+corrective branch remains draft, unmerged, and undeployed. Production
+containment was separately verified by restoring both services to the
+pre-reunion commit.
 
 ## Production triage
 
-- The PR #14 merge commit is present on `main`.
-- The production frontend deployment identifies that merge commit.
-- The reachable backend schema includes the reunion operations, activity RSVP,
-  and public RSVP structures introduced by the merge.
+- The PR #14 merge commit remains present on `main`, but is no longer the
+  production target.
+- Vercel deployment `dpl_3bkDnQrMurHXKmxFTqdoLhoJuTNS` and Railway deployment
+  record `5606000894` were independently verified against pre-reunion commit
+  `0f61fff0bc464d67905f04349eb3015e7937d827`.
+- Vercel and Railway production were restored to matching builds from that
+  commit. The public frontend no longer serves reunion bundle markers, while
+  direct subscription checkout continues to return HTTP 410.
 - The merged generic event schema includes invitation and named RSVP fields.
   Before this correction, ordinary authenticated community-member event
   responses were therefore capable of disclosing organizer-only invitation
@@ -48,10 +54,16 @@ invitations never inherit a member identity from email alone.
 
 ## Additional hardening
 
-- Secure `/rsvp/:token` routes suppress every product-analytics entry point,
+- New invitation links use `/rsvp#token`; the client sends the token only in an
+  authorization header to the path-stable `/api/public/rsvp` endpoint.
+- Existing `/rsvp/:token` links remain a controlled transition: the client
+  immediately rewrites them to fragment form before subsequent API requests.
+- Secure invitation routes suppress every product-analytics entry point,
   Google Tag Manager, Google Analytics, and referrer propagation.
-- Backend access logging is disabled so raw bearer paths are not written by the
-  application server.
+- Useful backend access logging remains enabled. Synthetic browser evidence
+  confirms invitation API log lines contain `/api/public/rsvp`, not a token.
+- The upgraded service worker treats every RSVP navigation as network-only,
+  removes the old cache, and purges any remaining RSVP entries.
 - Itinerary and RSVP deadlines reject malformed, nonexistent, or ambiguous
   local times unless an explicit offset resolves the instant.
 - Itinerary day grouping uses the resolved instant in the intended timezone.
@@ -60,8 +72,9 @@ invitations never inherit a member identity from email alone.
   constraint.
 - Legacy event arrays and naive timestamps remain safe for the detail page and
   dashboard.
-- Local QA can explicitly disable analytics and provider initialization; this
-  does not change production defaults or provider configuration.
+- Local QA can explicitly disable analytics. Apple, Google, and RevenueCat
+  initialization cannot be disabled by deployed application switches; provider
+  isolation belongs in the test harness.
 
 ## Verification evidence
 
@@ -70,32 +83,40 @@ unless both MongoDB environment variables identify a database whose name starts
 with `kindred_disposable_`. It verifies:
 
 - Organizer, member, unrelated-user, and anonymous list/detail authorization.
+- Organizer-only named RSVP notification enforcement across activity feed,
+  notification history, unread counts, and mark-read writes.
 - Absence of bearer credentials and personal information in unauthorized
   responses.
 - Sixteen simultaneous public respondents without lost overall responses,
   activity choices, party sizes, or invitation state.
 - Legacy member reconciliation and separation of unrelated guest identities.
+- Mixed-case legacy member reconciliation within the same community.
 - Idempotent concurrent reunion creation.
 - Unique invitation/idempotency indexes and an `IXSCAN` invitation lookup.
 - Malformed, DST-nonexistent, DST-ambiguous, explicit-offset, timezone-override,
   expired, invalid-stored, and valid-future deadline behavior.
+- Rejection of timezone updates that would make inherited activity starts,
+  ends, or deadlines nonexistent or ambiguous.
+- Header-only secure invitation reads/writes and the legacy route transition.
 
 Browser checks use disposable local data. Provider initialization, analytics,
 external delivery, billing, and email calls are disabled for that QA process.
 
-Final local verification:
+Current local verification:
 
-- Disposable MongoDB authorization, identity, concurrency, deadline, index,
-  and idempotency campaign: 1 passed.
+- Disposable MongoDB authorization, notification scope, identity, concurrency,
+  timezone, deadline, index, idempotency, and invitation transport campaign:
+  1 passed.
 - Focused backend itinerary, activation, commercial-readiness, and billing
-  kill-switch regressions: 41 passed.
+  kill-switch regressions: 43 passed.
 - Frontend analytics, itinerary, draft/idempotency, pricing, and legacy
-  compatibility tests: 25 passed.
+  compatibility tests: 28 passed.
 - Backend compilation, production frontend build, and public-route prerender:
   passed.
+- Browser service-worker upgrade from `kindred-v1` to `kindred-v2`: passed;
+  the synthetic legacy invitation cache entry was removed.
+- Synthetic desktop and mobile fragment/header invitation checks: passed.
 - Android debug build and unsigned iOS generic-device compilation: passed.
-- The iOS simulator was not launched because this Mac's CoreSimulator
-  framework is older than the installed Xcode build.
 
 ## Invitation-rotation recommendation
 
@@ -119,4 +140,5 @@ corrective branch.
 ## Unchanged systems
 
 The subscription HTTP 410 kill switch, RevenueCat, Stripe, Apple, Google Play,
-GCP, production data, and provider configuration are untouched.
+GCP, production data, and provider configuration are untouched. Subscription
+recovery remains paused.

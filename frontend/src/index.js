@@ -23,13 +23,9 @@ const app = (
 if (rootEl.hasChildNodes()) rootEl.innerHTML = "";
 ReactDOM.createRoot(rootEl).render(app);
 
-// Initialize RevenueCat AFTER first render so it never blocks the UI. Local
-// incident QA can disable provider initialization without changing production
-// behavior or provider configuration.
-if (process.env.REACT_APP_DISABLE_PROVIDER_INIT !== "true") {
-  setTimeout(() => {
-    initializeRevenueCat().catch(() => {
-      console.error("[Kindred] RevenueCat initialization failed");
-    });
-  }, 100);
-}
+// Initialize RevenueCat AFTER first render so it never blocks the UI.
+setTimeout(() => {
+  initializeRevenueCat().catch(() => {
+    console.error("[Kindred] RevenueCat initialization failed");
+  });
+}, 100);

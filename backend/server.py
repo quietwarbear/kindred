@@ -13,6 +13,7 @@ from db import (
     events_collection,
     invites_collection,
     sso_codes_collection,
+    users_collection,
 )
 from routes.activity import router as activity_router
 from routes.auth import router as auth_router
@@ -244,6 +245,11 @@ async def ensure_indexes():
         partialFilterExpression={
             "client_request_id": {"$type": "string", "$gt": ""},
         },
+    )
+    await users_collection.create_index(
+        [("community_id", ASCENDING), ("email_normalized", ASCENDING)],
+        name="community_email_normalized_lookup",
+        sparse=True,
     )
 
 

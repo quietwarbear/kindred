@@ -14,7 +14,7 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import get_current_user, now_iso
+from dependencies import get_current_user, notification_query_for_user, now_iso
 
 router = APIRouter(prefix="/api")
 
@@ -28,9 +28,10 @@ async def get_activity_feed(
 ):
     """Return a paginated activity feed for the community."""
     community_id = current_user["community_id"]
-    query = {"community_id": community_id}
-    if event_type:
-        query["event_type"] = event_type
+    query = notification_query_for_user(
+        current_user,
+        **({"event_type": event_type} if event_type else {}),
+    )
 
     skip = (max(page, 1) - 1) * page_size
     total = await notification_events_collection.count_documents(query)
@@ -48,7 +49,7 @@ async def get_activity_feed(
         item.pop("read_by_user_ids", None)
 
     # Get distinct event types for filter options
-    event_types = await notification_events_collection.distinct("event_type", {"community_id": community_id})
+    event_types = await notification_events_collection.distinct("event_type", query)
 
     # Get community stats for the feed header
     member_count = await users_collection.count_documents({"community_id": community_id})

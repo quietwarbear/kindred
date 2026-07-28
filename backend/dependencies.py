@@ -285,6 +285,20 @@ async def log_notification_event(
     await notification_events_collection.insert_one(event_doc.copy())
 
 
+def notification_query_for_user(
+    user: dict[str, Any],
+    **extra_filters: Any,
+) -> dict[str, Any]:
+    """Scope notification reads to the authenticated user's permitted audience."""
+    query: dict[str, Any] = {
+        "community_id": user["community_id"],
+        **extra_filters,
+    }
+    if user.get("role") not in {"host", "organizer"}:
+        query["audience_scope"] = {"$ne": "organizer"}
+    return query
+
+
 def build_notifications(
     kinships: list[dict[str, Any]],
     pending_invites: list[dict[str, Any]],

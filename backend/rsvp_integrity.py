@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 
@@ -10,6 +11,33 @@ MAX_RSVP_WRITE_ATTEMPTS = 32
 
 class RSVPWriteConflict(RuntimeError):
     pass
+
+
+async def find_community_member_by_email(
+    collection,
+    community_id: str,
+    email: str,
+) -> dict[str, Any] | None:
+    """Resolve a member email within one community, including legacy mixed-case rows."""
+    normalized_email = str(email or "").strip().lower()
+    if not community_id or not normalized_email:
+        return None
+    member = await collection.find_one(
+        {"community_id": community_id, "email_normalized": normalized_email},
+        {"_id": 0, "id": 1},
+    )
+    if member:
+        return member
+    return await collection.find_one(
+        {
+            "community_id": community_id,
+            "email": {
+                "$regex": f"^{re.escape(normalized_email)}$",
+                "$options": "i",
+            },
+        },
+        {"_id": 0, "id": 1},
+    )
 
 
 async def compare_and_swap_event(

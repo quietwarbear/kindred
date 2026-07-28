@@ -137,6 +137,26 @@ async def _run_campaign():
     }
     await events_collection.insert_one(sensitive_event.copy())
 
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://kindred.invalid",
+    ) as client:
+        missing_header = await client.get("/api/public/rsvp")
+        secure_view = await client.get(
+            "/api/public/rsvp",
+            headers={"Authorization": "Bearer synthetic-bearer-credential"},
+        )
+        secure_submit = await client.post(
+            "/api/public/rsvp",
+            headers={"Authorization": "Bearer synthetic-bearer-credential"},
+            json={"status": "going", "guests": 1, "activity_responses": {}},
+        )
+    assert missing_header.status_code == 401
+    assert secure_view.status_code == 200
+    assert secure_view.json()["invitee_name"] == MEMBER["full_name"]
+    assert secure_submit.status_code == 200
+    assert secure_submit.json()["saved"] is True
+
     for path in ("/api/events", f"/api/events/{sensitive_event['id']}"):
         member_response = await _request_as(MEMBER, "GET", path)
         assert member_response.status_code == 200
@@ -195,6 +215,53 @@ async def _run_campaign():
         anonymous = await client.get(f"/api/events/{sensitive_event['id']}")
     assert anonymous.status_code == 401
 
+    await notification_events_collection.insert_many([
+        {
+            "id": "synthetic-organizer-rsvp-notification",
+            "community_id": COMMUNITY_ID,
+            "event_type": "event-rsvp",
+            "title": "RSVP updated",
+            "description": f"{MEMBER['full_name']} is attending.",
+            "audience_scope": "organizer",
+            "read_by_user_ids": [],
+            "created_at": "2099-01-02T00:00:00+00:00",
+        },
+        {
+            "id": "synthetic-community-notification",
+            "community_id": COMMUNITY_ID,
+            "event_type": "event-create",
+            "title": "Community gathering",
+            "description": "A gathering was created.",
+            "audience_scope": "community",
+            "read_by_user_ids": [],
+            "created_at": "2099-01-01T00:00:00+00:00",
+        },
+    ])
+    for path in ("/api/activity-feed", "/api/notifications/history"):
+        host_feed = await _request_as(HOST, "GET", path)
+        member_feed = await _request_as(MEMBER, "GET", path)
+        outsider_feed = await _request_as(OUTSIDER, "GET", path)
+        assert host_feed.status_code == 200
+        assert member_feed.status_code == 200
+        assert outsider_feed.status_code == 200
+        assert "synthetic-organizer-rsvp-notification" in str(host_feed.json())
+        assert "synthetic-organizer-rsvp-notification" not in str(member_feed.json())
+        assert MEMBER["full_name"] not in str(member_feed.json())
+        assert "synthetic-organizer-rsvp-notification" not in str(outsider_feed.json())
+        assert "synthetic-community-notification" in str(member_feed.json())
+
+    host_unread = await _request_as(HOST, "GET", "/api/notifications/unread-count")
+    member_unread = await _request_as(MEMBER, "GET", "/api/notifications/unread-count")
+    assert host_unread.json()["unread_count"] == 2
+    assert member_unread.json()["unread_count"] == 1
+    marked = await _request_as(MEMBER, "POST", "/api/notifications/mark-read")
+    assert marked.json()["marked_count"] == 1
+    organizer_only = await notification_events_collection.find_one(
+        {"id": "synthetic-organizer-rsvp-notification"},
+        {"_id": 0},
+    )
+    assert MEMBER["id"] not in organizer_only["read_by_user_ids"]
+
     activity = {
         "id": "synthetic-activity",
         "title": "Synthetic Activity",
@@ -248,6 +315,10 @@ async def _run_campaign():
     )
     assert persisted["rsvp_revision"] == invite_count
 
+    await users_collection.update_one(
+        {"id": MEMBER["id"]},
+        {"$set": {"email": "MeMbEr@Example.Invalid"}},
+    )
     legacy_member_event = {
         **sensitive_event,
         "id": "synthetic-legacy-member-event",
@@ -285,6 +356,7 @@ async def _run_campaign():
     assert [record["user_id"] for record in reconciled["rsvp_records"]] == [
         MEMBER["id"]
     ]
+    assert await users_collection.count_documents({"id": MEMBER["id"]}) == 1
 
     guest_identity_event = {
         **sensitive_event,
@@ -382,6 +454,55 @@ async def _run_campaign():
             ).model_dump(),
         )
         assert response.status_code == 422
+
+    inherited_timezone_event = {
+        **sensitive_event,
+        "id": "synthetic-inherited-timezone-event",
+        "start_at": "2027-11-08T09:00:00",
+        "end_at": "2027-11-08T18:00:00",
+        "timezone": "UTC",
+        "event_invites": [],
+        "rsvp_records": [],
+        "agenda": [{
+            "id": "synthetic-inherited-timezone-activity",
+            "title": "Inherited local time",
+            "start_at": "2027-11-07T01:30:00",
+            "end_at": "2027-11-07T03:30:00",
+            "timezone": "",
+            "visibility": "published",
+        }],
+    }
+    await events_collection.insert_one(inherited_timezone_event.copy())
+    ambiguous_timezone_update = await _request_as(
+        HOST,
+        "PUT",
+        f"/api/events/{inherited_timezone_event['id']}",
+        json={"timezone": "America/New_York"},
+    )
+    assert ambiguous_timezone_update.status_code == 422
+    assert ambiguous_timezone_update.json()["detail"]["code"] == (
+        "invalid_inherited_itinerary_timezone"
+    )
+    unchanged = await events_collection.find_one(
+        {"id": inherited_timezone_event["id"]},
+        {"_id": 0, "timezone": 1},
+    )
+    assert unchanged["timezone"] == "UTC"
+
+    await events_collection.update_one(
+        {"id": inherited_timezone_event["id"]},
+        {"$set": {
+            "agenda.0.start_at": "2027-03-14T02:30:00",
+            "agenda.0.end_at": "2027-03-14T04:30:00",
+        }},
+    )
+    nonexistent_timezone_update = await _request_as(
+        HOST,
+        "PUT",
+        f"/api/events/{inherited_timezone_event['id']}",
+        json={"timezone": "America/New_York"},
+    )
+    assert nonexistent_timezone_update.status_code == 422
 
     explicit_offset = await _request_as(
         HOST,

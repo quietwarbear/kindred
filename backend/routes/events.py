@@ -224,6 +224,35 @@ async def update_event(event_id: str, payload: EventUpdateRequest, current_user:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Gathering end must not be before its start.",
         )
+    if "timezone" in updates:
+        inherited_errors = []
+        for activity in event_doc.get("agenda", []):
+            if activity.get("timezone"):
+                continue
+            if not any(
+                activity.get(field)
+                for field in ("start_at", "end_at", "rsvp_deadline")
+            ):
+                continue
+            errors = validate_activity(activity, prospective_timezone)
+            if errors:
+                inherited_errors.append({
+                    "activity_id": activity.get("id", ""),
+                    "title": activity.get("title", ""),
+                    "errors": errors,
+                })
+        if inherited_errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_inherited_itinerary_timezone",
+                    "message": (
+                        "The timezone change would make one or more inherited "
+                        "activity times invalid or ambiguous."
+                    ),
+                    "activities": inherited_errors,
+                },
+            )
     if updates:
         await events_collection.update_one({"id": event_id}, {"$set": updates})
         event_doc.update(updates)
@@ -492,7 +521,7 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
         title=f"RSVP updated for {event_doc['title']}",
         description=f"{current_user['full_name']} responded: {payload.status}",
         related_id=event_id,
-        audience_scope="event",
+        audience_scope="organizer",
     )
     return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
 
@@ -550,7 +579,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
             if email in existing_emails:
                 continue
             invite_id = str(uuid.uuid4())
-            rsvp_link = f"{app_url}/rsvp/{invite_id}"
+            rsvp_link = f"{app_url}/rsvp#{invite_id}"
             invite_records.append(
                 {
                     "id": invite_id,
@@ -574,7 +603,7 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         if not email or email in existing_emails:
             continue
         invite_id = str(uuid.uuid4())
-        rsvp_link = f"{app_url}/rsvp/{invite_id}"
+        rsvp_link = f"{app_url}/rsvp#{invite_id}"
         invite_records.append(
             {
                 "id": invite_id,
