@@ -75,7 +75,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -178,7 +180,9 @@ INVITE_NOT_FOUND_HTML = """<!DOCTYPE html>
 async def invite_landing(code: str):
     """Public landing page for invite links — no auth required."""
     code = code.strip().upper()
-    invite = await invites_collection.find_one({"code": code}, {"_id": 0, "community_id": 1, "code": 1})
+    invite = await invites_collection.find_one(
+        {"code": code}, {"_id": 0, "community_id": 1, "code": 1}
+    )
     community_name = "a Kindred Community"
     if invite:
         community = await communities_collection.find_one(
@@ -186,40 +190,47 @@ async def invite_landing(code: str):
         )
         if community:
             community_name = community["name"]
-        html = INVITE_HTML.replace("{community_name}", community_name).replace("{code}", invite["code"])
+        html = INVITE_HTML.replace("{community_name}", community_name).replace(
+            "{code}", invite["code"]
+        )
         return HTMLResponse(content=html)
     return HTMLResponse(content=INVITE_NOT_FOUND_HTML, status_code=404)
 
 
 @app.get("/.well-known/apple-app-site-association")
 async def apple_app_site_association():
-    return JSONResponse(content={
-        "applinks": {
-            "apps": [],
-            "details": [
-                {
-                    "appID": "H543QXDYUW.com.ubuntumarket.kindred",
-                    "paths": ["/invite/*"]
-                }
-            ]
-        }
-    }, headers={"Content-Type": "application/json"})
+    return JSONResponse(
+        content={
+            "applinks": {
+                "apps": [],
+                "details": [
+                    {
+                        "appID": "H543QXDYUW.com.ubuntumarket.kindred",
+                        "paths": ["/invite/*"],
+                    }
+                ],
+            }
+        },
+        headers={"Content-Type": "application/json"},
+    )
 
 
 @app.get("/.well-known/assetlinks.json")
 async def android_asset_links():
-    return JSONResponse(content=[
-        {
-            "relation": ["delegate_permission/common.handle_all_urls"],
-            "target": {
-                "namespace": "android_app",
-                "package_name": "com.ubuntumarket.kindred",
-                "sha256_cert_fingerprints": [
-                    "BE:F3:3C:3E:C2:DF:E1:F4:34:70:21:07:8C:81:4B:8D:C8:A2:95:56:2C:28:DA:F0:C4:33:B8:0B:63:32:C6:49"
-                ]
+    return JSONResponse(
+        content=[
+            {
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": "com.ubuntumarket.kindred",
+                    "sha256_cert_fingerprints": [
+                        "BE:F3:3C:3E:C2:DF:E1:F4:34:70:21:07:8C:81:4B:8D:C8:A2:95:56:2C:28:DA:F0:C4:33:B8:0B:63:32:C6:49"
+                    ],
+                },
             }
-        }
-    ])
+        ]
+    )
 
 
 @app.on_event("startup")
@@ -245,6 +256,14 @@ async def ensure_indexes():
         name="invitation_redelivery_old_credential_once",
         unique=True,
         sparse=True,
+    )
+    await invitation_redelivery_operations_collection.create_index(
+        [("selection_fingerprint", ASCENDING)],
+        name="invitation_redelivery_incident_selection_once",
+        unique=True,
+        partialFilterExpression={
+            "selection_fingerprint": {"$type": "string", "$gt": ""},
+        },
     )
     await events_collection.create_index(
         [

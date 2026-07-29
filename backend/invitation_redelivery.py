@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import html
+import ipaddress
+import json
 import logging
 import re
 import secrets
-import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -29,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 OPAQUE_OPERATION_ID = re.compile(r"^[0-9a-f]{32}$")
 SAFE_STATUS = re.compile(r"^[a-z0-9_]{2,64}$")
+SAFE_APPLICATION_HOST = re.compile(
+    r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 
 
 class SafeErrorCode(str, Enum):
@@ -45,6 +50,7 @@ class SafeErrorCode(str, Enum):
     OPERATION_MISMATCH = "operation_mismatch"
     VALIDATION_UNAVAILABLE = "validation_unavailable"
     VALIDATION_FAILED = "validation_failed"
+    INCIDENT_ALREADY_CLAIMED = "incident_already_claimed"
     INTERNAL_FAILURE = "internal_failure"
 
 
@@ -98,6 +104,7 @@ class SensitiveDeliveryTarget:
 @dataclass(frozen=True, repr=False)
 class SensitiveActivationMaterial:
     operation_id: str
+    validation_revision: int
     credential_pairs: tuple[tuple[str, str], ...]
 
     def __repr__(self) -> str:
@@ -221,6 +228,8 @@ class HeaderOnlyInvitationValidator(Protocol):
 
 
 class InvitationRedeliveryStore(Protocol):
+    async def preflight(self) -> PreflightResult: ...
+
     async def prepare(
         self,
         operation_id: str,
@@ -258,13 +267,10 @@ class InvitationRedeliveryStore(Protocol):
         old_credentials_rejected: int,
         new_credentials_validated: int,
         failures: int,
+        expected_validation_revision: int,
     ) -> SafeOperationReport: ...
 
     async def report(self, operation_id: str) -> SafeOperationReport: ...
-
-
-def new_operation_id() -> str:
-    return uuid.uuid4().hex
 
 
 def new_invitation_credential() -> str:
@@ -275,11 +281,58 @@ def credential_digest(credential: str) -> str:
     return hashlib.sha256(credential.encode("utf-8")).hexdigest()
 
 
+def selection_fingerprint(selection: InvitationSelection) -> str:
+    canonical = json.dumps(
+        selection.safe_document(),
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def validate_operation_id(operation_id: str) -> str:
     clean = str(operation_id or "").strip()
     if not OPAQUE_OPERATION_ID.fullmatch(clean):
         raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
     return clean
+
+
+def normalize_application_url(app_url: str) -> str:
+    stable_app_url = str(app_url or "").strip().rstrip("/")
+    parsed_app_url = urlsplit(stable_app_url)
+    try:
+        hostname = parsed_app_url.hostname
+        port = parsed_app_url.port
+        ascii_hostname = (
+            hostname.encode("idna").decode("ascii").lower() if hostname else ""
+        )
+    except (UnicodeError, ValueError) as exc:
+        raise RedeliveryFailure(SafeErrorCode.CONFIGURATION_UNAVAILABLE) from exc
+    try:
+        ipaddress.ip_address(ascii_hostname)
+    except ValueError:
+        is_ip_address = False
+    else:
+        is_ip_address = True
+    if (
+        parsed_app_url.scheme != "https"
+        or not parsed_app_url.netloc
+        or not hostname
+        or is_ip_address
+        or ascii_hostname == "localhost"
+        or ascii_hostname.endswith(".localhost")
+        or not SAFE_APPLICATION_HOST.fullmatch(ascii_hostname)
+        or parsed_app_url.username is not None
+        or parsed_app_url.password is not None
+        or parsed_app_url.path not in ("", "/")
+        or parsed_app_url.query
+        or parsed_app_url.fragment
+        or "\\" in parsed_app_url.netloc
+        or any(ord(character) <= 32 for character in stable_app_url)
+    ):
+        raise RedeliveryFailure(SafeErrorCode.CONFIGURATION_UNAVAILABLE)
+    authority = ascii_hostname if port is None else f"{ascii_hostname}:{port}"
+    return f"{parsed_app_url.scheme}://{authority}"
 
 
 def invitation_redelivery_envelope(
@@ -292,22 +345,8 @@ def invitation_redelivery_envelope(
     target_id: str,
 ) -> DeliveryEnvelope:
     """Build a generic message without names, event details, or URL credentials."""
-    stable_app_url = str(app_url or "").strip().rstrip("/")
-    parsed_app_url = urlsplit(stable_app_url)
-    if (
-        parsed_app_url.scheme != "https"
-        or not parsed_app_url.netloc
-        or parsed_app_url.username is not None
-        or parsed_app_url.password is not None
-        or parsed_app_url.path not in ("", "/")
-        or parsed_app_url.query
-        or parsed_app_url.fragment
-    ):
-        raise RedeliveryFailure(SafeErrorCode.CONFIGURATION_UNAVAILABLE)
-    invitation_url = (
-        f"{parsed_app_url.scheme}://{parsed_app_url.netloc}"
-        f"/rsvp#{replacement_credential}"
-    )
+    stable_app_url = normalize_application_url(app_url)
+    invitation_url = f"{stable_app_url}/rsvp#{replacement_credential}"
     escaped_url = html.escape(invitation_url, quote=True)
     body = (
         "<p>Your private Kindred invitation link has been refreshed.</p>"
@@ -338,7 +377,7 @@ class InvitationRedeliveryCoordinator:
         self._store = store
         self._provider = provider
         self._validator = validator
-        self._app_url = app_url
+        self._app_url = normalize_application_url(app_url)
 
     @staticmethod
     def _preflight_failure(
@@ -356,11 +395,17 @@ class InvitationRedeliveryCoordinator:
         self,
         selection: InvitationSelection,
         *,
-        operation_id: str | None = None,
+        operation_id: str,
     ) -> SafeOperationReport:
-        operation_id = validate_operation_id(operation_id or new_operation_id())
+        operation_id = validate_operation_id(operation_id)
 
-        provider_preflight = await self._provider.preflight()
+        try:
+            provider_preflight = await self._provider.preflight()
+        except Exception:
+            provider_preflight = PreflightResult(
+                ready=False,
+                error_code=SafeErrorCode.PROVIDER_UNAVAILABLE,
+            )
         if not provider_preflight.ready:
             provider_code = (
                 provider_preflight.error_code
@@ -377,7 +422,13 @@ class InvitationRedeliveryCoordinator:
                 provider_code,
             )
 
-        validation_preflight = await self._validator.preflight()
+        try:
+            validation_preflight = await self._validator.preflight()
+        except Exception:
+            validation_preflight = PreflightResult(
+                ready=False,
+                error_code=SafeErrorCode.VALIDATION_UNAVAILABLE,
+            )
         if not validation_preflight.ready:
             validation_code = (
                 validation_preflight.error_code
@@ -392,6 +443,29 @@ class InvitationRedeliveryCoordinator:
             return self._preflight_failure(
                 operation_id,
                 validation_code,
+            )
+
+        try:
+            store_preflight = await self._store.preflight()
+        except Exception:
+            store_preflight = PreflightResult(
+                ready=False,
+                error_code=SafeErrorCode.TRANSACTION_REQUIRED,
+            )
+        if not store_preflight.ready:
+            store_code = (
+                store_preflight.error_code
+                if store_preflight.error_code != SafeErrorCode.NONE
+                else SafeErrorCode.TRANSACTION_REQUIRED
+            )
+            logger.warning(
+                "invitation_redelivery status=preflight_failed operation_id=%s code=%s",
+                operation_id,
+                store_code.value,
+            )
+            return self._preflight_failure(
+                operation_id,
+                store_code,
             )
 
         try:
@@ -450,6 +524,7 @@ class InvitationRedeliveryCoordinator:
                 old_credentials_rejected=old_rejected,
                 new_credentials_validated=new_validated,
                 failures=validation_failures,
+                expected_validation_revision=activation.validation_revision,
             )
             logger.info(
                 "invitation_redelivery status=%s operation_id=%s "

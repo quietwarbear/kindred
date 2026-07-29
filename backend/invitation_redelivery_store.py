@@ -19,6 +19,7 @@ from invitation_redelivery import (
     CredentialVault,
     InvitationRedeliveryStore,
     InvitationSelection,
+    PreflightResult,
     ProviderReceipt,
     ProviderStatus,
     RedeliveryFailure,
@@ -27,6 +28,7 @@ from invitation_redelivery import (
     SensitiveActivationMaterial,
     SensitiveDeliveryTarget,
     credential_digest,
+    selection_fingerprint,
 )
 
 
@@ -84,6 +86,28 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
         self._events = events_collection
         self._operations = operations_collection
         self._vault = vault
+
+    async def preflight(self) -> PreflightResult:
+        """Verify transaction support without creating or changing a document."""
+        try:
+            async with await self._client.start_session() as session:
+                async with session.start_transaction():
+                    await self._operations.find_one(
+                        {"id": "__privacy_safe_preflight__"},
+                        {"_id": 0, "id": 1},
+                        session=session,
+                    )
+        except (
+            ConfigurationError,
+            InvalidOperation,
+            OperationFailure,
+            PyMongoError,
+        ):
+            return PreflightResult(
+                ready=False,
+                error_code=SafeErrorCode.TRANSACTION_REQUIRED,
+            )
+        return PreflightResult(ready=True)
 
     @staticmethod
     def _report(document: dict[str, Any]) -> SafeOperationReport:
@@ -145,6 +169,7 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
         selection: InvitationSelection,
         credential_factory: Callable[[], str],
     ) -> SafeOperationReport:
+        fingerprint = selection_fingerprint(selection)
         existing = await self._operations.find_one(
             {"id": operation_id},
             {"_id": 0},
@@ -153,6 +178,13 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
             if existing.get("selection") != selection.safe_document():
                 raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
             return self._report(existing)
+
+        claimed = await self._operations.find_one(
+            {"selection_fingerprint": fingerprint},
+            {"_id": 0, "id": 1},
+        )
+        if claimed:
+            raise RedeliveryFailure(SafeErrorCode.INCIDENT_ALREADY_CLAIMED)
 
         try:
             async with await self._client.start_session() as session:
@@ -166,6 +198,14 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                         if existing.get("selection") != selection.safe_document():
                             raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
                         return self._report(existing)
+
+                    claimed = await self._operations.find_one(
+                        {"selection_fingerprint": fingerprint},
+                        {"_id": 0, "id": 1},
+                        session=session,
+                    )
+                    if claimed:
+                        raise RedeliveryFailure(SafeErrorCode.INCIDENT_ALREADY_CLAIMED)
 
                     cursor = self._events.find(
                         {
@@ -245,6 +285,7 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                             "event_id": event["id"],
                             "old_credential_digest": credential_digest(old_credential),
                             "new_credential_digest": credential_digest(replacement),
+                            "selection_fingerprint": fingerprint,
                             "old_credential_ciphertext": self._vault.seal(
                                 old_credential
                             ),
@@ -264,11 +305,13 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                         "id": operation_id,
                         "status": "prepared",
                         "selection": selection.safe_document(),
+                        "selection_fingerprint": fingerprint,
                         "expected_count": selection.expected_count,
                         "targets": targets,
                         "created_at": now,
                         "updated_at": now,
                         "validation_failures": 0,
+                        "validation_revision": 0,
                         "old_credentials_rejected": 0,
                         "new_credentials_validated": 0,
                         "error_code": "",
@@ -287,7 +330,7 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
         ) as exc:
             raise RedeliveryFailure(SafeErrorCode.TRANSACTION_REQUIRED) from exc
         except DuplicateKeyError as exc:
-            raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT) from exc
+            raise RedeliveryFailure(SafeErrorCode.INCIDENT_ALREADY_CLAIMED) from exc
         except PyMongoError as exc:
             raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT) from exc
 
@@ -514,6 +557,9 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                     }:
                         return SensitiveActivationMaterial(
                             operation_id=operation_id,
+                            validation_revision=int(
+                                operation.get("validation_revision", 0) or 0
+                            ),
                             credential_pairs=tuple(
                                 (
                                     self._vault.open(item["old_credential_ciphertext"]),
@@ -584,6 +630,12 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                                     f"/rsvp#{new_credential}",
                                 )
                             invite["id"] = new_credential
+                            invite["credential_rotation"] = {
+                                "operation_id": operation_id,
+                                "selection_fingerprint": operation[
+                                    "selection_fingerprint"
+                                ],
+                            }
                             credential_pairs.append((old_credential, new_credential))
                         result = await self._events.update_one(
                             _guarded_event_query(event),
@@ -597,6 +649,9 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                             raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)
 
                     operation["status"] = "activated"
+                    operation["validation_revision"] = int(
+                        operation.get("validation_revision", 0) or 0
+                    )
                     for target in operation.get("targets") or []:
                         target.pop("recipient_ciphertext", None)
                     operation["updated_at"] = _now_iso()
@@ -606,6 +661,7 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                             "$set": {
                                 "status": "activated",
                                 "targets": operation["targets"],
+                                "validation_revision": operation["validation_revision"],
                                 "error_code": "",
                                 "updated_at": operation["updated_at"],
                             }
@@ -614,6 +670,7 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
                     )
                     return SensitiveActivationMaterial(
                         operation_id=operation_id,
+                        validation_revision=operation["validation_revision"],
                         credential_pairs=tuple(credential_pairs),
                     )
         except RedeliveryFailure:
@@ -633,39 +690,107 @@ class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):
         old_credentials_rejected: int,
         new_credentials_validated: int,
         failures: int,
+        expected_validation_revision: int,
     ) -> SafeOperationReport:
-        operation = await self._operations.find_one(
-            {"id": operation_id},
-            {"_id": 0},
-        )
-        if not operation:
-            raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
-        expected = int(operation.get("expected_count", 0) or 0)
-        complete = (
-            failures == 0
-            and old_credentials_rejected == expected
-            and new_credentials_validated == expected
-        )
-        targets = [dict(item) for item in operation.get("targets") or []]
-        if complete:
-            for target in targets:
-                target.pop("old_credential_ciphertext", None)
-                target.pop("new_credential_ciphertext", None)
-                target.pop("recipient_ciphertext", None)
-        status = "completed" if complete else "validation_failed"
-        error_code = "" if complete else SafeErrorCode.VALIDATION_FAILED.value
-        update = {
-            "status": status,
-            "targets": targets,
-            "old_credentials_rejected": old_credentials_rejected,
-            "new_credentials_validated": new_credentials_validated,
-            "validation_failures": failures,
-            "error_code": error_code,
-            "updated_at": _now_iso(),
-        }
-        await self._operations.update_one(
-            {"id": operation_id},
-            {"$set": update},
-        )
-        operation.update(update)
-        return self._report(operation)
+        if expected_validation_revision < 0:
+            raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)
+
+        for attempt in range(5):
+            try:
+                async with await self._client.start_session() as session:
+                    async with session.start_transaction():
+                        operation = await self._operations.find_one(
+                            {"id": operation_id},
+                            {"_id": 0},
+                            session=session,
+                        )
+                        if not operation:
+                            raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
+                        if operation.get("status") == "completed":
+                            return self._report(operation)
+                        if operation.get("status") != "activated":
+                            raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)
+
+                        current_revision = int(
+                            operation.get("validation_revision", 0) or 0
+                        )
+                        if current_revision < expected_validation_revision:
+                            raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)
+
+                        expected = int(operation.get("expected_count", 0) or 0)
+                        complete = (
+                            failures == 0
+                            and old_credentials_rejected == expected
+                            and new_credentials_validated == expected
+                        )
+                        if (
+                            current_revision > expected_validation_revision
+                            and not complete
+                        ):
+                            return self._report(operation)
+
+                        targets = [
+                            dict(item) for item in operation.get("targets") or []
+                        ]
+                        if complete:
+                            for target in targets:
+                                target.pop("old_credential_ciphertext", None)
+                                target.pop("new_credential_ciphertext", None)
+                                target.pop("recipient_ciphertext", None)
+
+                        next_revision = current_revision + 1
+                        update = {
+                            "status": "completed" if complete else "activated",
+                            "targets": targets,
+                            "old_credentials_rejected": old_credentials_rejected,
+                            "new_credentials_validated": new_credentials_validated,
+                            "validation_failures": failures,
+                            "validation_revision": next_revision,
+                            "error_code": (
+                                ""
+                                if complete
+                                else SafeErrorCode.VALIDATION_FAILED.value
+                            ),
+                            "updated_at": _now_iso(),
+                        }
+                        result = await self._operations.update_one(
+                            {
+                                "id": operation_id,
+                                "status": "activated",
+                                "validation_revision": current_revision,
+                            },
+                            {"$set": update},
+                            session=session,
+                        )
+                        if result.matched_count == 1:
+                            operation.update(update)
+                            return self._report(operation)
+            except RedeliveryFailure:
+                raise
+            except (
+                ConfigurationError,
+                InvalidOperation,
+                OperationFailure,
+                PyMongoError,
+            ) as exc:
+                if attempt == 4:
+                    raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT) from exc
+
+            latest = await self._operations.find_one(
+                {"id": operation_id},
+                {"_id": 0},
+            )
+            if not latest:
+                raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
+            if latest.get("status") == "completed":
+                return self._report(latest)
+            latest_expected = int(latest.get("expected_count", 0) or 0)
+            validation_succeeded = (
+                failures == 0
+                and old_credentials_rejected == latest_expected
+                and new_credentials_validated == latest_expected
+            )
+            if not validation_succeeded:
+                return self._report(latest)
+
+        raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)

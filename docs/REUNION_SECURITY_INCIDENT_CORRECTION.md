@@ -236,6 +236,39 @@ Hotfix verification:
 - The public subscription checkout endpoint still returns HTTP 410 with
   `subscription_checkout_migrating`.
 
+## Invitation-redelivery concurrency and preflight correction
+
+Independent post-merge review identified three release blockers in the first
+redelivery implementation. Production rotation remains prohibited until this
+follow-up is independently reviewed and approved.
+
+This correction:
+
+- requires an explicit, stable, owner-approved operation ID and validates it
+  before any persistence or provider activity;
+- atomically claims one canonical incident-selection fingerprint and writes a
+  durable per-invitation rotation marker, so a replacement credential cannot
+  become eligible for another operation;
+- preserves recovery through the original operation ID while rejecting a new
+  operation ID for an already claimed or completed population;
+- makes final validation a revision-checked transition from `activated` only,
+  keeps terminal `completed` state immutable, and deletes recovery ciphertext
+  only in the same successful transaction that records completion;
+- records transient validation failures without downgrading a completed
+  operation or destroying recovery material; and
+- validates the application URL, delivery provider, validator, encryption
+  material, transaction capability, and all required environment settings
+  before creating an operation, claiming a target, writing an outbox record,
+  changing an invitation, or calling the provider.
+
+Synthetic verification covers missing and unsafe operation IDs, same- and
+different-ID retries, activation crashes, competing operations, completed
+retries, concurrent validators, transient validation failures, recovery
+ciphertext lifetime, and parameterized configuration failures. Disposable
+MongoDB tests verify the transaction and index behavior against a replica set.
+No production invitation, customer record, provider, deployment, or
+configuration was accessed or changed by this follow-up.
+
 ## Unchanged systems
 
 The subscription HTTP 410 kill switch, RevenueCat, Stripe, Apple, Google Play,
