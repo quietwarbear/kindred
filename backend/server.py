@@ -11,6 +11,7 @@ from db import (
     client,
     communities_collection,
     events_collection,
+    invitation_redelivery_operations_collection,
     invites_collection,
     sso_codes_collection,
     users_collection,
@@ -231,6 +232,17 @@ async def ensure_indexes():
     await events_collection.create_index(
         [("event_invites.id", ASCENDING)],
         name="event_invitation_token_lookup",
+        unique=True,
+        sparse=True,
+    )
+    await invitation_redelivery_operations_collection.create_index(
+        [("id", ASCENDING)],
+        name="invitation_redelivery_operation_id",
+        unique=True,
+    )
+    await invitation_redelivery_operations_collection.create_index(
+        [("targets.old_credential_digest", ASCENDING)],
+        name="invitation_redelivery_old_credential_once",
         unique=True,
         sparse=True,
     )

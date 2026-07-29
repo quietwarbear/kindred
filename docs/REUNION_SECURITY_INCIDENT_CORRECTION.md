@@ -166,6 +166,76 @@ event responses were fetched or retained, selective rotation based only on
 access logs is not sufficient evidence. No rotation was performed in this
 corrective branch.
 
+## Privacy-safe invitation redelivery hotfix
+
+A later aggregate-only assessment identified two current guest invitation
+credentials for owner-approved rotation. The first authorized production
+attempt stopped before reading or changing invitation records because the
+existing application did not have a privacy-safe redelivery path. Invitation
+creation and reminder routes only prepared delivery state, while the generic
+email helper logged recipient information.
+
+This follow-up draft adds a dedicated operator-only redelivery workflow. It is
+not exposed as an HTTP endpoint and does not use the generic email helper:
+
+- A provider and header-validation preflight must pass before the workflow
+  stages any replacement.
+- The operator supplies aggregate selection criteria and an expected count;
+  customer or invitation identifiers are not hard-coded.
+- Replacement credentials are generated with `secrets.token_urlsafe(32)` and
+  staged in a transaction while every old credential remains active.
+- Recoverable old/new credential material is encrypted with a dedicated
+  incident recovery key. The ciphertext is removed after successful
+  header-only validation.
+- Provider submission is transactionally claimed before the provider call and
+  uses stable idempotency keys. Accepted, pending, submitting, rejected,
+  timed-out, ambiguous, failed, and delivered states are recorded only as
+  sanitized categories with opaque provider message IDs.
+- A partial or ambiguous delivery leaves all old credentials active. Retrying
+  a definitively rejected target reuses the same provider idempotency key and
+  staged replacement. Ambiguous or interrupted submissions are never
+  automatically submitted again, preventing duplicates after an unknown
+  provider-acceptance outcome.
+- Only after every replacement is confirmed delivered does one MongoDB
+  transaction activate the complete set. Event `rsvp_revision` guards prevent
+  concurrent RSVP or rotation snapshots from being overwritten.
+- The generated web link is `/rsvp#credential`; post-activation validation
+  uses only `Authorization: Bearer` against `/api/public/rsvp`.
+- Reports and logs contain only aggregate counts, opaque operation/target IDs,
+  safe status categories, and sanitized error codes. They never contain
+  recipient data, event details, credentials, links, bodies, provider payloads,
+  or raw exception text.
+- The CLI requires the exact deployed commit and fails closed if the provider,
+  verified sender domain, recovery key, stable application URL, or header-only
+  validation endpoint is unavailable.
+
+All hotfix verification uses synthetic disposable records and fake or mocked
+delivery providers. No production invitation was rotated and no real email was
+sent while preparing this draft.
+
+Hotfix verification:
+
+- Dedicated state-machine, privacy, provider-payload, header-transport, and
+  static deployment-boundary tests: 19 passed.
+- Existing itinerary, activation, commercial-readiness, and subscription
+  kill-switch regressions combined with the new tests: 64 passed.
+- Real privacy-safe outbox/activation transaction against a disposable MongoDB
+  replica set: 1 passed.
+- Existing disposable invitation confidentiality, notification scope,
+  timezone/DST, concurrency, idempotency, and index campaign: 1 passed.
+- Frontend invitation transport, analytics, itinerary, draft/idempotency, and
+  pricing tests: 28 passed.
+- Python compilation, formatting, Flake8, and mypy checks: passed.
+- Production frontend build and public-route prerender: passed.
+- Real-built-application browser campaign at desktop/mobile widths, including
+  fragment/header transport, legacy transition, third-party isolation, and an
+  installed `kindred-v1` worker upgrade that purges an RSVP request: passed.
+- Android debug build and unsigned iOS generic-device build: passed.
+- Generated web, Android, and iOS artifacts contain none of the synthetic
+  invitation, recipient, recovery-key, or legacy-cache markers: passed.
+- The public subscription checkout endpoint still returns HTTP 410 with
+  `subscription_checkout_migrating`.
+
 ## Unchanged systems
 
 The subscription HTTP 410 kill switch, RevenueCat, Stripe, Apple, Google Play,
