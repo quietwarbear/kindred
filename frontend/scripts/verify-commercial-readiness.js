@@ -8,6 +8,7 @@ const BUILD = path.resolve(__dirname, '..', 'build');
 const OUTPUT = path.resolve(__dirname, '..', '..', 'docs', 'screenshots');
 const HOST = '127.0.0.1';
 const SENSITIVE_HOST = 'kindred.localhost';
+const WORKER_UPGRADE_HOST = 'worker-upgrade.kindred.localhost';
 const PORT = 4173;
 const API_URL = 'https://kindred-production-badd.up.railway.app/api/subscriptions/plans';
 const API_ORIGIN = new URL(API_URL).origin;
@@ -192,6 +193,31 @@ function startServer() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const pathname = decodeURIComponent(req.url.split('?')[0]);
+      if (pathname === '/sw-upgrade-test') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<!doctype html><title>Service worker upgrade test</title>');
+        return;
+      }
+      if (pathname === '/sw-v1-test.js') {
+        res.writeHead(200, { 'Content-Type': 'text/javascript' });
+        res.end(`
+          self.addEventListener('install', (event) => {
+            event.waitUntil(
+              caches.open('kindred-v1').then((cache) =>
+                cache.put(
+                  '/rsvp/synthetic-legacy-browser-credential',
+                  new Response('synthetic legacy response')
+                )
+              )
+            );
+            self.skipWaiting();
+          });
+          self.addEventListener('activate', (event) => {
+            event.waitUntil(self.clients.claim());
+          });
+        `);
+        return;
+      }
       let file = path.join(BUILD, pathname);
       if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
       if (!fs.existsSync(file)) file = path.join(BUILD, 'index.html');
@@ -275,6 +301,68 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
 
   try {
     fs.mkdirSync(OUTPUT, { recursive: true });
+    const workerUpgradePage = await browser.newPage();
+    await workerUpgradePage.goto(
+      `http://${WORKER_UPGRADE_HOST}:${PORT}/sw-upgrade-test`,
+      { waitUntil: 'networkidle0' },
+    );
+    const workerUpgradeEvidence = await workerUpgradePage.evaluate(async () => {
+      const legacyRegistration = await navigator.serviceWorker.register(
+        '/sw-v1-test.js',
+        { scope: '/' },
+      );
+      await navigator.serviceWorker.ready;
+      const legacyCache = await caches.open('kindred-v1');
+      const legacyRequests = await legacyCache.keys();
+      if (!legacyRequests.some((request) => new URL(request.url).pathname.startsWith('/rsvp/'))) {
+        throw new Error('Synthetic legacy RSVP request was not cached.');
+      }
+      const upgradedRegistration = await navigator.serviceWorker.register(
+        '/sw.js',
+        { scope: '/' },
+      );
+      const installing = (
+        upgradedRegistration.installing
+        || upgradedRegistration.waiting
+        || upgradedRegistration.active
+      );
+      if (installing && installing.state !== 'activated') {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Timed out waiting for upgraded worker activation.')),
+            15000,
+          );
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'activated') {
+              clearTimeout(timeout);
+              resolve();
+            }
+          });
+        });
+      }
+      const cacheNames = await caches.keys();
+      const cachedRsvpRequests = [];
+      for (const cacheName of cacheNames) {
+        const cache = await caches.open(cacheName);
+        for (const request of await cache.keys()) {
+          if (new URL(request.url).pathname.startsWith('/rsvp')) {
+            cachedRsvpRequests.push(request.url);
+          }
+        }
+      }
+      await legacyRegistration.unregister();
+      return { cacheNames, cachedRsvpRequests };
+    });
+    await workerUpgradePage.close();
+    if (
+      workerUpgradeEvidence.cacheNames.includes('kindred-v1')
+      || workerUpgradeEvidence.cachedRsvpRequests.length
+    ) {
+      throw new Error(
+        `Service worker upgrade did not purge legacy RSVP data: ${JSON.stringify(workerUpgradeEvidence)}`,
+      );
+    }
+
     const page = await browser.newPage();
     const browserErrors = [];
     const anonymousMutationRequests = [];
@@ -597,7 +685,7 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
       throw new Error(`Browser errors detected:\n${browserErrors.join('\n')}`);
     }
 
-    console.log('Verified reunion-first homepage, keyboard CTA, browser-only multiday draft, invitation preview, organizer itinerary, operations summary, combined public activity RSVP, authentication boundary, public pricing, privacy, terms, and support at desktop/mobile widths with no browser errors or anonymous backend mutations.');
+    console.log('Verified service-worker upgrade/purge, reunion-first homepage, keyboard CTA, browser-only multiday draft, invitation preview, organizer itinerary, operations summary, combined public activity RSVP, authentication boundary, public pricing, privacy, terms, and support at desktop/mobile widths with no browser errors or anonymous backend mutations.');
     console.log(`Screenshots: ${OUTPUT}`);
   } finally {
     await browser.close();

@@ -21,6 +21,7 @@ password_resets_collection = db.password_resets
 subyards_collection = db.subyards
 kinships_collection = db.kinship_relationships
 events_collection = db.events
+invitation_redelivery_operations_collection = db.invitation_redelivery_operations
 memories_collection = db.memories
 threads_collection = db.threads
 payments_collection = db.payment_transactions
