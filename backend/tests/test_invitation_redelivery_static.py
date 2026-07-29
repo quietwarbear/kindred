@@ -23,7 +23,10 @@ def test_redelivery_is_operator_only_and_bypasses_generic_email_helper():
     assert "import email_service" not in provider
     assert "RAILWAY_GIT_COMMIT_SHA" in cli
     assert "--expected-commit" in cli
+    assert "required=True" in cli
+    assert "new_operation_id" not in cli
     assert "invitation_redelivery_operations_collection.create_index" in server
+    assert "invitation_redelivery_incident_selection_once" in server
     assert "event_invitation_staged_token_lookup" not in server
     assert "credential_rotation" not in server
 
@@ -32,7 +35,7 @@ def test_links_and_validation_use_fragment_and_header_only_transport():
     coordinator = read("backend/invitation_redelivery.py")
     validator = read("backend/invitation_redelivery_validator.py")
 
-    assert 'f"/rsvp#{replacement_credential}"' in coordinator
+    assert 'f"{stable_app_url}/rsvp#{replacement_credential}"' in coordinator
     assert '/api/public/rsvp"' in validator
     assert 'authorization=f"Bearer {credential}"' in validator
     assert "/api/public/rsvp/" not in validator
@@ -125,3 +128,8 @@ def test_recovery_outbox_and_revision_guards_are_mandatory():
     assert 'target.pop("old_credential_ciphertext", None)' in store
     assert 'target.pop("new_credential_ciphertext", None)' in store
     assert 'target.pop("recipient_ciphertext", None)' in store
+    assert '"selection_fingerprint": fingerprint' in store
+    assert 'invite["credential_rotation"]' in store
+    assert '"validation_revision": current_revision' in store
+    assert 'operation.get("status") == "completed"' in store
+    assert "async def preflight" in store

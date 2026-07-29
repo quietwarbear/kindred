@@ -12,7 +12,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -23,7 +22,7 @@ from invitation_redelivery import (  # noqa: E402
     RedeliveryFailure,
     SafeErrorCode,
     SafeOperationReport,
-    new_operation_id,
+    normalize_application_url,
     validate_operation_id,
 )
 from invitation_redelivery_provider import (  # noqa: E402
@@ -37,7 +36,7 @@ from invitation_redelivery_validator import (  # noqa: E402
 )
 
 
-def _arguments() -> argparse.Namespace:
+def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Rotate a bounded invitation population through the recoverable "
@@ -46,8 +45,8 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--operation-id",
-        default="",
-        help="Opaque operation ID from an interrupted attempt; omit for a new operation.",
+        required=True,
+        help="Stable owner-approved opaque incident operation ID.",
     )
     parser.add_argument(
         "--invite-source",
@@ -65,7 +64,7 @@ def _arguments() -> argparse.Namespace:
         required=True,
         help="Exact commit required in RAILWAY_GIT_COMMIT_SHA.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _safe_failure(
@@ -81,7 +80,7 @@ def _safe_failure(
 
 
 async def _run(args: argparse.Namespace) -> SafeOperationReport:
-    operation_id = validate_operation_id(args.operation_id or new_operation_id())
+    operation_id = validate_operation_id(args.operation_id)
     deployed_commit = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
     if len(args.expected_commit) != 40 or deployed_commit != args.expected_commit:
         return _safe_failure(
@@ -90,6 +89,19 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
         )
 
     try:
+        required_environment = (
+            "MONGO_URL",
+            "DB_NAME",
+            "RESEND_API_KEY",
+            "FROM_EMAIL",
+            "PUBLIC_API_BASE_URL",
+            "APP_URL",
+            "INVITATION_REDELIVERY_RECOVERY_KEY",
+        )
+        if any(
+            not str(os.environ.get(name, "")).strip() for name in required_environment
+        ):
+            raise RedeliveryFailure(SafeErrorCode.CONFIGURATION_UNAVAILABLE)
         created_before = datetime.fromisoformat(
             args.created_before.replace("Z", "+00:00")
         )
@@ -101,6 +113,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
         vault = CredentialVault(
             os.environ.get("INVITATION_REDELIVERY_RECOVERY_KEY", "")
         )
+        app_url = normalize_application_url(os.environ.get("APP_URL", ""))
     except (ValueError, RedeliveryFailure):
         return _safe_failure(
             operation_id,
@@ -130,7 +143,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
         store=store,
         provider=provider,
         validator=validator,
-        app_url=os.environ.get("APP_URL", ""),
+        app_url=app_url,
     )
     return await coordinator.execute(
         selection,
@@ -144,16 +157,24 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     args = _arguments()
-    operation_id = args.operation_id if args.operation_id else new_operation_id()
     try:
-        if not args.operation_id:
-            args.operation_id = operation_id
+        operation_id = validate_operation_id(args.operation_id)
+    except RedeliveryFailure:
+        invalid_report = {
+            "status": "preflight_failed",
+            "credentials_selected": 0,
+            "credentials_rotated": 0,
+            "replacements_delivered": 0,
+            "old_credentials_rejected": 0,
+            "new_credentials_validated": 0,
+            "failures": 1,
+            "error_code": SafeErrorCode.OPERATION_MISMATCH.value,
+        }
+        print(json.dumps(invalid_report, separators=(",", ":"), sort_keys=True))
+        return 2
+    try:
         report = asyncio.run(_run(args))
     except Exception:
-        try:
-            operation_id = validate_operation_id(operation_id)
-        except RedeliveryFailure:
-            operation_id = new_operation_id()
         report = _safe_failure(
             operation_id,
             SafeErrorCode.INTERNAL_FAILURE,

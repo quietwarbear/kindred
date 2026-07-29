@@ -5,13 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import subprocess
+import sys
 import threading
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 
 from invitation_redelivery import (
     InvitationRedeliveryCoordinator,
@@ -24,6 +29,9 @@ from invitation_redelivery import (
     SafeOperationReport,
     SensitiveActivationMaterial,
     SensitiveDeliveryTarget,
+    CredentialVault,
+    normalize_application_url,
+    selection_fingerprint,
 )
 from invitation_redelivery_provider import (
     ResendInvitationDeliveryProvider,
@@ -76,6 +84,19 @@ class FakeStore:
         self.lock = threading.Lock()
         self.prepare_calls = 0
         self.activation_calls = 0
+        self.preflight_calls = 0
+        self.preflight_ready = True
+
+    async def preflight(self):
+        self.preflight_calls += 1
+        return PreflightResult(
+            ready=self.preflight_ready,
+            error_code=(
+                SafeErrorCode.NONE
+                if self.preflight_ready
+                else SafeErrorCode.TRANSACTION_REQUIRED
+            ),
+        )
 
     def active_credentials(self):
         return {record["id"] for record in self.records}
@@ -115,16 +136,23 @@ class FakeStore:
     async def prepare(self, operation_id, selection, credential_factory):
         with self.lock:
             self.prepare_calls += 1
+            fingerprint = selection_fingerprint(selection)
             if operation_id in self.operations:
                 operation = self.operations[operation_id]
                 if operation["selection"] != selection.safe_document():
                     raise RedeliveryFailure(SafeErrorCode.OPERATION_MISMATCH)
                 return self._report(operation)
+            if any(
+                operation["selection_fingerprint"] == fingerprint
+                for operation in self.operations.values()
+            ):
+                raise RedeliveryFailure(SafeErrorCode.INCIDENT_ALREADY_CLAIMED)
             selected = [
                 record
                 for record in self.records
                 if record["invite_source"] == selection.invite_source
                 and record["created_at"] <= selection.created_before.isoformat()
+                and not record.get("credential_rotation")
             ]
             if len(selected) != selection.expected_count:
                 raise RedeliveryFailure(SafeErrorCode.SELECTION_MISMATCH)
@@ -148,8 +176,10 @@ class FakeStore:
             operation = {
                 "id": operation_id,
                 "selection": selection.safe_document(),
+                "selection_fingerprint": fingerprint,
                 "status": "prepared",
                 "targets": targets,
+                "validation_revision": 0,
             }
             self.operations[operation_id] = operation
             return self._report(operation)
@@ -234,6 +264,7 @@ class FakeStore:
             if operation["status"] in {"activated", "validation_failed"}:
                 return SensitiveActivationMaterial(
                     operation_id=operation_id,
+                    validation_revision=operation["validation_revision"],
                     credential_pairs=tuple(
                         (target["old"], target["new"])
                         for target in operation["targets"]
@@ -250,9 +281,14 @@ class FakeStore:
             for target in operation["targets"]:
                 record = target["record"]
                 record["id"] = target["new"]
+                record["credential_rotation"] = {
+                    "operation_id": operation_id,
+                    "selection_fingerprint": operation["selection_fingerprint"],
+                }
             operation["status"] = "activated"
             return SensitiveActivationMaterial(
                 operation_id=operation_id,
+                validation_revision=operation["validation_revision"],
                 credential_pairs=tuple(
                     (target["old"], target["new"]) for target in operation["targets"]
                 ),
@@ -265,16 +301,29 @@ class FakeStore:
         old_credentials_rejected,
         new_credentials_validated,
         failures,
+        expected_validation_revision,
     ):
-        operation = self.operations[operation_id]
-        operation["old_rejected"] = old_credentials_rejected
-        operation["new_validated"] = new_credentials_validated
-        operation["validation_failures"] = failures
-        operation["status"] = "completed" if failures == 0 else "validation_failed"
-        operation["error_code"] = (
-            "" if failures == 0 else SafeErrorCode.VALIDATION_FAILED.value
-        )
-        return self._report(operation)
+        with self.lock:
+            operation = self.operations[operation_id]
+            if operation["status"] == "completed":
+                return self._report(operation)
+            current_revision = operation["validation_revision"]
+            complete = (
+                failures == 0
+                and old_credentials_rejected == len(operation["targets"])
+                and new_credentials_validated == len(operation["targets"])
+            )
+            if current_revision > expected_validation_revision and not complete:
+                return self._report(operation)
+            operation["old_rejected"] = old_credentials_rejected
+            operation["new_validated"] = new_credentials_validated
+            operation["validation_failures"] = failures
+            operation["validation_revision"] = current_revision + 1
+            operation["status"] = "completed" if complete else "activated"
+            operation["error_code"] = (
+                "" if complete else SafeErrorCode.VALIDATION_FAILED.value
+            )
+            return self._report(operation)
 
     async def report(self, operation_id):
         if operation_id not in self.operations:
@@ -442,21 +491,24 @@ def test_successful_two_invitation_rotation_is_private_and_preserves_state(
 
 
 @pytest.mark.parametrize(
-    ("provider_ready", "validator_ready", "expected_code"),
+    ("provider_ready", "validator_ready", "store_ready", "expected_code"),
     (
-        (False, True, SafeErrorCode.PROVIDER_UNAVAILABLE.value),
-        (True, False, SafeErrorCode.VALIDATION_UNAVAILABLE.value),
+        (False, True, True, SafeErrorCode.PROVIDER_UNAVAILABLE.value),
+        (True, False, True, SafeErrorCode.VALIDATION_UNAVAILABLE.value),
+        (True, True, False, SafeErrorCode.TRANSACTION_REQUIRED.value),
     ),
 )
 def test_preflight_failure_does_not_mutate(
     provider_ready,
     validator_ready,
+    store_ready,
     expected_code,
 ):
     store = FakeStore()
     before = deepcopy(store.records)
     provider = FakeProvider(ready=provider_ready)
     validator = FakeValidator(store, ready=validator_ready)
+    store.preflight_ready = store_ready
     report = run(
         coordinator(store, provider, validator).execute(
             SELECTION,
@@ -471,6 +523,215 @@ def test_preflight_failure_does_not_mutate(
     assert store.records == before
     assert store.operations == {}
     assert provider.envelopes == []
+
+
+@pytest.mark.parametrize(
+    ("component", "expected_code"),
+    (
+        ("provider", SafeErrorCode.PROVIDER_UNAVAILABLE.value),
+        ("validator", SafeErrorCode.VALIDATION_UNAVAILABLE.value),
+        ("store", SafeErrorCode.TRANSACTION_REQUIRED.value),
+    ),
+)
+def test_preflight_exception_is_sanitized_and_does_not_mutate(
+    component,
+    expected_code,
+    caplog,
+):
+    store = FakeStore()
+    before = deepcopy(store.records)
+    provider = FakeProvider()
+    validator = FakeValidator(store)
+
+    async def unsafe_preflight():
+        raise RuntimeError("synthetic-private-preflight-payload")
+
+    setattr(
+        {"provider": provider, "validator": validator, "store": store}[component],
+        "preflight",
+        unsafe_preflight,
+    )
+    with caplog.at_level(logging.INFO):
+        report = run(
+            coordinator(store, provider, validator).execute(
+                SELECTION,
+                operation_id=OPERATION_ID,
+            )
+        )
+
+    assert report.status == "preflight_failed"
+    assert report.error_code == expected_code
+    assert report.failures == 1
+    assert store.records == before
+    assert store.operations == {}
+    assert provider.send_calls == 0
+    assert "synthetic-private-preflight-payload" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "app_url",
+    (
+        "",
+        "http://kindred.example.invalid",
+        "https://user@kindred.example.invalid",
+        "https://kindred.example.invalid/path",
+        "https://kindred.example.invalid?query=unsafe",
+        "https://kindred.example.invalid#fragment",
+        "https://kindred.example.invalid:unsafe",
+        "https://kindred.example.invalid\\@unsafe.example",
+        "https://kindred.example.invalid/\nunsafe",
+        "https://localhost",
+        "https://kindred.localhost",
+        "https://127.0.0.1",
+        "https://[::1]",
+        "https://single-label",
+        "https://unsafe_host.example",
+        "not-a-url",
+    ),
+)
+def test_app_url_validation_precedes_every_mutation(app_url):
+    store = FakeStore()
+    before = deepcopy(store.records)
+    provider = FakeProvider()
+
+    with pytest.raises(RedeliveryFailure) as captured:
+        InvitationRedeliveryCoordinator(
+            store=store,
+            provider=provider,
+            validator=FakeValidator(store),
+            app_url=app_url,
+        )
+
+    assert captured.value.code == SafeErrorCode.CONFIGURATION_UNAVAILABLE
+    assert store.records == before
+    assert store.operations == {}
+    assert store.preflight_calls == 0
+    assert provider.send_calls == 0
+
+
+def test_application_url_normalization_and_invalid_vault_are_preflight_only():
+    assert (
+        normalize_application_url("  https://kindred.example.invalid/  ")
+        == "https://kindred.example.invalid"
+    )
+    with pytest.raises(RedeliveryFailure) as captured:
+        CredentialVault("not-a-fernet-key")
+    assert captured.value.code == SafeErrorCode.CONFIGURATION_UNAVAILABLE
+
+
+def _run_cli(arguments, *, environment=None):
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts" / "run_invitation_redelivery.py"
+    )
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+    }
+    if environment:
+        env.update(environment)
+    return subprocess.run(
+        [sys.executable, str(script), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_cli_requires_an_explicit_operation_id():
+    result = _run_cli(
+        [
+            "--invite-source",
+            "guest",
+            "--expected-count",
+            "2",
+            "--created-before",
+            "2026-07-28T19:04:14Z",
+            "--expected-commit",
+            "a" * 40,
+        ]
+    )
+    assert result.returncode == 2
+    assert "--operation-id" in result.stderr
+    assert result.stdout == ""
+
+
+@pytest.mark.parametrize(
+    "unsafe_operation_id",
+    ("", "short", "../unsafe", "g" * 32, "a" * 33),
+)
+def test_cli_rejects_malformed_operation_id_before_environment_or_database(
+    unsafe_operation_id,
+):
+    result = _run_cli(
+        [
+            "--operation-id",
+            unsafe_operation_id,
+            "--invite-source",
+            "guest",
+            "--expected-count",
+            "2",
+            "--created-before",
+            "2026-07-28T19:04:14Z",
+            "--expected-commit",
+            "a" * 40,
+        ]
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["status"] == "preflight_failed"
+    assert report["error_code"] == SafeErrorCode.OPERATION_MISMATCH.value
+    assert report["credentials_selected"] == 0
+    assert report["credentials_rotated"] == 0
+    assert "operation_id" not in report
+
+
+@pytest.mark.parametrize(
+    "missing_name",
+    (
+        "MONGO_URL",
+        "DB_NAME",
+        "RESEND_API_KEY",
+        "FROM_EMAIL",
+        "PUBLIC_API_BASE_URL",
+        "APP_URL",
+        "INVITATION_REDELIVERY_RECOVERY_KEY",
+    ),
+)
+def test_cli_required_environment_failure_precedes_database_import(missing_name):
+    commit = "a" * 40
+    environment = {
+        "RAILWAY_GIT_COMMIT_SHA": commit,
+        "MONGO_URL": "mongodb://127.0.0.1:1",
+        "DB_NAME": "kindred_disposable_cli_preflight",
+        "RESEND_API_KEY": "synthetic-provider-key",
+        "FROM_EMAIL": "noreply@example.invalid",
+        "PUBLIC_API_BASE_URL": "https://api.example.invalid",
+        "APP_URL": "https://kindred.example.invalid",
+        "INVITATION_REDELIVERY_RECOVERY_KEY": Fernet.generate_key().decode(),
+    }
+    environment.pop(missing_name)
+    result = _run_cli(
+        [
+            "--operation-id",
+            OPERATION_ID,
+            "--invite-source",
+            "guest",
+            "--expected-count",
+            "2",
+            "--created-before",
+            "2026-07-28T19:04:14Z",
+            "--expected-commit",
+            commit,
+        ],
+        environment=environment,
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["status"] == "preflight_failed"
+    assert report["error_code"] == SafeErrorCode.CONFIGURATION_UNAVAILABLE.value
+    assert report["credentials_selected"] == 0
+    assert report["credentials_rotated"] == 0
 
 
 @pytest.mark.parametrize(
@@ -688,6 +949,177 @@ def test_completed_retry_and_concurrent_execution_are_idempotent():
             if envelope.idempotency_key == key
         ]
         assert len(matching) == 1
+
+
+def test_different_operation_id_cannot_repeat_completed_rotation():
+    store = FakeStore()
+    provider = FakeProvider()
+    flow = coordinator(store, provider)
+
+    first = run(flow.execute(SELECTION, operation_id=OPERATION_ID))
+    active_after_first = store.active_credentials()
+    second = run(
+        flow.execute(
+            SELECTION,
+            operation_id="11111111111111111111111111111111",
+        )
+    )
+
+    assert first.status == "completed"
+    assert second.status == "blocked"
+    assert second.error_code == SafeErrorCode.INCIDENT_ALREADY_CLAIMED.value
+    assert store.active_credentials() == active_after_first
+    assert provider.send_calls == 2
+    assert len(store.operations) == 1
+
+
+def test_crash_after_activation_recovers_only_through_original_operation_id():
+    store = FakeStore()
+    replacements = iter(("synthetic-new-one", "synthetic-new-two"))
+    run(store.prepare(OPERATION_ID, SELECTION, lambda: next(replacements)))
+    for target in run(store.delivery_targets(OPERATION_ID)):
+        claimed = run(
+            store.claim_provider_submission(
+                OPERATION_ID,
+                target.target_id,
+            )
+        )
+        assert claimed is not None
+        run(
+            store.record_provider_receipt(
+                OPERATION_ID,
+                target.target_id,
+                ProviderReceipt(
+                    ProviderStatus.DELIVERED,
+                    provider_message_id=f"provider_{target.target_id}_0001",
+                ),
+            )
+        )
+    activation = run(store.activate_if_ready(OPERATION_ID))
+    assert activation is not None
+    assert all(record.get("credential_rotation") for record in store.records)
+
+    provider = FakeProvider()
+    recovered = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+    rejected_new_operation = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id="22222222222222222222222222222222",
+        )
+    )
+
+    assert recovered.status == "completed"
+    assert rejected_new_operation.status == "blocked"
+    assert (
+        rejected_new_operation.error_code
+        == SafeErrorCode.INCIDENT_ALREADY_CLAIMED.value
+    )
+    assert provider.send_calls == 0
+    assert store.activation_calls == 1
+
+
+def test_concurrent_distinct_operations_claim_population_once():
+    store = FakeStore()
+    provider = FakeProvider()
+
+    async def concurrent_run():
+        return await asyncio.gather(
+            coordinator(store, provider).execute(
+                SELECTION,
+                operation_id="33333333333333333333333333333333",
+            ),
+            coordinator(store, provider).execute(
+                SELECTION,
+                operation_id="44444444444444444444444444444444",
+            ),
+        )
+
+    reports = run(concurrent_run())
+    assert sorted(report.status for report in reports) == ["blocked", "completed"]
+    assert provider.send_calls == 2
+    assert len(store.operations) == 1
+    assert store.activation_calls == 1
+
+
+def test_rotation_marker_prevents_replacement_from_becoming_newly_eligible():
+    store = FakeStore()
+    provider = FakeProvider()
+    first = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+    changed_selection = InvitationSelection(
+        invite_source="guest",
+        expected_count=2,
+        created_before=datetime(2026, 7, 29, tzinfo=timezone.utc),
+    )
+    second = run(
+        coordinator(store, provider).execute(
+            changed_selection,
+            operation_id="55555555555555555555555555555555",
+        )
+    )
+    assert first.status == "completed"
+    assert second.status == "blocked"
+    assert second.error_code == SafeErrorCode.SELECTION_MISMATCH.value
+    assert provider.send_calls == 2
+
+
+def test_transient_validation_failure_preserves_recovery_and_retry_completes():
+    store = FakeStore()
+    provider = FakeProvider()
+    failed = run(
+        coordinator(
+            store,
+            provider,
+            FakeValidator(store, force_failure=True),
+        ).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+    retried = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+
+    assert failed.status == "activated"
+    assert failed.error_code == SafeErrorCode.VALIDATION_FAILED.value
+    assert failed.credentials_rotated == 2
+    assert retried.status == "completed"
+    assert provider.send_calls == 2
+
+
+def test_completed_validation_state_is_immutable():
+    store = FakeStore()
+    provider = FakeProvider()
+    completed = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+    overwritten = run(
+        store.record_validation(
+            OPERATION_ID,
+            old_credentials_rejected=0,
+            new_credentials_validated=0,
+            failures=2,
+            expected_validation_revision=0,
+        )
+    )
+    assert completed.status == "completed"
+    assert overwritten.status == "completed"
+    assert overwritten.failures == 0
 
 
 def test_header_validator_uses_only_stable_path_and_authorization_header():
