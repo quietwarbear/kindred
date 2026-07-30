@@ -10,7 +10,7 @@ export const SupportPage = () => (
       </Link>
 
       <h1 className="font-display text-4xl text-foreground" data-testid="support-title">Support &amp; Contact</h1>
-      <p className="mt-2 text-sm text-muted-foreground">We are here to help your community thrive.</p>
+      <p className="mt-2 text-sm text-muted-foreground">Kindred support for reunion organizers, invitees, and family members.</p>
 
       <div className="mt-10 grid gap-6 sm:grid-cols-2">
         <div className="rounded-[24px] border border-border/60 bg-background/80 p-6" data-testid="support-email-card">
@@ -57,8 +57,8 @@ export const SupportPage = () => (
 
           <div className="mt-4 space-y-5">
             <div data-testid="support-faq-1">
-              <p className="font-semibold text-foreground">How do I invite people to my community?</p>
-              <p className="mt-1">Go to Courtyards &gt; Members and use the invite feature. Each community has a unique invite code you can share. You can also invite directly from the Kinship Map.</p>
+              <p className="font-semibold text-foreground">How do I invite relatives to a reunion?</p>
+              <p className="mt-1">Open the reunion, create a private invitation, and share it with the intended relative. A guest can RSVP from the private web link without creating an account.</p>
             </div>
 
             <div data-testid="support-faq-2">
@@ -73,7 +73,7 @@ export const SupportPage = () => (
 
             <div data-testid="support-faq-4">
               <p className="font-semibold text-foreground">Can I delete my account?</p>
-              <p className="mt-1">Yes. Go to Settings &gt; Delete Account. All personal data is permanently removed within 30 days. If you are the community owner, transfer ownership first or your community will be deleted.</p>
+              <p className="mt-1">Yes. Go to Settings &gt; Delete Account. If you own a family space with other members, transfer ownership first. The deletion endpoint removes the account records described in our <Link className="font-semibold text-primary hover:underline" to="/privacy">Privacy Policy</Link>; some shared content, subscriptions, provider records, logs, backups, or legally retained records may remain.</p>
             </div>
 
             <div data-testid="support-faq-5">

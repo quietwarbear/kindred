@@ -62,14 +62,18 @@ export const ReunionOperations = ({ event, operations }) => {
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="reunion-summary-cards">
         {[
           [Users, operations.total_invitees, "Total invitees"],
           [Users, overallAttending, "Attending overall"],
           [ClipboardList, operations.unanswered_invitations, "Unanswered"],
           [CalendarDays, Object.keys(days).length, "Scheduled days"],
         ].map(([Icon, value, label]) => (
-          <div className="soft-panel" key={label}>
+          <div
+            className="soft-panel"
+            data-testid={`reunion-summary-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            key={label}
+          >
             <Icon className="h-4 w-4 text-primary" />
             <p className="mt-3 text-2xl font-semibold">{value}</p>
             <p className="text-sm text-muted-foreground">{label}</p>

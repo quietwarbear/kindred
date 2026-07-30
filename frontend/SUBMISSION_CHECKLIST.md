@@ -1,6 +1,6 @@
 # Kindred — App Store Submission Checklist
 
-**Date:** April 8, 2026
+**Release 2 review date:** July 30, 2026
 **Prior Rejection:** March 23, 2026 (Apple Guideline 3.1.2(c))
 
 ---
@@ -17,8 +17,7 @@
 
 1. **App Store Description**
    - [ ] Replace description with updated copy from `STORE_LISTINGS.md` (iOS section)
-   - [ ] Verify all 5 tiers listed with prices
-   - [ ] Verify auto-renewal language and cancellation instructions
+   - [ ] Confirm reunion-first product name, subtitle, description, keywords, categories, and release notes
    - [ ] Verify Privacy Policy and Terms URLs at the bottom
 
 2. **Subscription Metadata (Subscriptions section)**
@@ -69,16 +68,31 @@
 
 3. **Privacy & Data Safety**
    - [ ] Privacy Policy URL set
-   - [ ] Data Safety form completed
+   - [ ] Replace the incorrect “No data collected” answer using `docs/STORE_PRIVACY_DECLARATION_MATRIX.md`
+   - [ ] Obtain the production and legal confirmations listed in the matrix before submitting
 
-4. **Build & Upload**
+4. **Store creative**
+   - [ ] Use the six ordered Google phone exports from `store-assets/google/phone`
+   - [ ] Confirm dimensions, no alpha channel, synthetic-only source data, and sensitive-marker scan
+   - [ ] Confirm no desktop framing, watermarks, reviewer/demo labels, credentials, or production data
+
+5. **Build & Upload**
    - [ ] `cd frontend && npm install && GENERATE_SOURCEMAP=false npm run build`
    - [ ] `npx cap sync android`
    - [ ] Build signed AAB (see NATIVE_DEPLOY.md)
    - [ ] Upload to Google Play Console
 
-5. **Submit**
+6. **Submit**
    - [ ] Submit for review
+
+---
+
+## RELEASE 2 PUBLICATION BOUNDARY
+
+- [ ] Do not publish Apple metadata, privacy answers, screenshots, or listing changes without separate approval.
+- [ ] Do not publish Google metadata, Data Safety answers, screenshots, or listing changes without separate approval.
+- [ ] Do not invent a branded support mailbox. Continue using the verified repository fallback until the owner confirms a working `heykindred.org` address.
+- [ ] Keep web subscription checkout disabled with `subscription_checkout_migrating`.
 
 ---
 

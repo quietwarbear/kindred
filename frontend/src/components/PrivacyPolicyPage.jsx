@@ -11,7 +11,7 @@ export const PrivacyPolicyPage = () => (
       </Link>
 
       <h1 className="font-display text-4xl text-foreground" data-testid="privacy-title">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Last updated: July 23, 2026</p>
+      <p className="mt-2 text-sm text-muted-foreground">Last updated: July 30, 2026</p>
 
       <div className="mt-8 space-y-8 text-sm leading-7 text-muted-foreground">
         <section>
@@ -53,6 +53,7 @@ export const PrivacyPolicyPage = () => (
           <p className="mt-2">We do not sell personal information. Code in the Service can disclose limited data to:</p>
           <ul className="mt-2 list-disc space-y-1 pl-6">
             <li><strong>MongoDB and the configured hosting provider:</strong> application records, content, media stored as data URLs, and operational metadata.</li>
+            <li><strong>Vercel and Railway:</strong> frontend and API delivery, including provider-generated request, browser/device, IP, log, and diagnostic information according to the active production configuration.</li>
             <li><strong>Stripe:</strong> web checkout, billing, customer, payment, and subscription data.</li>
             <li><strong>RevenueCat, Apple, and Google Play:</strong> mobile purchase identifiers, entitlements, store, status, and subscription dates.</li>
             <li><strong>Google:</strong> Google Sign-In identity data; Google Analytics and Tag Manager usage data; and, when the configured AI model uses Gemini, content supplied to that model.</li>

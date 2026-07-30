@@ -265,7 +265,7 @@ export const PublicRSVPPage = () => {
       ) : null}
 
       {!saved && step === 1 ? (
-        <fieldset>
+        <fieldset data-testid="public-rsvp-options">
           <legend className="text-xl font-semibold text-slate-900">Will you join the reunion?</legend>
           <p className="mt-2 text-sm text-slate-600">You can still choose individual activities next.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">

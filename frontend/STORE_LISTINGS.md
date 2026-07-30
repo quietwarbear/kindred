@@ -1,127 +1,160 @@
-# Kindred — App Store & Google Play Listing Copy
+# heyKindred proposed store metadata
 
----
+Last reviewed against the built application and `docs/PRIVACY_DATA_MAP.md`: 2026-07-30
 
-## iOS APP STORE (App Store Connect)
+These are repository-managed proposals. Nothing in this file has been published to App Store Connect or Google Play Console. Store-console privacy answers must follow `docs/STORE_PRIVACY_DECLARATION_MATRIX.md` and receive the production/legal confirmations listed there.
 
-### Name (30 char max)
-Kindred
+## Shared positioning
 
-### Subtitle (30 char max)
-Your Community's Digital Home
+**Primary promise:** Plan the reunion. Bring everyone in. Keep the stories.
 
-### Promotional Text (170 char max)
-Build lasting community with Kindred — the invitation-only platform for families, churches, and intentional groups. Courses, events, memory vaults, and governance built in.
+**Position:** heyKindred is a private family-reunion planner and source of truth. Existing family chats can continue; Kindred keeps the itinerary, private invitation, RSVP responses, planning work, and memories together.
 
-### Description (4000 char max)
+**Do not claim:** that Kindred replaces WhatsApp or Facebook; that all data is deleted within 30 days; that Kindred collects no data; adoption figures; security certifications; end-to-end encryption; guaranteed delivery; unsupported prices; or provider behavior not confirmed in production.
 
-Kindred is the digital hearth for your community. Not a social network, not another group chat — a permanent home where families, churches, and intentional communities gather, grow, and preserve what matters.
+## Apple App Store
 
-Built on the principle that community should be sovereign, intimate, and lasting, Kindred gives your group the tools to thrive across generations.
+### Product name
 
-WHAT KINDRED DOES
+heyKindred
 
-Gather your people with events, polls, and real-time communication. Share memories through a living vault that grows with your community. Build knowledge with structured discussions and shared archives. Track your community's story on a visual timeline. Govern together with role-based access and transparent decision-making.
+### Subtitle
 
-5 GOVERNANCE ROLES
-Every community member has a role: Guest, Member, Steward, Elder, or Host. Each carries distinct access and purpose, so leadership is clear and community trust is built in.
+Family Reunion Planner
 
-MEMORY VAULT
-Capture and preserve photos, stories, milestones, and traditions. Kindred's Memory Vault is designed for permanence — not algorithms or feeds.
+### Promotional text
 
-EVENTS & GATHERINGS
-Plan reunions, services, meetings, or celebrations. RSVP tracking, reminders, and post-event reflections keep your community connected.
+Plan a multiday family reunion, invite relatives privately, collect no-account RSVPs, coordinate the details, and keep the stories together.
 
-MULTILINGUAL SUPPORT
-Available in English with internationalization built into the platform architecture.
+### Description
 
-SUBSCRIPTION PLANS
-- Seedling: Free — Up to 10 members, core community features
-- Sapling: $9.99/month or $89.99/year — Up to 25 members, subyard spaces, file sharing
-- Oak: $19.99/month or $179.99/year — Up to 50 members, analytics dashboard, custom branding
-- Redwood: $39.99/month or $359.99/year — Up to 100 members, advanced governance, priority support
-- Elder Grove: Custom pricing — 100+ members, dedicated support, custom integrations
+Plan the reunion. Bring everyone in. Keep the stories.
 
-Subscriptions auto-renew unless renewal is turned off. The App Store confirmation shows the complete localized charge and billing interval before purchase. You can manage and cancel subscriptions in your Apple ID account settings.
+heyKindred gives your family one private place to coordinate a reunion without asking every relative to abandon the chats they already use.
 
-Privacy Policy: https://www.heykindred.org/privacy
-Terms of Service: https://www.heykindred.org/terms
+START THE REUNION
 
-### Keywords (100 char max, comma-separated)
-community,family,church,events,memories,groups,private,governance,reunion,archive,vault,gathering
+Name the gathering, choose the dates and location, and begin with a focused planning workspace.
 
-### Primary Category
-Social Networking
+BUILD A MULTIDAY ITINERARY
 
-### Secondary Category
-Lifestyle
+Keep activities, times, venues, RSVP choices, potluck needs, volunteer roles, and travel details in one plan.
 
-### Content Rating
-4+
+INVITE FAMILY PRIVATELY
 
-### Support URL
-https://www.heykindred.org/support
+Create a private invitation for the intended relative. Guests can respond on the web without creating an account.
 
-### Marketing URL
-https://www.heykindred.org
+SEE WHAT NEEDS ATTENTION
 
-### Privacy Policy URL
-https://www.heykindred.org/privacy
+Organizers can review response gaps and planning progress while member and guest views remain limited to the information they need.
 
----
+KEEP THE STORIES
 
-## GOOGLE PLAY STORE (Google Play Console)
+Preserve family photos, voice notes, oral histories, and memories after the reunion.
 
-### App Name (50 char max)
-Kindred - Your Community's Digital Home
-
-### Short Description (80 char max)
-Private community platform for families, churches, and intentional groups.
-
-### Full Description (4000 char max)
-
-Kindred is not another social network. It's a permanent digital home for communities that matter — families, churches, neighborhoods, and intentional groups that want to gather, grow, and preserve what matters most.
-
-Built on the belief that community should be sovereign and lasting, Kindred gives your group everything it needs in one private, ad-free space.
-
-WHAT MAKES KINDRED DIFFERENT
-
-Your community is invitation-only, with no public profiles or ads. Kindred uses the limited service providers and analytics described in its Privacy Policy. Every feature is designed for depth and permanence, not public engagement metrics.
-
-FEATURES
-
-- Events & Gatherings: Plan reunions, services, meetings with RSVP tracking and reminders
-- Memory Vault: Preserve photos, stories, milestones, and traditions for generations
-- Community Timeline: A living history of your group's journey together
-- Governance Roles: 5 distinct roles (Guest, Member, Steward, Elder, Host) with clear access
-- Polls & Decision-Making: Transparent collective decisions
-- Real-Time Communication: Chat and notifications that keep your community connected
-- Analytics Dashboard: Understand community engagement and growth
-- Subyard Spaces: Create focused groups within your community
-
-5 GOVERNANCE ROLES
-Guest, Member, Steward, Elder, Host — each with distinct purpose and access levels, building trust and clarity into your community structure.
-
-SUBSCRIPTION PLANS
-- Seedling: Free — Up to 10 members, core features
-- Sapling: $9.99/month or $89.99/year — Up to 25 members, subyard spaces, file sharing
-- Oak: $19.99/month or $179.99/year — Up to 50 members, analytics, custom branding
-- Redwood: $39.99/month or $359.99/year — Up to 100 members, advanced governance
-- Elder Grove: Custom pricing — 100+ members, dedicated support
-
-Subscriptions auto-renew unless renewal is turned off. Google Play shows the complete localized charge and billing interval before purchase. You can manage and cancel subscriptions in your Google Play account settings.
+Kindred is invitation-only, has no public member profiles, and is not built around an advertising feed. Kindred processes account, community, content, device, purchase, communication, diagnostic, and usage information as described in its Privacy Policy.
 
 Privacy Policy: https://www.heykindred.org/privacy
 Terms of Service: https://www.heykindred.org/terms
 
-### Category
-Social
+### Keywords
 
-### Content Rating
-Everyone
+family reunion,reunion planner,RSVP,itinerary,family memories,potluck,volunteers,invitation
 
-### Contact Email
-contact@ubuntumarkets.com
+### Category recommendation
 
-### Privacy Policy
-https://www.heykindred.org/privacy
+- Primary: Lifestyle
+- Secondary: Social Networking
+- Rationale: the acquisition job is personal family-reunion planning; social participation supports that job but is not the primary store promise.
+
+### URLs
+
+- Support: https://www.heykindred.org/support
+- Privacy policy: https://www.heykindred.org/privacy
+- Marketing: https://www.heykindred.org
+- Terms: https://www.heykindred.org/terms
+
+### Release notes
+
+Kindred now opens with one reunion-first path: start a private reunion plan, build a multiday itinerary, share a private invitation, collect no-account RSVPs, see planning gaps, and preserve family stories. This release also aligns public privacy and support information with the application’s documented behavior.
+
+## Google Play
+
+### App name
+
+heyKindred: Reunion Planner
+
+### Short description
+
+Plan a private family reunion, collect RSVPs, and keep the stories together.
+
+### Full description
+
+Plan the reunion. Bring everyone in. Keep the stories.
+
+heyKindred is a private family-reunion planner for organizers, invited relatives, and multigenerational families.
+
+Your family can keep using its existing group chats. Kindred serves as the private reunion source of truth for:
+
+- Multiday activities, times, and locations
+- Private invitations
+- No-account guest RSVP
+- Response gaps and planning progress
+- Potluck items, volunteer roles, and travel details
+- Family photos, voice notes, oral histories, and memories
+
+Organizers control the reunion plan and invitations. Guests receive the gathering information needed to respond from a private web link. Family membership is not published as a public profile.
+
+Kindred is not positioned as a replacement for WhatsApp, Facebook, text messages, or phone calls. It keeps the details that are difficult to manage inside a conversation in one private workspace.
+
+Kindred processes account, profile, community, event, RSVP, content, device, purchase, communication, diagnostic, and usage information. Review the Privacy Policy for the current categories, service providers, retention limitations, and deletion controls.
+
+Privacy Policy: https://www.heykindred.org/privacy
+Terms of Service: https://www.heykindred.org/terms
+
+### Category recommendation
+
+- Category: Events
+- Rationale: the primary acquisition and first-value job is planning and coordinating a family reunion.
+
+### Contact and URLs
+
+- Current verified repository support email: support@ubuntu-village.org
+- Support URL: https://www.heykindred.org/support
+- Privacy policy: https://www.heykindred.org/privacy
+- Marketing URL: https://www.heykindred.org
+- Terms: https://www.heykindred.org/terms
+
+The support email is a verified existing fallback but is not on the canonical `heykindred.org` domain. Do not invent or publish a replacement mailbox until the owner verifies that it exists and receives mail.
+
+### Release notes
+
+A clearer reunion-first start, private multiday planning, no-account guest RSVP, response-gap visibility, and aligned privacy and support information.
+
+## Screenshot captions and order
+
+Use the same six-frame narrative on Apple and Google:
+
+1. **Start a family reunion** — Name the gathering, dates, and place.
+2. **Build a multiday itinerary** — Keep every activity and update in one plan.
+3. **Share one private invitation** — Invite family without posting details publicly.
+4. **RSVP without an account** — Relatives can answer from a private web link.
+5. **See what still needs attention** — Track responses, gaps, and planning progress.
+6. **Keep the stories** — Preserve photos, voices, and memories after the reunion.
+
+The reproducible source campaign, exact dimensions, alt text, and synthetic-data statement are in `frontend/store-assets/README.md`.
+
+## Reviewer instructions
+
+1. Use only the dedicated synthetic review account entered securely in the applicable store console. Do not place review credentials in this repository or in listing text.
+2. To review organizer behavior, start a reunion draft, save it with the synthetic account, and create a private invitation for a synthetic disposable invitee.
+3. To review no-account RSVP, open that newly created synthetic invitation in a signed-out browser and submit a response. No account is required for this step.
+4. Do not use production family names, events, invitations, email addresses, or customer records.
+5. Web subscription checkout intentionally remains unavailable and returns HTTP 410 with `subscription_checkout_migrating`. Do not treat that paused path as a working purchase flow.
+
+## External console changes intentionally unpublished
+
+- Apple product name, subtitle, description, keywords, categories, release notes, reviewer instructions, URLs, screenshot order, screenshots, and App Privacy answers.
+- Google app name, short/full descriptions, category, release notes, contact/support URLs, screenshot order, screenshots, and Data Safety answers.
+- Any branded support-mailbox replacement.
+- Any price, product, subscription, or purchase-console change.
