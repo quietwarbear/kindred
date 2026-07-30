@@ -274,3 +274,37 @@ configuration was accessed or changed by this follow-up.
 The subscription HTTP 410 kill switch, RevenueCat, Stripe, Apple, Google Play,
 GCP, production data, and provider configuration are untouched. Subscription
 recovery remains paused.
+
+## Restricted-key delivery-confirmation recovery
+
+The authorized production attempt failed closed after the delivery provider
+accepted both submissions because the least-privilege Sending-access key cannot
+read individual message status. No credential was activated. The previous
+status-polling design therefore left the recoverable operation waiting even
+though opaque provider message references had been durably recorded.
+
+This follow-up correction removes all provider message-status reads and adds a
+signed, provider-only delivery callback. The callback is not a redelivery
+trigger and cannot submit email or rotate an invitation. It verifies the raw
+request body with the provider webhook secret before extracting only an opaque
+event ID, opaque provider message ID, terminal safe status, and timestamp.
+Recipient fields, message content, links, credentials, event details, and the
+remaining provider payload are discarded.
+
+Verified terminal events are applied transactionally and monotonically:
+
+- duplicate events are idempotent;
+- failure events cannot downgrade a delivered target;
+- ambiguous or accepted targets can recover to delivered;
+- a provider reference that resolves to zero or multiple operations is ignored;
+- terminal activated or completed operations cannot be rewritten; and
+- activation remains impossible until every selected target is durably
+  confirmed delivered.
+
+The operator CLI now requires the webhook signing secret during preflight,
+before database import or mutation. A restricted Sending-access key remains
+sufficient: it submits the privacy-safe invitation message, while signed
+provider callbacks establish delivery. Deployment, provider webhook
+configuration, event replay, operation resumption, and production rotation are
+separate authorization gates and were not performed while preparing this
+correction.

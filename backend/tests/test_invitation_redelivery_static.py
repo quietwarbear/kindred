@@ -14,6 +14,7 @@ def test_redelivery_is_operator_only_and_bypasses_generic_email_helper():
     provider = read("backend/invitation_redelivery_provider.py")
     cli = read("backend/scripts/run_invitation_redelivery.py")
     server = read("backend/server.py")
+    webhook_route = read("backend/routes/resend_webhooks.py")
 
     assert "APIRouter" not in coordinator
     assert "FastAPI" not in coordinator
@@ -25,6 +26,7 @@ def test_redelivery_is_operator_only_and_bypasses_generic_email_helper():
     assert "--expected-commit" in cli
     assert "required=True" in cli
     assert "RESEND_VERIFIED_DOMAIN" in cli
+    assert "RESEND_WEBHOOK_SECRET" in cli
     assert "restricted_api_key" in provider
     assert "resend._domainkey" in provider
     assert "feedback-smtp.us-east-1.amazonses.com" in provider
@@ -32,8 +34,29 @@ def test_redelivery_is_operator_only_and_bypasses_generic_email_helper():
     assert "new_operation_id" not in cli
     assert "invitation_redelivery_operations_collection.create_index" in server
     assert "invitation_redelivery_incident_selection_once" in server
+    assert "invitation_redelivery_provider_message_lookup" in server
     assert "event_invitation_staged_token_lookup" not in server
     assert "credential_rotation" not in server
+    assert "resend_webhooks_router" in server
+    assert "include_in_schema=False" in webhook_route
+    assert "InvitationRedeliveryCoordinator" not in webhook_route
+    assert ".send(" not in webhook_route
+    assert "credential" not in webhook_route
+
+
+def test_resend_delivery_confirmation_never_uses_read_access_api():
+    coordinator = read("backend/invitation_redelivery.py")
+    provider = read("backend/invitation_redelivery_provider.py")
+    webhook = read("backend/invitation_redelivery_webhook.py")
+    route = read("backend/routes/resend_webhooks.py")
+
+    assert "delivery_status" not in coordinator
+    assert "delivery_status" not in provider
+    assert 'f"/emails/' not in provider
+    assert "svix-id" in webhook
+    assert "svix-signature" in webhook
+    assert "request.stream()" in route
+    assert "record_provider_delivery_event" in route
 
 
 def test_links_and_validation_use_fragment_and_header_only_transport():
@@ -65,6 +88,8 @@ def test_sensitive_dataclasses_redact_their_representations():
 def test_logs_and_reports_are_aggregate_only():
     source = read("backend/invitation_redelivery.py")
     provider = read("backend/invitation_redelivery_provider.py")
+    webhook = read("backend/invitation_redelivery_webhook.py")
+    webhook_route = read("backend/routes/resend_webhooks.py")
     report_fields = source.split(
         "class SafeOperationReport",
         1,
@@ -83,7 +108,9 @@ def test_logs_and_reports_are_aggregate_only():
 
     log_lines = "\n".join(
         line
-        for line in (source + "\n" + provider).splitlines()
+        for line in (
+            source + "\n" + provider + "\n" + webhook + "\n" + webhook_route
+        ).splitlines()
         if "invitation_redelivery status=" in line
         or "invitation_delivery status=" in line
     )

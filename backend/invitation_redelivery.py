@@ -210,14 +210,6 @@ class InvitationDeliveryProvider(Protocol):
 
     async def send(self, envelope: DeliveryEnvelope) -> ProviderReceipt: ...
 
-    async def delivery_status(
-        self,
-        provider_message_id: str,
-        *,
-        operation_id: str,
-        target_id: str,
-    ) -> ProviderReceipt: ...
-
 
 class HeaderOnlyInvitationValidator(Protocol):
     async def preflight(self) -> PreflightResult: ...
@@ -582,15 +574,6 @@ class InvitationRedeliveryCoordinator:
         operation_id: str,
         target: SensitiveDeliveryTarget,
     ) -> ProviderReceipt | None:
-        if target.provider_message_id and target.provider_status in {
-            ProviderStatus.ACCEPTED,
-        }:
-            return await self._provider.delivery_status(
-                target.provider_message_id,
-                operation_id=operation_id,
-                target_id=target.target_id,
-            )
-
         if target.provider_status not in {
             ProviderStatus.PENDING,
             ProviderStatus.REJECTED,
@@ -611,11 +594,4 @@ class InvitationRedeliveryCoordinator:
             operation_id=operation_id,
             target_id=claimed.target_id,
         )
-        receipt = await self._provider.send(envelope)
-        if receipt.status == ProviderStatus.ACCEPTED and receipt.provider_message_id:
-            return await self._provider.delivery_status(
-                receipt.provider_message_id,
-                operation_id=operation_id,
-                target_id=claimed.target_id,
-            )
-        return receipt
+        return await self._provider.send(envelope)

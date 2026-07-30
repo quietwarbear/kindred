@@ -34,6 +34,7 @@ from invitation_redelivery_store import (  # noqa: E402
 from invitation_redelivery_validator import (  # noqa: E402
     PublicRSVPHeaderValidator,
 )
+from invitation_redelivery_webhook import validate_webhook_secret  # noqa: E402
 
 
 def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
@@ -95,6 +96,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
             "RESEND_API_KEY",
             "FROM_EMAIL",
             "RESEND_VERIFIED_DOMAIN",
+            "RESEND_WEBHOOK_SECRET",
             "PUBLIC_API_BASE_URL",
             "APP_URL",
             "INVITATION_REDELIVERY_RECOVERY_KEY",
@@ -114,6 +116,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
         vault = CredentialVault(
             os.environ.get("INVITATION_REDELIVERY_RECOVERY_KEY", "")
         )
+        validate_webhook_secret(os.environ.get("RESEND_WEBHOOK_SECRET", ""))
         app_url = normalize_application_url(os.environ.get("APP_URL", ""))
     except (ValueError, RedeliveryFailure):
         return _safe_failure(
