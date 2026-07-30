@@ -94,6 +94,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
             "DB_NAME",
             "RESEND_API_KEY",
             "FROM_EMAIL",
+            "RESEND_VERIFIED_DOMAIN",
             "PUBLIC_API_BASE_URL",
             "APP_URL",
             "INVITATION_REDELIVERY_RECOVERY_KEY",
@@ -135,6 +136,7 @@ async def _run(args: argparse.Namespace) -> SafeOperationReport:
     provider = ResendInvitationDeliveryProvider(
         api_key=os.environ.get("RESEND_API_KEY", ""),
         from_address=os.environ.get("FROM_EMAIL", ""),
+        verified_domain=os.environ.get("RESEND_VERIFIED_DOMAIN", ""),
     )
     validator = PublicRSVPHeaderValidator(
         api_base_url=os.environ.get("PUBLIC_API_BASE_URL", ""),

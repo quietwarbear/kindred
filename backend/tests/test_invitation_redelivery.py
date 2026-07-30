@@ -39,6 +39,7 @@ from invitation_redelivery_provider import (
 from invitation_redelivery_validator import PublicRSVPHeaderValidator
 
 OPERATION_ID = "0123456789abcdef0123456789abcdef"
+SYNTHETIC_PROVIDER_KEY = "synthetic-provider-key"  # pragma: allowlist secret
 BOUNDARY = datetime(2026, 7, 28, 19, 4, 14, tzinfo=timezone.utc)
 SELECTION = InvitationSelection(
     invite_source="guest",
@@ -693,6 +694,7 @@ def test_cli_rejects_malformed_operation_id_before_environment_or_database(
         "DB_NAME",
         "RESEND_API_KEY",
         "FROM_EMAIL",
+        "RESEND_VERIFIED_DOMAIN",
         "PUBLIC_API_BASE_URL",
         "APP_URL",
         "INVITATION_REDELIVERY_RECOVERY_KEY",
@@ -704,8 +706,9 @@ def test_cli_required_environment_failure_precedes_database_import(missing_name)
         "RAILWAY_GIT_COMMIT_SHA": commit,
         "MONGO_URL": "mongodb://127.0.0.1:1",
         "DB_NAME": "kindred_disposable_cli_preflight",
-        "RESEND_API_KEY": "synthetic-provider-key",
+        "RESEND_API_KEY": "synthetic-provider-key",  # pragma: allowlist secret
         "FROM_EMAIL": "noreply@example.invalid",
+        "RESEND_VERIFIED_DOMAIN": "example.invalid",
         "PUBLIC_API_BASE_URL": "https://api.example.invalid",
         "APP_URL": "https://kindred.example.invalid",
         "INVITATION_REDELIVERY_RECOVERY_KEY": Fernet.generate_key().decode(),
@@ -1160,6 +1163,269 @@ def test_header_validator_uses_only_stable_path_and_authorization_header():
         assert "synthetic-new" not in str(request.url)
 
 
+class FakeDNSResolver:
+    def __init__(self, records=None, error=None):
+        self.records = records or {}
+        self.error = error
+        self.calls = []
+
+    async def resolve(self, name, record_type, *, lifetime):
+        self.calls.append((name, record_type, lifetime))
+        if self.error is not None:
+            raise self.error
+        return self.records.get((name, record_type), [])
+
+
+def verified_resend_dns(domain="heykindred.org"):
+    return {
+        (f"resend._domainkey.{domain}", "TXT"): ["p=" + ("A" * 216)],
+        (f"send.{domain}", "TXT"): ["v=spf1 include:amazonses.com ~all"],
+        (f"send.{domain}", "MX"): ["10 feedback-smtp.us-east-1.amazonses.com."],
+    }
+
+
+def restricted_resend_client(response=None):
+    observed = []
+
+    def handler(request):
+        observed.append(request)
+        return (
+            response
+            if response is not None
+            else httpx.Response(
+                401,
+                json={
+                    "name": "restricted_api_key",
+                    "message": "synthetic restricted-key response",
+                },
+            )
+        )
+
+    return (
+        httpx.AsyncClient(
+            base_url="https://api.resend.com",
+            transport=httpx.MockTransport(handler),
+        ),
+        observed,
+    )
+
+
+def test_resend_preflight_accepts_exact_restricted_key_and_dns_configuration():
+    client, observed = restricted_resend_client()
+    resolver = FakeDNSResolver(verified_resend_dns())
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert result.ready
+    assert result.error_code == SafeErrorCode.NONE
+    assert len(observed) == 1
+    assert observed[0].url.path == "/domains"
+    assert [call[:2] for call in resolver.calls] == [
+        ("resend._domainkey.heykindred.org", "TXT"),
+        ("send.heykindred.org", "TXT"),
+        ("send.heykindred.org", "MX"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("response", "expected_code"),
+    (
+        (
+            httpx.Response(
+                401,
+                json={"name": "unexpected_restricted_response"},
+            ),
+            SafeErrorCode.CONFIGURATION_UNAVAILABLE,
+        ),
+        (
+            httpx.Response(
+                401,
+                content=b"not-json",
+            ),
+            SafeErrorCode.CONFIGURATION_UNAVAILABLE,
+        ),
+        (
+            httpx.Response(
+                403,
+                json={"name": "invalid_api_key"},
+            ),
+            SafeErrorCode.PROVIDER_UNAVAILABLE,
+        ),
+    ),
+)
+def test_resend_preflight_rejects_non_exact_provider_responses(
+    response,
+    expected_code,
+):
+    client, observed = restricted_resend_client(response)
+    resolver = FakeDNSResolver(verified_resend_dns())
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert not result.ready
+    assert result.error_code == expected_code
+    assert len(observed) == 1
+    assert resolver.calls == []
+
+
+@pytest.mark.parametrize(
+    ("from_address", "verified_domain"),
+    (
+        ("Kindred <noreply@heykindred.org>", ""),
+        ("Kindred <noreply@heykindred.org>", "other.example"),
+        ("Kindred <noreply@heykindred.org>", "https://heykindred.org"),
+        ("Kindred <noreply@localhost>", "localhost"),
+        (
+            "Kindred <noreply@heykindred.org>\nBcc: unsafe@example.invalid",
+            "heykindred.org",
+        ),
+        (
+            "Kindred <noreply@heykindred.org>\r\nBcc: unsafe@example.invalid",
+            "heykindred.org",
+        ),
+    ),
+)
+def test_resend_preflight_rejects_domain_configuration_before_network(
+    from_address,
+    verified_domain,
+):
+    client, observed = restricted_resend_client()
+    resolver = FakeDNSResolver(verified_resend_dns())
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address=from_address,
+        verified_domain=verified_domain,
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert not result.ready
+    assert result.error_code == SafeErrorCode.CONFIGURATION_UNAVAILABLE
+    assert observed == []
+    assert resolver.calls == []
+
+
+@pytest.mark.parametrize(
+    ("record_key", "unsafe_values"),
+    (
+        (
+            ("resend._domainkey.heykindred.org", "TXT"),
+            [],
+        ),
+        (
+            ("resend._domainkey.heykindred.org", "TXT"),
+            ["p=short"],
+        ),
+        (
+            ("send.heykindred.org", "TXT"),
+            ["v=spf1 include:untrusted.example ~all"],
+        ),
+        (
+            ("send.heykindred.org", "MX"),
+            ["10 untrusted.example."],
+        ),
+        (
+            ("send.heykindred.org", "MX"),
+            ["20 feedback-smtp.us-east-1.amazonses.com."],
+        ),
+    ),
+)
+def test_resend_preflight_fails_closed_for_missing_or_wrong_dns(
+    record_key,
+    unsafe_values,
+):
+    records = verified_resend_dns()
+    records[record_key] = unsafe_values
+    client, observed = restricted_resend_client()
+    resolver = FakeDNSResolver(records)
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert not result.ready
+    assert result.error_code == SafeErrorCode.CONFIGURATION_UNAVAILABLE
+    assert len(observed) == 1
+    assert len(resolver.calls) == 3
+
+
+def test_resend_preflight_fails_closed_for_dns_unavailability():
+    client, observed = restricted_resend_client()
+    resolver = FakeDNSResolver(error=OSError("synthetic DNS unavailable"))
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert not result.ready
+    assert result.error_code == SafeErrorCode.PROVIDER_UNAVAILABLE
+    assert len(observed) == 1
+    assert len(resolver.calls) == 1
+
+
+def test_resend_preflight_preserves_full_access_verified_domain_support():
+    client, observed = restricted_resend_client(
+        httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "name": "heykindred.org",
+                        "status": "verified",
+                    }
+                ]
+            },
+        )
+    )
+    resolver = FakeDNSResolver(verified_resend_dns())
+    provider = ResendInvitationDeliveryProvider(
+        api_key=SYNTHETIC_PROVIDER_KEY,
+        from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
+        client=client,
+        resolver=resolver,
+    )
+
+    result = run(provider.preflight())
+    run(client.aclose())
+
+    assert result.ready
+    assert result.error_code == SafeErrorCode.NONE
+    assert len(observed) == 1
+    assert len(resolver.calls) == 3
+
+
 def test_resend_adapter_logs_only_safe_categories(caplog):
     observed_payloads = []
 
@@ -1194,9 +1460,11 @@ def test_resend_adapter_logs_only_safe_categories(caplog):
         transport=httpx.MockTransport(handler),
     )
     provider = ResendInvitationDeliveryProvider(
-        api_key="synthetic-provider-key",
+        api_key=SYNTHETIC_PROVIDER_KEY,
         from_address="Kindred <noreply@heykindred.org>",
+        verified_domain="heykindred.org",
         client=client,
+        resolver=FakeDNSResolver(verified_resend_dns()),
     )
     store = FakeStore()
     with caplog.at_level(logging.INFO):
