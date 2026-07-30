@@ -90,4 +90,4 @@ All public support, privacy, terms, and marketing URLs use `https://www.heykindr
 
 This release does not change invitation credential transport, header-only `/api/public/rsvp`, legacy RSVP protections, hidden-event confidentiality, notification audience isolation, RSVP concurrency/idempotency, service-worker RSVP bypass/purge, privacy-safe redelivery, provider initialization, Apple/Google authentication, RevenueCat initialization, the subscription HTTP 410 kill switch, or the subscription recovery pause.
 
-No production customer data, invitation, credential, provider payload, or email history was accessed. No invitation was rotated, no message was sent, no provider configuration was changed, no store listing was published, and no code was deployed.
+No production customer data, invitation, credential, provider payload, or email history was accessed. No invitation was rotated, no message was sent, no provider configuration was changed, no store listing was published, and no production code was deployed. Opening the draft PR can trigger the repository's existing isolated Vercel preview automation; that preview is not a production promotion.
