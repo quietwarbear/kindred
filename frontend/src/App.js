@@ -8,7 +8,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthPage } from "@/components/AuthPage";
 import { InviteLandingPage } from "@/components/InviteLandingPage";
 import { LandingPage } from "@/components/LandingPage";
-import { OnboardingPage } from "@/components/OnboardingPage";
 import { PricingPage } from "@/components/PricingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
@@ -44,12 +43,12 @@ const ProtectedApp = ({ session, onLogout, onSessionRefresh }) => {
     return <Navigate replace to="/login" />;
   }
 
-  const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
-  if (needsGoogleOnboarding && location.pathname !== "/welcome") {
-    return <Navigate replace to="/welcome" />;
+  const needsOrganizerActivation = !session?.user?.community_id;
+  if (needsOrganizerActivation && location.pathname !== "/reunion/start") {
+    return <Navigate replace to="/reunion/start" />;
   }
 
-  if (!needsGoogleOnboarding && location.pathname === "/welcome") {
+  if (!needsOrganizerActivation && location.pathname === "/welcome") {
     return <Navigate replace to="/home" />;
   }
 
@@ -267,7 +266,7 @@ function App() {
     () => <AuthPage onAuthSuccess={handleFreshLogin} onGoogleNativeSignIn={handleNativeGoogleSignIn} session={session} pendingInviteCode={pendingInviteCode} onInviteCodeConsumed={() => setPendingInviteCode(null)} />,
     [handleFreshLogin, handleNativeGoogleSignIn, pendingInviteCode, session]
   );
-  const needsGoogleOnboarding = session?.user?.auth_provider === "google" && !session?.user?.onboarding_completed;
+  const needsOrganizerActivation = Boolean(session?.token && !session?.user?.community_id);
 
   if (hasGoogleSessionId && !session?.token) {
     return <FullScreenMessage copy="Completing your Google sign-in." title="Opening Kindred" />;
@@ -283,7 +282,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
-            <Route element={<ReunionStartPage session={session} />} path="/reunion/start" />
+            <Route element={<ReunionStartPage onSessionRefresh={handleAuthSuccess} session={session} />} path="/reunion/start" />
             <Route
               element={<ReunionActivationPage session={session} />}
               path="/reunion/activate/:eventId"
@@ -293,7 +292,7 @@ function App() {
               path="/login"
             />
             <Route
-              element={session?.token ? (needsGoogleOnboarding ? <OnboardingPage onComplete={handleAuthSuccess} session={session} token={session.token} /> : <Navigate replace to="/home" />) : <Navigate replace to="/login" />}
+              element={session?.token ? <Navigate replace to={needsOrganizerActivation ? "/reunion/start" : "/home"} /> : <Navigate replace to="/login" />}
               path="/welcome"
             />
             <Route element={<InviteLandingPage />} path="/invite/:code" />

@@ -81,13 +81,28 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     toast.success(message);
     if (hasReunionIntent) {
       try {
+        let activeSession = payload;
+        if (!payload.user?.community_id) {
+          activeSession = await apiRequest("/auth/onboarding/complete", {
+            method: "POST",
+            token: payload.token,
+            data: {
+              full_name: reunionDraft.organizer_name,
+              community_name: provisionalCommunityName(reunionDraft),
+              community_type: "family reunion",
+              location: reunionDraft.location,
+            },
+          });
+          onAuthSuccess(activeSession);
+          trackReunionEvent("organizer_intent_confirmed", { source: "account_boundary" });
+        }
         const event = await apiRequest("/events", {
           method: "POST",
-          token: payload.token,
+          token: activeSession.token,
           data: reunionDraftToEventPayload(reunionDraft),
         });
         clearReunionDraft();
-        trackReunionEvent("reunion_draft_created", { source: "account_boundary" });
+        trackReunionEvent("reunion_saved", { source: "account_boundary" });
         navigate(`/reunion/activate/${event.id}`);
       } catch (error) {
         toast.error(error.response?.data?.detail || "Your account is ready, but the reunion draft could not be saved.");
@@ -95,8 +110,8 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       }
       return;
     }
-    navigate(intent === "guest" ? "/home" : "/subscription");
-  }, [hasReunionIntent, intent, navigate, onAuthSuccess, reunionDraft]);
+    navigate(payload.user?.community_id ? "/home" : "/reunion/start");
+  }, [hasReunionIntent, navigate, onAuthSuccess, reunionDraft]);
 
   const handleGoogleCredential = useCallback(async (response) => {
     setIsSubmitting(true);

@@ -18,6 +18,7 @@ from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pymongo.errors import DuplicateKeyError
 
 
 def _mobile_scheme_redirect(url: str) -> Response:
@@ -158,10 +159,15 @@ def _external_base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-async def _build_google_auth_response(google_user: dict[str, str], response: Response, *, provider: str = "google"):
+async def _build_google_auth_response(
+    google_user: dict[str, str], response: Response, *, provider: str = "google"
+):
     email = normalize_email(google_user.get("email", ""))
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Social sign-in did not return a usable email.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Social sign-in did not return a usable email.",
+        )
 
     user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
     if user_doc:
@@ -170,15 +176,17 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
             "google_picture": google_user.get("picture", ""),
             "auth_provider": provider,
         }
-        if user_doc.get("auth_provider") != provider or "onboarding_completed" not in user_doc:
-            update_payload["onboarding_completed"] = False
+        if "onboarding_completed" not in user_doc:
+            update_payload["onboarding_completed"] = bool(user_doc.get("community_id"))
         await users_collection.update_one(
             {"id": user_doc["id"]},
             {"$set": update_payload},
         )
         user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
     else:
-        invite_doc = await invites_collection.find_one({"email": email, "status": "pending"}, {"_id": 0})
+        invite_doc = await invites_collection.find_one(
+            {"email": email, "status": "pending"}, {"_id": 0}
+        )
         created_at = now_iso()
         user_id = str(uuid.uuid4())
 
@@ -195,25 +203,20 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "password_hash": "",
                 "role": invite_doc["role"],
                 "community_id": invite_doc["community_id"],
+                "community_ids": [invite_doc["community_id"]],
                 "auth_provider": provider,
-                "onboarding_completed": False,
+                "onboarding_completed": True,
                 "created_at": created_at,
             }
             await users_collection.insert_one(user_doc.copy())
-            await invites_collection.update_one({"id": invite_doc["id"]}, {"$set": {"status": "accepted", "accepted_at": created_at}})
+            await invites_collection.update_one(
+                {"id": invite_doc["id"]},
+                {"$set": {"status": "accepted", "accepted_at": created_at}},
+            )
         else:
-            community_id = str(uuid.uuid4())
-            display_name = (google_user.get("name") or email.split("@")[0]).split(" ")[0]
-            community_doc = {
-                "id": community_id,
-                "name": f"{display_name}'s Circle",
-                "community_type": "community",
-                "location": "",
-                "description": "A new Kindred courtyard created through social sign up.",
-                "motto": "",
-                "owner_user_id": user_id,
-                "created_at": created_at,
-            }
+            display_name = (google_user.get("name") or email.split("@")[0]).split(" ")[
+                0
+            ]
             user_doc = {
                 "id": user_id,
                 "full_name": google_user.get("name") or display_name,
@@ -223,36 +226,14 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "profile_image_url": "",
                 "google_picture": google_user.get("picture", ""),
                 "password_hash": "",
-                "role": "host",
-                "community_id": community_id,
+                "role": "member",
+                "community_id": "",
+                "community_ids": [],
                 "auth_provider": provider,
                 "onboarding_completed": False,
                 "created_at": created_at,
             }
-            await communities_collection.insert_one(community_doc.copy())
             await users_collection.insert_one(user_doc.copy())
-
-            default_subyards = []
-            for template in build_default_subyards(community_doc["community_type"]):
-                default_subyards.append(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "community_id": community_id,
-                        "name": template["name"],
-                        "description": template["description"],
-                        "inherited_roles": True,
-                        "role_focus": template["role_focus"],
-                        "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
-                        "visibility": "shared",
-                        "created_by": user_id,
-                        "created_at": created_at,
-                    }
-                )
-            if default_subyards:
-                await subyards_collection.insert_many([item.copy() for item in default_subyards])
-                await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
-            else:
-                await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
 
     session_token = secrets.token_urlsafe(32)
     await user_sessions_collection.update_one(
@@ -262,7 +243,9 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
                 "session_token": session_token,
                 "user_id": user_doc["id"],
                 "email": email,
-                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "expires_at": (
+                    datetime.now(timezone.utc) + timedelta(days=7)
+                ).isoformat(),
                 "created_at": now_iso(),
             }
         },
@@ -270,7 +253,9 @@ async def _build_google_auth_response(google_user: dict[str, str], response: Res
     )
     apply_session_cookie(response, session_token)
 
-    community_doc = await get_community_for_user(user_doc)
+    community_doc = None
+    if user_doc.get("community_id"):
+        community_doc = await get_community_for_user(user_doc)
     return build_auth_response(user_doc, community_doc)
 
 
@@ -684,7 +669,9 @@ async def sso_redeem_code(payload: SSORedeemRequest):
 
 @router.get("/auth/me", response_model=AuthResponse)
 async def me(current_user: dict[str, Any] = Depends(get_current_user)):
-    community_doc = await get_community_for_user(current_user)
+    community_doc = None
+    if current_user.get("community_id"):
+        community_doc = await get_community_for_user(current_user)
     return build_auth_response(current_user, community_doc)
 
 
@@ -957,33 +944,154 @@ async def transfer_ownership(payload: OwnershipTransferRequest, current_user: di
     return {"ok": True, "new_owner_name": new_owner["full_name"]}
 
 
+async def _ensure_confirmed_organizer_community(
+    payload: GoogleOnboardingRequest,
+    current_user: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Create a community only after the signed-in user confirms organizer intent.
+
+    The deterministic ID makes an interrupted retry converge on one community.
+    The user association is compare-and-set from an unclaimed account so a
+    concurrent invitation acceptance cannot be overwritten.
+    """
+
+    if current_user.get("community_id"):
+        return current_user, await get_community_for_user(current_user)
+
+    community_name = (payload.community_name or "").strip()
+    if not community_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name the reunion before opening its private family space.",
+        )
+
+    community_id = str(
+        uuid.uuid5(uuid.NAMESPACE_URL, f"kindred-organizer:{current_user['id']}")
+    )
+    community_type = normalize_community_type(
+        payload.community_type or "family reunion"
+    )
+    created_at = now_iso()
+    community_doc = await communities_collection.find_one(
+        {"id": community_id}, {"_id": 0}
+    )
+    created_community = False
+    if not community_doc:
+        community_doc = {
+            "_id": community_id,
+            "id": community_id,
+            "name": community_name,
+            "community_type": community_type,
+            "location": (payload.location or "").strip(),
+            "description": "A private planning space created for a family reunion.",
+            "motto": (payload.motto or "").strip(),
+            "owner_user_id": current_user["id"],
+            "created_at": created_at,
+        }
+        try:
+            await communities_collection.insert_one(community_doc.copy())
+            created_community = True
+        except DuplicateKeyError:
+            community_doc = await communities_collection.find_one(
+                {"id": community_id}, {"_id": 0}
+            )
+            if not community_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Organizer activation is already in progress.",
+                )
+
+    if community_doc.get("owner_user_id") != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Organizer activation could not safely resume.",
+        )
+
+    await users_collection.update_one(
+        {
+            "id": current_user["id"],
+            "$or": [
+                {"community_id": ""},
+                {"community_id": {"$exists": False}},
+            ],
+        },
+        {
+            "$set": {
+                "community_id": community_id,
+                "role": "host",
+            },
+            "$addToSet": {"community_ids": community_id},
+        },
+    )
+    refreshed_user = await users_collection.find_one(
+        {"id": current_user["id"]}, {"_id": 0}
+    )
+    if not refreshed_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found.",
+        )
+    if refreshed_user.get("community_id") != community_id:
+        if created_community:
+            await communities_collection.delete_one(
+                {"id": community_id, "owner_user_id": current_user["id"]}
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This account joined another community while activation was in progress.",
+        )
+
+    await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
+    return refreshed_user, community_doc
+
+
 @router.post("/auth/onboarding/complete", response_model=AuthResponse)
-async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def complete_onboarding(
+    payload: GoogleOnboardingRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    refreshed_user, community_doc = await _ensure_confirmed_organizer_community(
+        payload, current_user
+    )
     profile_updates = {
-        "full_name": payload.full_name.strip() or current_user.get("full_name", ""),
+        "full_name": payload.full_name.strip() or refreshed_user.get("full_name", ""),
         "nickname": (payload.nickname or "").strip(),
         "phone_number": (payload.phone_number or "").strip(),
         "profile_image_url": (payload.profile_image_url or "").strip(),
         "onboarding_completed": True,
     }
-    await users_collection.update_one({"id": current_user["id"]}, {"$set": profile_updates})
+    await users_collection.update_one(
+        {"id": refreshed_user["id"]}, {"$set": profile_updates}
+    )
 
-    refreshed_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
-    community_doc = await get_community_for_user(refreshed_user)
+    refreshed_user = await users_collection.find_one(
+        {"id": refreshed_user["id"]}, {"_id": 0}
+    )
 
     if refreshed_user["role"] in {"host", "organizer"}:
         community_updates = {
-            "name": (payload.community_name or community_doc.get("name", "")).strip() or community_doc.get("name", ""),
-            "community_type": normalize_community_type(payload.community_type or community_doc.get("community_type", "community")),
+            "name": (payload.community_name or community_doc.get("name", "")).strip()
+            or community_doc.get("name", ""),
+            "community_type": normalize_community_type(
+                payload.community_type
+                or community_doc.get("community_type", "community")
+            ),
             "location": (payload.location or community_doc.get("location", "")).strip(),
             "motto": (payload.motto or community_doc.get("motto", "")).strip(),
         }
-        await communities_collection.update_one({"id": community_doc["id"]}, {"$set": community_updates})
-        community_doc = await communities_collection.find_one({"id": community_doc["id"]}, {"_id": 0})
+        await communities_collection.update_one(
+            {"id": community_doc["id"]}, {"$set": community_updates}
+        )
+        community_doc = await communities_collection.find_one(
+            {"id": community_doc["id"]}, {"_id": 0}
+        )
 
         if (payload.first_subyard_name or "").strip():
             existing_subyard = await subyards_collection.find_one(
-                {"community_id": community_doc["id"], "name": payload.first_subyard_name.strip()},
+                {
+                    "community_id": community_doc["id"],
+                    "name": payload.first_subyard_name.strip(),
+                },
                 {"_id": 0},
             )
             if not existing_subyard:
@@ -991,16 +1099,25 @@ async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_u
                     "id": str(uuid.uuid4()),
                     "community_id": community_doc["id"],
                     "name": payload.first_subyard_name.strip(),
-                    "description": (payload.first_subyard_description or "").strip() or "Starter subyard created during onboarding.",
+                    "description": (payload.first_subyard_description or "").strip()
+                    or "Starter subyard created during onboarding.",
                     "inherited_roles": True,
                     "role_focus": ["organizer", "historian"],
-                    "assigned_tools": sorted({tool for role in ["organizer", "historian"] for tool in ROLE_TOOLING.get(role, [])}),
+                    "assigned_tools": sorted(
+                        {
+                            tool
+                            for role in ["organizer", "historian"]
+                            for tool in ROLE_TOOLING.get(role, [])
+                        }
+                    ),
                     "visibility": "shared",
                     "created_by": refreshed_user["id"],
                     "created_at": now_iso(),
                 }
                 await subyards_collection.insert_one(subyard_doc.copy())
-                await ensure_chat_rooms_for_community(community_doc["id"], community_doc["name"], [subyard_doc])
+                await ensure_chat_rooms_for_community(
+                    community_doc["id"], community_doc["name"], [subyard_doc]
+                )
 
         if (
             (payload.first_gathering_title or "").strip()
@@ -1033,7 +1150,9 @@ async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_u
                     "subyard_id": "",
                     "subyard_name": "",
                     "assigned_roles": build_role_suggestions(template),
-                    "planning_checklist": build_planning_checklist(template, "in-person"),
+                    "planning_checklist": build_planning_checklist(
+                        template, "in-person"
+                    ),
                     "travel_coordination_notes": "",
                     "suggested_contribution": 0.0,
                     "recurrence_frequency": "none",
@@ -1056,8 +1175,17 @@ async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_u
 
         for invite_email in payload.invite_emails:
             email = normalize_email(invite_email)
-            existing_member = await users_collection.find_one({"community_id": community_doc["id"], "email": email}, {"_id": 0})
-            existing_invite = await invites_collection.find_one({"community_id": community_doc["id"], "email": email, "status": "pending"}, {"_id": 0})
+            existing_member = await users_collection.find_one(
+                {"community_id": community_doc["id"], "email": email}, {"_id": 0}
+            )
+            existing_invite = await invites_collection.find_one(
+                {
+                    "community_id": community_doc["id"],
+                    "email": email,
+                    "status": "pending",
+                },
+                {"_id": 0},
+            )
             if existing_member or existing_invite:
                 continue
             invite_doc = {
@@ -1072,10 +1200,11 @@ async def complete_google_onboarding(payload: GoogleOnboardingRequest, current_u
             }
             await invites_collection.insert_one(invite_doc.copy())
 
-    refreshed_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    refreshed_user = await users_collection.find_one(
+        {"id": current_user["id"]}, {"_id": 0}
+    )
     community_doc = await get_community_for_user(refreshed_user)
     return build_auth_response(refreshed_user, community_doc)
-
 
 
 @router.post("/auth/push-token")

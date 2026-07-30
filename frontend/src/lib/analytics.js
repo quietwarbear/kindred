@@ -92,6 +92,8 @@ export function trackEvent(name, properties = {}) {
 export const REUNION_EVENTS = Object.freeze([
   "reunion_start_clicked",
   "reunion_draft_created",
+  "organizer_intent_confirmed",
+  "reunion_saved",
   "reunion_preview_viewed",
   "invite_created",
   "invite_link_copied",

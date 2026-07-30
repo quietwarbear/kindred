@@ -31,6 +31,8 @@ test("declares every deliberate reunion funnel event", () => {
   expect(REUNION_EVENTS).toEqual([
     "reunion_start_clicked",
     "reunion_draft_created",
+    "organizer_intent_confirmed",
+    "reunion_saved",
     "reunion_preview_viewed",
     "invite_created",
     "invite_link_copied",
