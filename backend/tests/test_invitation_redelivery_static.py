@@ -24,6 +24,11 @@ def test_redelivery_is_operator_only_and_bypasses_generic_email_helper():
     assert "RAILWAY_GIT_COMMIT_SHA" in cli
     assert "--expected-commit" in cli
     assert "required=True" in cli
+    assert "RESEND_VERIFIED_DOMAIN" in cli
+    assert "restricted_api_key" in provider
+    assert "resend._domainkey" in provider
+    assert "feedback-smtp.us-east-1.amazonses.com" in provider
+    assert "v=spf1 include:amazonses.com ~all" in provider
     assert "new_operation_id" not in cli
     assert "invitation_redelivery_operations_collection.create_index" in server
     assert "invitation_redelivery_incident_selection_once" in server
