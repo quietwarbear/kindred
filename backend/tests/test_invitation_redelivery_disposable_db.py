@@ -27,7 +27,11 @@ from invitation_redelivery import (
     RedeliveryFailure,
     SafeErrorCode,
 )
-from invitation_redelivery_store import MongoInvitationRedeliveryStore
+from invitation_redelivery_store import (
+    MongoInvitationRedeliveryStore,
+    record_provider_delivery_event,
+)
+from invitation_redelivery_webhook import VerifiedDeliveryEvent
 
 DISPOSABLE_URL = os.environ.get("KINDRED_DISPOSABLE_MONGO_URL")
 if not DISPOSABLE_URL:
@@ -51,9 +55,10 @@ SENSITIVE_NEEDLES = (
 
 
 class FakeProvider:
-    def __init__(self):
+    def __init__(self, *, accept_only=False):
         self.send_calls = 0
         self.idempotency_keys = []
+        self.accept_only = accept_only
 
     async def preflight(self):
         return PreflightResult(ready=True)
@@ -63,20 +68,12 @@ class FakeProvider:
         self.idempotency_keys.append(envelope.idempotency_key)
         await asyncio.sleep(0.02)
         return ProviderReceipt(
-            status=ProviderStatus.ACCEPTED,
+            status=(
+                ProviderStatus.ACCEPTED
+                if self.accept_only
+                else ProviderStatus.DELIVERED
+            ),
             provider_message_id=f"provider_{envelope.target_id}_0001",
-        )
-
-    async def delivery_status(
-        self,
-        provider_message_id,
-        *,
-        operation_id,
-        target_id,
-    ):
-        return ProviderReceipt(
-            status=ProviderStatus.DELIVERED,
-            provider_message_id=provider_message_id,
         )
 
 
@@ -157,24 +154,43 @@ def test_real_transaction_keeps_staged_secrets_out_of_events(caplog):
         )
         coordinator = InvitationRedeliveryCoordinator(
             store=store,
-            provider=FakeProvider(),
+            provider=FakeProvider(accept_only=True),
             validator=DatabaseValidator(events),
             app_url="https://synthetic.example",
         )
-        report = await coordinator.execute(
-            InvitationSelection(
-                invite_source="guest",
-                expected_count=2,
-                created_before=datetime(
-                    2026,
-                    7,
-                    28,
-                    19,
-                    4,
-                    14,
-                    tzinfo=timezone.utc,
-                ),
+        selection = InvitationSelection(
+            invite_source="guest",
+            expected_count=2,
+            created_before=datetime(
+                2026,
+                7,
+                28,
+                19,
+                4,
+                14,
+                tzinfo=timezone.utc,
             ),
+        )
+        awaiting = await coordinator.execute(
+            selection,
+            operation_id=OPERATION_ID,
+        )
+        assert awaiting.status == "awaiting_delivery"
+        staged = await operations.find_one({"id": OPERATION_ID}, {"_id": 0})
+        for ordinal, target in enumerate(staged["targets"], 1):
+            outcome = await record_provider_delivery_event(
+                client=client,
+                operations_collection=operations,
+                event=VerifiedDeliveryEvent(
+                    event_id=f"evt_synthetic_mongo_{ordinal:04d}",
+                    provider_message_id=target["provider_message_id"],
+                    provider_status=ProviderStatus.DELIVERED,
+                    occurred_at=datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            assert outcome == "delivered"
+        report = await coordinator.execute(
+            selection,
             operation_id=OPERATION_ID,
         )
         final_events = await events.find({}, {"_id": 0}).sort("id", 1).to_list(None)

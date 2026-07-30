@@ -30,6 +30,7 @@ from invitation_redelivery import (
     credential_digest,
     selection_fingerprint,
 )
+from invitation_redelivery_webhook import VerifiedDeliveryEvent
 
 
 def _now_iso() -> str:
@@ -69,6 +70,127 @@ def _guarded_event_query(event: dict[str, Any]) -> dict[str, Any]:
     else:
         query["rsvp_revision"] = {"$exists": False}
     return query
+
+
+async def record_provider_delivery_event(
+    *,
+    client,
+    operations_collection,
+    event: VerifiedDeliveryEvent,
+) -> str:
+    """Record one verified provider outcome without retaining provider payloads."""
+
+    for _attempt in range(5):
+        try:
+            async with await client.start_session() as session:
+                async with session.start_transaction():
+                    cursor = operations_collection.find(
+                        {
+                            "targets.provider_message_id": event.provider_message_id,
+                        },
+                        {"_id": 0},
+                        session=session,
+                    )
+                    matches = await cursor.to_list(length=2)
+                    if len(matches) != 1:
+                        return "ignored"
+
+                    operation = matches[0]
+                    event_ids = list(operation.get("provider_event_ids") or [])
+                    if event.event_id in event_ids:
+                        return "duplicate"
+                    if operation.get("status") in {
+                        "activated",
+                        "validation_failed",
+                        "completed",
+                    }:
+                        return "terminal"
+
+                    targets = [dict(item) for item in operation.get("targets") or []]
+                    matching_targets = [
+                        target
+                        for target in targets
+                        if target.get("provider_message_id")
+                        == event.provider_message_id
+                    ]
+                    if len(matching_targets) != 1:
+                        return "ignored"
+                    outcome = "ignored"
+                    for target in targets:
+                        if (
+                            target.get("provider_message_id")
+                            != event.provider_message_id
+                        ):
+                            continue
+                        current = target.get("provider_status")
+                        if event.provider_status == ProviderStatus.DELIVERED:
+                            target["provider_status"] = ProviderStatus.DELIVERED.value
+                            target["error_code"] = ""
+                            outcome = "delivered"
+                        elif current != ProviderStatus.DELIVERED.value:
+                            target["provider_status"] = ProviderStatus.FAILED.value
+                            target["error_code"] = SafeErrorCode.DELIVERY_FAILED.value
+                            outcome = "failed"
+                        target["provider_event_at"] = event.occurred_at
+                        break
+
+                    all_delivered = all(
+                        item.get("provider_status") == ProviderStatus.DELIVERED.value
+                        for item in targets
+                    )
+                    error_code = (
+                        ""
+                        if all_delivered
+                        else next(
+                            (
+                                str(item.get("error_code") or "")
+                                for item in targets
+                                if item.get("error_code")
+                            ),
+                            "",
+                        )
+                    )
+                    current_revision = int(
+                        operation.get("provider_event_revision", 0) or 0
+                    )
+                    revision_query: Any = current_revision
+                    if current_revision == 0:
+                        revision_query = {"$in": [0, None]}
+                    result = await operations_collection.update_one(
+                        {
+                            "id": operation["id"],
+                            "status": operation.get("status"),
+                            "provider_event_revision": revision_query,
+                            "provider_event_ids": {"$ne": event.event_id},
+                        },
+                        {
+                            "$set": {
+                                "targets": targets,
+                                "status": (
+                                    "activation_ready"
+                                    if all_delivered
+                                    else "awaiting_delivery"
+                                ),
+                                "error_code": error_code,
+                                "provider_event_ids": (event_ids + [event.event_id])[
+                                    -128:
+                                ],
+                                "provider_event_revision": current_revision + 1,
+                                "updated_at": _now_iso(),
+                            }
+                        },
+                        session=session,
+                    )
+                    if result.matched_count == 1:
+                        return outcome
+        except (
+            ConfigurationError,
+            InvalidOperation,
+            OperationFailure,
+            PyMongoError,
+        ):
+            continue
+    raise RedeliveryFailure(SafeErrorCode.CONCURRENT_CONFLICT)
 
 
 class MongoInvitationRedeliveryStore(InvitationRedeliveryStore):

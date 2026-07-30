@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -40,6 +41,9 @@ from invitation_redelivery_validator import PublicRSVPHeaderValidator
 
 OPERATION_ID = "0123456789abcdef0123456789abcdef"
 SYNTHETIC_PROVIDER_KEY = "synthetic-provider-key"  # pragma: allowlist secret
+WEBHOOK_SECRET = "whsec_" + base64.b64encode(  # pragma: allowlist secret
+    b"synthetic-resend-webhook-secret"
+).decode("ascii")
 BOUNDARY = datetime(2026, 7, 28, 19, 4, 14, tzinfo=timezone.utc)
 SELECTION = InvitationSelection(
     invite_source="guest",
@@ -259,6 +263,27 @@ class FakeStore:
             )
             return self._report(operation)
 
+    def record_webhook(self, operation_id, target_id, status):
+        with self.lock:
+            operation = self.operations[operation_id]
+            target = next(
+                item for item in operation["targets"] if item["target_id"] == target_id
+            )
+            if status == ProviderStatus.DELIVERED:
+                target["status"] = ProviderStatus.DELIVERED
+                target["error_code"] = ""
+            elif target["status"] != ProviderStatus.DELIVERED:
+                target["status"] = ProviderStatus.FAILED
+                target["error_code"] = SafeErrorCode.DELIVERY_FAILED.value
+            operation["status"] = (
+                "activation_ready"
+                if all(
+                    item["status"] == ProviderStatus.DELIVERED
+                    for item in operation["targets"]
+                )
+                else "awaiting_delivery"
+            )
+
     async def activate_if_ready(self, operation_id):
         with self.lock:
             operation = self.operations[operation_id]
@@ -338,14 +363,10 @@ class FakeProvider:
         *,
         ready=True,
         send_statuses=None,
-        delivery_statuses=None,
     ):
         self.ready = ready
         self.send_statuses = {
             key: list(value) for key, value in (send_statuses or {}).items()
-        }
-        self.delivery_statuses = {
-            key: list(value) for key, value in (delivery_statuses or {}).items()
         }
         self.envelopes = []
         self.send_calls = 0
@@ -371,27 +392,15 @@ class FakeProvider:
                 receipt = self._accepted[envelope.idempotency_key]
             else:
                 receipt = ProviderReceipt(
-                    status=ProviderStatus.ACCEPTED,
+                    status=ProviderStatus.DELIVERED,
                     provider_message_id=f"provider_{envelope.target_id}_0001",
                 )
-            if receipt.status == ProviderStatus.ACCEPTED:
+            if receipt.status in {
+                ProviderStatus.ACCEPTED,
+                ProviderStatus.DELIVERED,
+            }:
                 self._accepted[envelope.idempotency_key] = receipt
             return receipt
-
-    async def delivery_status(
-        self,
-        provider_message_id,
-        *,
-        operation_id,
-        target_id,
-    ):
-        scripted = self.delivery_statuses.get(target_id, [])
-        if scripted:
-            return scripted.pop(0)
-        return ProviderReceipt(
-            status=ProviderStatus.DELIVERED,
-            provider_message_id=provider_message_id,
-        )
 
 
 class FakeValidator:
@@ -695,6 +704,7 @@ def test_cli_rejects_malformed_operation_id_before_environment_or_database(
         "RESEND_API_KEY",
         "FROM_EMAIL",
         "RESEND_VERIFIED_DOMAIN",
+        "RESEND_WEBHOOK_SECRET",
         "PUBLIC_API_BASE_URL",
         "APP_URL",
         "INVITATION_REDELIVERY_RECOVERY_KEY",
@@ -709,6 +719,7 @@ def test_cli_required_environment_failure_precedes_database_import(missing_name)
         "RESEND_API_KEY": "synthetic-provider-key",  # pragma: allowlist secret
         "FROM_EMAIL": "noreply@example.invalid",
         "RESEND_VERIFIED_DOMAIN": "example.invalid",
+        "RESEND_WEBHOOK_SECRET": WEBHOOK_SECRET,
         "PUBLIC_API_BASE_URL": "https://api.example.invalid",
         "APP_URL": "https://kindred.example.invalid",
         "INVITATION_REDELIVERY_RECOVERY_KEY": Fernet.generate_key().decode(),
@@ -735,6 +746,41 @@ def test_cli_required_environment_failure_precedes_database_import(missing_name)
     assert report["error_code"] == SafeErrorCode.CONFIGURATION_UNAVAILABLE.value
     assert report["credentials_selected"] == 0
     assert report["credentials_rotated"] == 0
+
+
+def test_cli_rejects_invalid_webhook_secret_before_database_import():
+    commit = "a" * 40
+    result = _run_cli(
+        [
+            "--operation-id",
+            OPERATION_ID,
+            "--invite-source",
+            "guest",
+            "--expected-count",
+            "2",
+            "--created-before",
+            "2026-07-28T19:04:14Z",
+            "--expected-commit",
+            commit,
+        ],
+        environment={
+            "RAILWAY_GIT_COMMIT_SHA": commit,
+            "MONGO_URL": "mongodb://127.0.0.1:1",
+            "DB_NAME": "kindred_disposable_cli_preflight",
+            "RESEND_API_KEY": SYNTHETIC_PROVIDER_KEY,
+            "FROM_EMAIL": "noreply@example.invalid",
+            "RESEND_VERIFIED_DOMAIN": "example.invalid",
+            "RESEND_WEBHOOK_SECRET": "invalid",  # pragma: allowlist secret
+            "PUBLIC_API_BASE_URL": "https://api.example.invalid",
+            "APP_URL": "https://kindred.example.invalid",
+            "INVITATION_REDELIVERY_RECOVERY_KEY": Fernet.generate_key().decode(),
+        },
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["status"] == "preflight_failed"
+    assert report["error_code"] == SafeErrorCode.CONFIGURATION_UNAVAILABLE.value
+    assert report["credentials_selected"] == 0
 
 
 @pytest.mark.parametrize(
@@ -839,7 +885,7 @@ def test_partial_failure_is_recoverable_and_does_not_duplicate_accepted_send():
                     error_code=SafeErrorCode.PROVIDER_REJECTED,
                 ),
                 ProviderReceipt(
-                    ProviderStatus.ACCEPTED,
+                    ProviderStatus.DELIVERED,
                     provider_message_id="provider_target_2_0001",
                 ),
             ]
@@ -868,17 +914,13 @@ def test_partial_failure_is_recoverable_and_does_not_duplicate_accepted_send():
     assert len(target_one_sends) == 1
 
 
-def test_accepted_delivery_is_polled_without_resubmission():
+def test_accepted_delivery_waits_for_signed_webhook_without_resubmission():
     store = FakeStore()
     provider = FakeProvider(
-        delivery_statuses={
+        send_statuses={
             "target_1": [
                 ProviderReceipt(
                     ProviderStatus.ACCEPTED,
-                    provider_message_id="provider_target_1_0001",
-                ),
-                ProviderReceipt(
-                    ProviderStatus.DELIVERED,
                     provider_message_id="provider_target_1_0001",
                 ),
             ]
@@ -899,11 +941,28 @@ def test_accepted_delivery_is_polled_without_resubmission():
             operation_id=OPERATION_ID,
         )
     )
-    assert second.status == "completed"
+    assert second.status == "awaiting_delivery"
+    assert second.credentials_rotated == 0
     target_one_sends = [
         item for item in provider.envelopes if item.target_id == "target_1"
     ]
     assert len(target_one_sends) == 1
+
+    store.record_webhook(
+        OPERATION_ID,
+        "target_1",
+        ProviderStatus.DELIVERED,
+    )
+    final = run(
+        coordinator(store, provider).execute(
+            SELECTION,
+            operation_id=OPERATION_ID,
+        )
+    )
+    assert final.status == "completed"
+    assert (
+        len([item for item in provider.envelopes if item.target_id == "target_1"]) == 1
+    )
 
 
 def test_interrupted_submission_is_not_automatically_replayed():
@@ -1428,8 +1487,10 @@ def test_resend_preflight_preserves_full_access_verified_domain_support():
 
 def test_resend_adapter_logs_only_safe_categories(caplog):
     observed_payloads = []
+    observed_requests = []
 
     def handler(request):
+        observed_requests.append((request.method, request.url.path))
         if request.url.path == "/domains":
             return httpx.Response(
                 200,
@@ -1447,11 +1508,6 @@ def test_resend_adapter_logs_only_safe_categories(caplog):
             return httpx.Response(
                 201,
                 json={"id": "provider_message_000001"},
-            )
-        if request.url.path == "/emails/provider_message_000001":
-            return httpx.Response(
-                200,
-                json={"last_event": "delivered"},
             )
         return httpx.Response(404)
 
@@ -1475,9 +1531,14 @@ def test_resend_adapter_logs_only_safe_categories(caplog):
             )
         )
     run(client.aclose())
-    assert report.status == "completed"
+    assert report.status == "awaiting_delivery"
+    assert report.credentials_rotated == 0
     assert len(observed_payloads) == 2
     assert all("to" in payload for payload in observed_payloads)
+    assert not any(
+        method == "GET" and path.startswith("/emails/")
+        for method, path in observed_requests
+    )
     rendered = caplog.text + json.dumps(report.to_dict(), sort_keys=True)
     for needle in SENSITIVE_NEEDLES:
         assert needle not in rendered
