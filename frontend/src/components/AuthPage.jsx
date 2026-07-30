@@ -343,24 +343,24 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div>
             <p className="eyebrow-text text-orange-200">Invitation-only access</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              {hasReunionIntent ? "Save the reunion. Keep setup light." : "Welcome to the digital home your community owns."}
+              {hasReunionIntent ? "Save the reunion. Keep setup light." : "Plan the reunion. Bring everyone in. Keep the stories."}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
               {hasReunionIntent
                 ? "Your draft stays private until you create this account. We’ll save the gathering first; permanent family-space details can wait."
-                : "Create a host account for your community, join with an invite code, or sign back in to plan events, share memories, and preserve legacy."}
+                : "Start with a private reunion plan, join your family with an invite code, or sign back in. Existing family chats can continue while Kindred keeps the plan together."}
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-[24px] border border-white/10 bg-white/5 p-5" data-testid="auth-highlight-security">
               <LockKeyhole className="h-5 w-5 text-orange-200" />
-              <p className="mt-3 text-lg font-semibold">Roles that protect trust</p>
-              <p className="mt-2 text-sm text-stone-300">Hosts, organizers, and members each get the right level of access.</p>
+              <p className="mt-3 text-lg font-semibold">Private organizer controls</p>
+              <p className="mt-2 text-sm text-stone-300">Hosts and organizers manage invitations, responses, and planning details.</p>
             </div>
             <div className="rounded-[24px] border border-white/10 bg-white/5 p-5" data-testid="auth-highlight-belonging">
               <Users className="h-5 w-5 text-orange-200" />
-              <p className="mt-3 text-lg font-semibold">Built for belonging</p>
-              <p className="mt-2 text-sm text-stone-300">Perfect for reunions, ministries, cultural organizations, and diaspora circles.</p>
+              <p className="mt-3 text-lg font-semibold">No-account RSVP</p>
+              <p className="mt-2 text-sm text-stone-300">Relatives can respond from a private web invitation without creating an account.</p>
             </div>
           </div>
         </div>
@@ -371,7 +371,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
             <p className="mt-2 text-sm text-muted-foreground">
               {hasReunionIntent
                 ? "Use Apple or Google to save the reunion with the organizer identity you already chose."
-                : "Use Apple or Google to sign in, join an invited circle, or automatically start your own Kindred space."}
+                : "Use Apple or Google to sign in after starting a reunion plan, or to return to a family space you already joined."}
             </p>
             <button
               className="mt-4 flex w-full items-center justify-center gap-3 rounded-full border border-border/70 bg-background px-6 py-3.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent/60 hover:shadow-md disabled:opacity-50"

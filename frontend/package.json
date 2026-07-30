@@ -75,7 +75,8 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
-    "postbuild": "node scripts/prerender.js"
+    "postbuild": "node scripts/prerender.js",
+    "store-assets:generate": "node scripts/generate-store-assets.js"
   },
   "browserslist": {
     "production": [

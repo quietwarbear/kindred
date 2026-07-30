@@ -611,7 +611,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           </div>
         </div>
         <p className="mt-4 text-sm leading-7 text-muted-foreground" data-testid="settings-delete-account-info">
-          Permanently remove your account and all associated data. This action cannot be undone. If you are the community owner, you must transfer ownership before deleting unless you are the only member.
+          Remove your account and the first-party records handled by the deletion endpoint. Shared content, subscription records, provider records, logs, backups, or legally retained records may remain as described in the Privacy Policy. If you are the community owner, you must transfer ownership before deleting unless you are the only member.
         </p>
 
         {!showDeleteConfirm ? (
@@ -631,7 +631,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
               <div>
                 <p className="text-sm font-semibold text-foreground">Are you absolutely sure?</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  This will permanently delete your profile, preferences, votes, and all personal data. {user?.role === "host" ? "As the community owner, your entire community will also be deleted if you are the only member." : ""}
+                  This will delete your profile, sessions, preferences, and vote references handled by the deletion endpoint. Some shared or externally processed records may remain as described in the Privacy Policy. {user?.role === "host" ? "As the community owner, your entire community will also be deleted if you are the only member." : ""}
                 </p>
               </div>
             </div>

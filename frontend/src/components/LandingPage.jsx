@@ -43,13 +43,6 @@ const steps = [
   },
 ];
 
-const useCases = [
-  ["Church communities", "Coordinate ministries, care, gatherings, and shared memory."],
-  ["Intentional communities", "Keep member coordination and community history in one private place."],
-  ["Greek organizations", "Plan chapter gatherings and preserve intergenerational stories."],
-  ["Cultural collectives", "Support diaspora coordination, traditions, and living archives."],
-];
-
 export const LandingPage = ({ isAuthenticated }) => {
   const showStoreBadges = !isNative();
   const { plans, loading: plansLoading, error: plansError } = usePublicPlans();
@@ -69,7 +62,7 @@ export const LandingPage = ({ isAuthenticated }) => {
           <Link className="font-display text-xl font-semibold text-primary" to="/">Kindred</Link>
           <div className="hidden items-center gap-7 md:flex">
             <a className="text-sm text-foreground/70 transition-colors hover:text-foreground" href="#how">How it works</a>
-            <a className="text-sm text-foreground/70 transition-colors hover:text-foreground" href="#use-cases">Other use cases</a>
+            <a className="text-sm text-foreground/70 transition-colors hover:text-foreground" href="#family-chats">Family chats</a>
             <Link className="text-sm text-foreground/70 transition-colors hover:text-foreground" to="/pricing">Pricing</Link>
           </div>
           <Link
@@ -230,22 +223,21 @@ export const LandingPage = ({ isAuthenticated }) => {
           </div>
         </section>
 
-        <section className="page-section scroll-mt-24 pb-16" id="use-cases">
-          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-            <div className="archival-card">
-              <p className="eyebrow-text">Beyond reunions</p>
-              <h2 className="mt-3 font-display text-4xl text-foreground">The same private infrastructure serves other communities.</h2>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                Reunion planning is the clearest way to begin. Existing church, intentional-community, Greek-organization, and cultural-collective capabilities remain available.
-              </p>
+        <section className="page-section scroll-mt-24 pb-16" id="family-chats">
+          <div className="archival-card grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+            <div>
+              <p className="eyebrow-text">Keep the family chat</p>
+              <h2 className="mt-3 font-display text-4xl text-foreground">Give the reunion one private source of truth.</h2>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {useCases.map(([title, copy]) => (
-                <article className="soft-panel" data-testid={`landing-use-case-${title.toLowerCase().replace(/\s+/g, "-")}`} key={title}>
-                  <h3 className="font-display text-2xl text-foreground">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
-                </article>
-              ))}
+            <div className="space-y-4 text-sm leading-7 text-muted-foreground">
+              <p>
+                Your family can keep talking in the group chats it already uses. Kindred does not need to replace WhatsApp,
+                Facebook, text messages, or phone calls.
+              </p>
+              <p>
+                Use Kindred for the reunion details that are hard to keep straight in a conversation: the multiday schedule,
+                private invitation, RSVP responses, planning gaps, contributions, photos, and stories.
+              </p>
             </div>
           </div>
         </section>

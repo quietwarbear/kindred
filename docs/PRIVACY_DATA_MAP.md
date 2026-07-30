@@ -1,6 +1,6 @@
 # Kindred privacy data map
 
-Last code review: 2026-07-23
+Last code review: 2026-07-30
 
 This is an engineering inventory, not legal advice. “Production confirmation required” means the code supports or names the integration, but repository access alone cannot prove the active vendor account, contract, region, backup policy, retention setting, or console configuration.
 
@@ -23,7 +23,7 @@ This is an engineering inventory, not legal advice. “Production confirmation r
 | Transactional email and weekly digest | Account/community activity | Subscription notices, reminders, opt-in digests | Resend | Kindred does not maintain a separate delivery-log collection in this path; Resend retention requires confirmation | Digest preference and unsubscribe control; account deletion; contact support | `backend/email_service.py`; `backend/routes/digest.py`; `RESEND_API_KEY`, `FROM_EMAIL`, `APP_URL` |
 | Google Analytics / Google Tag Manager | Web visitor browser | Page/traffic analytics and configured tags | Google | Google property retention requires console confirmation | Browser/device blocking controls; no Kindred in-product opt-out observed | `frontend/public/index.html`; GA `G-K04LMYEJG1`; GTM `GTM-K5B32THN` |
 | PostHog analytics | Web/app visitor; signed-in user | Page views, autocaptured interactions, product analysis | PostHog EU ingestion (`eu.i.posthog.com`) | PostHog project retention requires confirmation | Browser/device blocking controls; identity reset on logout; no in-product opt-out observed | `frontend/src/lib/analytics.js`; client project key and host |
-| Support requests | User email/client | Support and privacy requests | Support mailbox provider (identity not provable from code) | Mailbox retention requires confirmation | Contact support to close/delete where applicable | `support@ubuntu-village.org`; public support/policy pages |
+| Support requests | User email/client | Support and privacy requests | Support mailbox provider (identity not provable from code) | Mailbox retention requires confirmation | Contact support to close/delete where applicable | `support@ubuntu-village.org`; `frontend/src/config/publicIdentity.js`; public support/policy pages |
 | Cross-product SSO handoff | User-initiated jump | Sign in to Legacy Table or Ile Ubuntu | Configured sibling API receives name and email; browser receives a short-lived code | Kindred SSO codes have MongoDB TTL index of 600 seconds; sibling retention requires confirmation | Do not initiate handoff; revoke sibling account separately | `backend/routes/federation.py`; `backend/server.py`; `UBUNTU_SSO_SECRET`; sibling URLs |
 | Technical hosting/log data | Requests to frontend/backend | Security, delivery, reliability | Vercel frontend and Railway backend are indicated by repository configuration/URLs; exact production providers and logging require confirmation | Provider log/backups retention requires confirmation | Provider-console controls; privacy request where applicable | `frontend/vercel.json`; `backend/railway.json`; deployment environment |
 
@@ -44,4 +44,4 @@ This is an engineering inventory, not legal advice. “Production confirmation r
 5. Confirm whether children may participate through adult-managed community accounts and obtain counsel on COPPA and state minor-privacy obligations.
 6. Confirm the lawful basis, notice/consent design, state “sale/share” analysis, and whether a cookie/analytics opt-out or consent manager is required.
 7. Confirm statutory accounting/fraud retention and update the account-deletion cascade/wording accordingly.
-8. Confirm the canonical branded support mailbox. Code centralizes the current `support@ubuntu-village.org`, but the domain does not match `heykindred.org`.
+8. Confirm the canonical branded support mailbox. Code centralizes the verified existing fallback `support@ubuntu-village.org`, but the domain does not match `heykindred.org`; no replacement address may be inferred.

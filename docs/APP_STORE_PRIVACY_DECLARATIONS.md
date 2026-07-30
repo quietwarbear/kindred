@@ -1,6 +1,8 @@
 # Kindred Apple App Privacy and Google Play Data Safety worksheet
 
-Last code review: 2026-07-23
+Last code review: 2026-07-30
+
+The exact cross-store category, linkage, purpose, processor, collection-versus-temporary-processing, retention, and deletion reconciliation is maintained in `docs/STORE_PRIVACY_DECLARATION_MATRIX.md`. This worksheet is the console-oriented companion; if the two differ, stop and reconcile them against `docs/PRIVACY_DATA_MAP.md` and the current code before submission.
 
 Use this worksheet to update the store consoles. No console changes were made. The answers below reflect production code paths; the owner must confirm production configuration, provider contracts, and actual feature availability before submitting. Store taxonomy and legal interpretations can change, so review the current console definitions and obtain legal review.
 

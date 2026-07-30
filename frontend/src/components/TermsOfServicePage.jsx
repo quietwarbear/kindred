@@ -10,7 +10,7 @@ export const TermsOfServicePage = () => (
       </Link>
 
       <h1 className="font-display text-4xl text-foreground" data-testid="terms-title">Terms of Service</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Last updated: March 15, 2026</p>
+      <p className="mt-2 text-sm text-muted-foreground">Last updated: July 30, 2026</p>
 
       <div className="mt-8 space-y-8 text-sm leading-7 text-muted-foreground">
         <section>
@@ -24,9 +24,9 @@ export const TermsOfServicePage = () => (
         <section>
           <h2 className="text-lg font-semibold text-foreground">2. Description of Service</h2>
           <p className="mt-2">
-            Kindred is a private, invitation-only community platform designed for families, churches, and intentional
-            communities. The Service provides tools for event planning, memory archiving, communication, community management,
-            and subscription-based features.
+            Kindred is a private family-reunion planning and memory service. It provides tools for multiday itineraries,
+            private invitations, no-account guest RSVP, organizer coordination, family participation, and shared stories.
+            Families may continue using their existing chats while Kindred serves as the reunion source of truth.
           </p>
         </section>
 
@@ -82,9 +82,9 @@ export const TermsOfServicePage = () => (
             You may delete your account at any time through Settings &gt; Delete Account. Upon deletion:
           </p>
           <ul className="mt-2 list-disc pl-6 space-y-1">
-            <li>Your personal data will be permanently removed within 30 days.</li>
-            <li>Active subscriptions will be canceled.</li>
-            <li>Community content you created may be retained in anonymized form.</li>
+            <li>The account and first-party records covered by the deletion endpoint will be removed as described in the Privacy Policy.</li>
+            <li>Store-managed subscriptions must also be managed through the applicable Apple or Google account.</li>
+            <li>Shared community content, subscription records, provider records, logs, backups, and records subject to legal or accounting retention may remain where described in the Privacy Policy.</li>
             <li>This action is irreversible.</li>
           </ul>
         </section>
