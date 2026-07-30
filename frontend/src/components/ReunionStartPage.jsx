@@ -20,7 +20,9 @@ import { Input } from "@/components/ui/input";
 import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import {
+  clearReunionDraft,
   loadReunionDraft,
+  provisionalCommunityName,
   reunionDayCount,
   reunionDraftIsComplete,
   reunionDraftToEventPayload,
@@ -82,13 +84,14 @@ export const ReunionInvitePreview = ({ draft, activities = [], compact = false }
   );
 };
 
-export const ReunionStartPage = ({ session }) => {
+export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const navigate = useNavigate();
   const [draft, setDraft] = useState(() => loadReunionDraft());
   const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(loadReunionDraft()));
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
-  const canPersist = ["host", "organizer"].includes(session?.user?.role);
+  const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
+  const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
 
   const dateLabel = useMemo(() => {
     if (!draft.approximate_date) return "Choose an approximate date";
@@ -135,12 +138,28 @@ export const ReunionStartPage = ({ session }) => {
     if (!session?.token || !canPersist) return;
     setSaving(true);
     try {
+      let activeSession = session;
+      if (canActivateOrganizer) {
+        activeSession = await apiRequest("/auth/onboarding/complete", {
+          method: "POST",
+          token: session.token,
+          data: {
+            full_name: draft.organizer_name,
+            community_name: provisionalCommunityName(draft),
+            community_type: "family reunion",
+            location: draft.location,
+          },
+        });
+        onSessionRefresh?.(activeSession);
+        trackReunionEvent("organizer_intent_confirmed", { source: "reunion_start" });
+      }
       const event = await apiRequest("/events", {
         method: "POST",
-        token: session.token,
+        token: activeSession.token,
         data: reunionDraftToEventPayload(draft),
       });
-      trackReunionEvent("reunion_draft_created", { source: "authenticated_reunion_start" });
+      clearReunionDraft();
+      trackReunionEvent("reunion_saved", { source: "authenticated_reunion_start" });
       navigate(`/reunion/activate/${event.id}`);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to save this reunion draft.");
