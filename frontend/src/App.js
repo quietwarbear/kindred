@@ -13,6 +13,7 @@ import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
 import { OrganizerCommandCenterPage } from "@/components/OrganizerCommandCenterPage";
 import { ReunionAttendeeHubPage } from "@/components/ReunionAttendeeHubPage";
+import { ReunionMemoryCapsulePage } from "@/components/ReunionMemoryCapsulePage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
 import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -296,6 +297,10 @@ function App() {
             <Route
               element={<ReunionAttendeeHubPage session={session} />}
               path="/reunion/hub/:eventId"
+            />
+            <Route
+              element={<ReunionMemoryCapsulePage session={session} />}
+              path="/reunion/memories/:eventId"
             />
             <Route
               element={<AuthRoute authPage={publicAuthPage} session={session} />}

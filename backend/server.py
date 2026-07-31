@@ -31,6 +31,7 @@ from routes.legacy import router as legacy_router
 from routes.organizer import router as organizer_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
+from routes.reunion_memories import router as reunion_memories_router
 from routes.revenuecat import router as revenuecat_router
 from routes.resend_webhooks import router as resend_webhooks_router
 from routes.steward import router as steward_router
@@ -67,6 +68,7 @@ app.include_router(legacy_router)
 app.include_router(organizer_router)
 app.include_router(polls_router)
 app.include_router(public_router)
+app.include_router(reunion_memories_router)
 app.include_router(revenuecat_router)
 app.include_router(resend_webhooks_router)
 app.include_router(steward_router)

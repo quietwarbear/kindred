@@ -8,10 +8,30 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from db import communities_collection, events_collection, memories_collection, threads_collection
-from dependencies import event_derived_query_for_user, get_community_for_user, get_current_user, get_memory_for_user, get_thread_for_user, now_iso, parse_datetime_safe
+from db import (
+    events_collection,
+    memories_collection,
+    threads_collection,
+)
+from dependencies import (
+    get_community_for_user,
+    get_current_user,
+    get_event_for_user,
+    get_memory_for_user,
+    get_thread_for_user,
+    now_iso,
+    parse_datetime_safe,
+)
 from event_privacy import serialize_event_for_user
-from models import CommentRequest, MemoryCreateRequest, MemoryPublic, MemoryUpdateRequest, ThreadCreateRequest, ThreadPublic
+from memory_privacy import is_memory_owner, visible_memory_query_for_user
+from models import (
+    CommentRequest,
+    MemoryCreateRequest,
+    MemoryPublic,
+    MemoryUpdateRequest,
+    ThreadCreateRequest,
+    ThreadPublic,
+)
 from ai_tagging import generate_memory_tags
 from ai_oralhistory import transcribe_audio, translate_text
 
@@ -29,10 +49,12 @@ async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_us
         {"_id": 0},
     ).to_list(300)
     memories = await memories_collection.find(
-        await event_derived_query_for_user(current_user),
+        await visible_memory_query_for_user(current_user),
         {"_id": 0},
     ).to_list(300)
-    threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(300)
+    threads = await threads_collection.find(
+        {"community_id": community_id}, {"_id": 0}
+    ).to_list(300)
 
     timeline_items = []
     for event in events:
@@ -75,18 +97,24 @@ async def timeline_archive(current_user: dict[str, Any] = Depends(get_current_us
             }
         )
 
-    timeline_items.sort(key=lambda item: parse_datetime_safe(item.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    timeline_items.sort(
+        key=lambda item: parse_datetime_safe(item.get("occurred_at"))
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
 
     today = datetime.now(timezone.utc)
     anniversaries = [
-        event for event in events
-        if (parsed := parse_datetime_safe(event.get("start_at"))) and parsed.month == today.month and parsed.day == today.day
+        event
+        for event in events
+        if (parsed := parse_datetime_safe(event.get("start_at")))
+        and parsed.month == today.month
+        and parsed.day == today.day
     ]
     return {
         "timeline_items": timeline_items[:300],
         "on_this_day": [
-            serialize_event_for_user(event, current_user)
-            for event in anniversaries[:5]
+            serialize_event_for_user(event, current_user) for event in anniversaries[:5]
         ],
     }
 
@@ -99,6 +127,7 @@ async def timeline_export(
 ):
     """Export timeline data as JSON or CSV."""
     from fastapi.responses import Response as FastResponse
+
     community_id = current_user["community_id"]
     events = await events_collection.find(
         {
@@ -108,42 +137,79 @@ async def timeline_export(
         {"_id": 0},
     ).to_list(500)
     memories = await memories_collection.find(
-        await event_derived_query_for_user(current_user),
+        await visible_memory_query_for_user(current_user),
         {"_id": 0},
     ).to_list(500)
-    threads = await threads_collection.find({"community_id": community_id}, {"_id": 0}).to_list(500)
+    threads = await threads_collection.find(
+        {"community_id": community_id}, {"_id": 0}
+    ).to_list(500)
 
     rows = []
     if not item_type or item_type == "gathering":
         for e in events:
-            rows.append({"type": "gathering", "title": e["title"], "description": e.get("description", ""), "date": e.get("start_at", ""), "location": e.get("location", ""), "tags": ", ".join(e.get("assigned_roles", []))})
+            rows.append(
+                {
+                    "type": "gathering",
+                    "title": e["title"],
+                    "description": e.get("description", ""),
+                    "date": e.get("start_at", ""),
+                    "location": e.get("location", ""),
+                    "tags": ", ".join(e.get("assigned_roles", [])),
+                }
+            )
     if not item_type or item_type == "memory":
         for m in memories:
-            rows.append({"type": "memory", "title": m["title"], "description": m.get("description", ""), "date": m.get("created_at", ""), "location": "", "tags": ", ".join(m.get("tags", []))})
+            rows.append(
+                {
+                    "type": "memory",
+                    "title": m["title"],
+                    "description": m.get("description", ""),
+                    "date": m.get("created_at", ""),
+                    "location": "",
+                    "tags": ", ".join(m.get("tags", [])),
+                }
+            )
     if not item_type or item_type == "story":
         for t in threads:
-            rows.append({"type": "story", "title": t["title"], "description": t.get("body", ""), "date": t.get("created_at", ""), "location": "", "tags": t.get("category", "")})
+            rows.append(
+                {
+                    "type": "story",
+                    "title": t["title"],
+                    "description": t.get("body", ""),
+                    "date": t.get("created_at", ""),
+                    "location": "",
+                    "tags": t.get("category", ""),
+                }
+            )
 
     rows.sort(key=lambda r: r.get("date", ""), reverse=True)
 
     if format == "csv":
         import csv
         import io
+
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=["type", "title", "description", "date", "location", "tags"])
+        writer = csv.DictWriter(
+            output,
+            fieldnames=["type", "title", "description", "date", "location", "tags"],
+        )
         writer.writeheader()
         writer.writerows(rows)
         return FastResponse(
             content=output.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=kindred_timeline.csv"},
+            headers={
+                "Content-Disposition": "attachment; filename=kindred_timeline.csv"
+            },
         )
 
     return {"items": rows, "total": len(rows)}
 
 
 @router.get("/memory/search")
-async def memory_search(q: str = "", current_user: dict[str, Any] = Depends(get_current_user)):
+async def memory_search(
+    q: str = "", current_user: dict[str, Any] = Depends(get_current_user)
+):
     """Search the living archive — memories and stories — by text or tag."""
     community_id = current_user["community_id"]
     query = (q or "").strip()
@@ -151,48 +217,91 @@ async def memory_search(q: str = "", current_user: dict[str, Any] = Depends(get_
         return {"query": "", "memories": [], "threads": [], "total": 0}
 
     rx = {"$regex": re.escape(query), "$options": "i"}
-    memories = await memories_collection.find(
-        await event_derived_query_for_user(
-            current_user,
-            **{"$or": [{"title": rx}, {"description": rx}, {"ai_summary": rx}, {"tags": rx}]},
-        ),
-        {"_id": 0, "id": 1, "title": 1, "ai_summary": 1, "description": 1, "created_at": 1, "tags": 1},
-    ).sort("created_at", -1).to_list(40)
-    threads = await threads_collection.find(
-        {"community_id": community_id, "$or": [{"title": rx}, {"body": rx}, {"category": rx}, {"elder_name": rx}]},
-        {"_id": 0, "id": 1, "title": 1, "category": 1, "body": 1, "created_at": 1, "elder_name": 1},
-    ).sort("created_at", -1).to_list(40)
+    memories = (
+        await memories_collection.find(
+            await visible_memory_query_for_user(
+                current_user,
+                **{
+                    "$or": [
+                        {"title": rx},
+                        {"description": rx},
+                        {"ai_summary": rx},
+                        {"tags": rx},
+                    ]
+                },
+            ),
+            {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "ai_summary": 1,
+                "description": 1,
+                "created_at": 1,
+                "tags": 1,
+            },
+        )
+        .sort("created_at", -1)
+        .to_list(40)
+    )
+    threads = (
+        await threads_collection.find(
+            {
+                "community_id": community_id,
+                "$or": [
+                    {"title": rx},
+                    {"body": rx},
+                    {"category": rx},
+                    {"elder_name": rx},
+                ],
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "category": 1,
+                "body": 1,
+                "created_at": 1,
+                "elder_name": 1,
+            },
+        )
+        .sort("created_at", -1)
+        .to_list(40)
+    )
 
-    return {"query": query, "memories": memories, "threads": threads, "total": len(memories) + len(threads)}
+    return {
+        "query": query,
+        "memories": memories,
+        "threads": threads,
+        "total": len(memories) + len(threads),
+    }
 
 
 @router.get("/memories", response_model=list[MemoryPublic])
 async def list_memories(current_user: dict[str, Any] = Depends(get_current_user)):
-    memories = await memories_collection.find(
-        await event_derived_query_for_user(current_user),
-        {"_id": 0},
-    ).sort("created_at", -1).to_list(200)
+    memories = (
+        await memories_collection.find(
+            await visible_memory_query_for_user(current_user),
+            {"_id": 0},
+        )
+        .sort("created_at", -1)
+        .to_list(200)
+    )
     return memories
 
 
 @router.post("/memories", response_model=MemoryPublic)
-async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def create_memory(
+    payload: MemoryCreateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     event_title = ""
     if payload.event_id:
-        event_doc = await events_collection.find_one(
-            {
-                "id": payload.event_id,
-                "community_id": current_user["community_id"],
-                "hidden_from_user_ids": {"$ne": current_user["id"]},
-            },
-            {"_id": 0},
-        )
-        if event_doc:
-            event_title = event_doc.get("title", "")
+        event_doc = await get_event_for_user(payload.event_id, current_user)
+        event_title = event_doc.get("title", "")
 
     # Get community info for AI tagging
     community_doc = await get_community_for_user(current_user)
-    
+
     ai_tags = []
     ai_summary = ""
     if payload.description.strip():
@@ -241,44 +350,95 @@ async def create_memory(payload: MemoryCreateRequest, current_user: dict[str, An
 
 
 @router.put("/memories/{memory_id}", response_model=MemoryPublic)
-async def update_memory(memory_id: str, payload: MemoryUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def update_memory(
+    memory_id: str,
+    payload: MemoryUpdateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     memory_doc = await get_memory_for_user(memory_id, current_user)
+    if not is_memory_owner(memory_doc, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the contributor can edit this memory.",
+        )
     updates = {}
     if payload.title.strip():
         updates["title"] = payload.title.strip()
     if payload.description is not None and payload.description != "":
         updates["description"] = payload.description.strip()
     if updates:
-        await memories_collection.update_one({"id": memory_id}, {"$set": updates})
+        await memories_collection.update_one(
+            {
+                "id": memory_id,
+                "community_id": current_user["community_id"],
+                "created_by": current_user["id"],
+            },
+            {"$set": updates},
+        )
         memory_doc.update(updates)
     return memory_doc
 
 
 @router.delete("/memories/{memory_id}")
-async def delete_memory(memory_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
-    await get_memory_for_user(memory_id, current_user)
-    await memories_collection.delete_one({"id": memory_id})
+async def delete_memory(
+    memory_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
+    memory_doc = await get_memory_for_user(memory_id, current_user)
+    if not is_memory_owner(memory_doc, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the contributor can withdraw this memory.",
+        )
+    await memories_collection.delete_one(
+        {
+            "id": memory_id,
+            "community_id": current_user["community_id"],
+            "created_by": current_user["id"],
+        }
+    )
     return {"ok": True}
 
 
 @router.post("/memories/{memory_id}/comments", response_model=MemoryPublic)
-async def add_memory_comment(memory_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_memory_comment(
+    memory_id: str,
+    payload: CommentRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     memory_doc = await get_memory_for_user(memory_id, current_user)
     comments = memory_doc.get("comments", [])
-    comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
-    await memories_collection.update_one({"id": memory_id}, {"$set": {"comments": comments}})
+    comments.append(
+        {
+            "id": str(uuid.uuid4()),
+            "author_name": current_user["full_name"],
+            "text": payload.text.strip(),
+            "created_at": now_iso(),
+        }
+    )
+    await memories_collection.update_one(
+        {"id": memory_id}, {"$set": {"comments": comments}}
+    )
     memory_doc["comments"] = comments
     return memory_doc
 
 
 @router.get("/threads", response_model=list[ThreadPublic])
 async def list_threads(current_user: dict[str, Any] = Depends(get_current_user)):
-    threads = await threads_collection.find({"community_id": current_user["community_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    threads = (
+        await threads_collection.find(
+            {"community_id": current_user["community_id"]}, {"_id": 0}
+        )
+        .sort("created_at", -1)
+        .to_list(200)
+    )
     return threads
 
 
 @router.post("/threads", response_model=ThreadPublic)
-async def create_thread(payload: ThreadCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def create_thread(
+    payload: ThreadCreateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     thread_doc = {
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
@@ -287,8 +447,16 @@ async def create_thread(payload: ThreadCreateRequest, current_user: dict[str, An
         "title": payload.title.strip(),
         "body": payload.body.strip(),
         "category": payload.category,
-        "elder_name": payload.elder_name.strip() if hasattr(payload, "elder_name") and payload.elder_name else "",
-        "voice_note_data_url": payload.voice_note_data_url if hasattr(payload, "voice_note_data_url") else "",
+        "elder_name": (
+            payload.elder_name.strip()
+            if hasattr(payload, "elder_name") and payload.elder_name
+            else ""
+        ),
+        "voice_note_data_url": (
+            payload.voice_note_data_url
+            if hasattr(payload, "voice_note_data_url")
+            else ""
+        ),
         "tags": payload.tags,
         "comments": [],
         "created_at": now_iso(),
@@ -298,50 +466,80 @@ async def create_thread(payload: ThreadCreateRequest, current_user: dict[str, An
 
 
 @router.post("/threads/{thread_id}/transcribe", response_model=ThreadPublic)
-async def transcribe_thread(thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def transcribe_thread(
+    thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     """Transcribe a thread's voice note into searchable, preservable text (best-effort)."""
     thread_doc = await get_thread_for_user(thread_id, current_user)
     if not thread_doc.get("voice_note_data_url"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This story has no voice note to transcribe.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This story has no voice note to transcribe.",
+        )
     api_key = os.environ.get("OPENAI_API_KEY", "")
     transcript = await transcribe_audio(api_key, thread_doc["voice_note_data_url"])
     if not transcript:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't transcribe the voice note. You can type the transcript into the story body instead.")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't transcribe the voice note. You can type the transcript into the story body instead.",
+        )
     await threads_collection.update_one(
-        {"id": thread_id, "community_id": current_user["community_id"]}, {"$set": {"transcript": transcript}}
+        {"id": thread_id, "community_id": current_user["community_id"]},
+        {"$set": {"transcript": transcript}},
     )
     thread_doc["transcript"] = transcript
     return thread_doc
 
 
 @router.post("/threads/{thread_id}/translate", response_model=ThreadPublic)
-async def translate_thread(thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def translate_thread(
+    thread_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     """Translate a story into Spanish + Yoruba so it reaches the whole family."""
     thread_doc = await get_thread_for_user(thread_id, current_user)
     source = (thread_doc.get("transcript") or thread_doc.get("body") or "").strip()
     if not source:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Add a story body or transcribe the voice note first.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add a story body or transcribe the voice note first.",
+        )
     api_key = os.environ.get("OPENAI_API_KEY", "")
     model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
     translations = await translate_text(api_key, model, source)
     if not (translations.get("es") or translations.get("yo")):
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Couldn't translate right now. Try again shortly.")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't translate right now. Try again shortly.",
+        )
     await threads_collection.update_one(
-        {"id": thread_id, "community_id": current_user["community_id"]}, {"$set": {"translations": translations}}
+        {"id": thread_id, "community_id": current_user["community_id"]},
+        {"$set": {"translations": translations}},
     )
     thread_doc["translations"] = translations
     return thread_doc
 
 
 @router.post("/threads/{thread_id}/comments", response_model=ThreadPublic)
-async def add_thread_comment(thread_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_thread_comment(
+    thread_id: str,
+    payload: CommentRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     thread_doc = await get_thread_for_user(thread_id, current_user)
     comments = thread_doc.get("comments", [])
-    comments.append({"id": str(uuid.uuid4()), "author_name": current_user["full_name"], "text": payload.text.strip(), "created_at": now_iso()})
-    await threads_collection.update_one({"id": thread_id}, {"$set": {"comments": comments}})
+    comments.append(
+        {
+            "id": str(uuid.uuid4()),
+            "author_name": current_user["full_name"],
+            "text": payload.text.strip(),
+            "created_at": now_iso(),
+        }
+    )
+    await threads_collection.update_one(
+        {"id": thread_id}, {"$set": {"comments": comments}}
+    )
     thread_doc["comments"] = comments
     return thread_doc
-
 
 
 @router.post("/memories/batch-retag")
@@ -351,7 +549,7 @@ async def batch_retag(current_user: dict[str, Any] = Depends(get_current_user)):
 
     community_doc = await get_community_for_user(current_user)
     memories = await memories_collection.find(
-        await event_derived_query_for_user(current_user),
+        await visible_memory_query_for_user(current_user),
         {"_id": 0},
     ).to_list(200)
 
@@ -374,7 +572,14 @@ async def batch_retag(current_user: dict[str, Any] = Depends(get_current_user)):
         mid = r.pop("memory_id")
         await memories_collection.update_one(
             {"id": mid},
-            {"$set": {"tags": r["tags"], "ai_summary": r["summary"], "sentiment": r.get("sentiment", "neutral"), "mood": r.get("mood", "warm")}},
+            {
+                "$set": {
+                    "tags": r["tags"],
+                    "ai_summary": r["summary"],
+                    "sentiment": r.get("sentiment", "neutral"),
+                    "mood": r.get("mood", "warm"),
+                }
+            },
         )
         updated += 1
 

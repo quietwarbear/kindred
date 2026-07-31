@@ -29,6 +29,8 @@ SENSITIVE_EVENT_FIELDS = {
     "event_role_assignments",
     "hidden_from_member_ids",
     "hidden_from_user_ids",
+    "memory_capsule_reviewed_by",
+    "memory_capsule_withdrawal_hashes",
     "planning_checklist",
     "planning_team_member_ids",
     "role_assignments",

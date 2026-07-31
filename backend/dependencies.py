@@ -529,7 +529,17 @@ async def get_memory_for_user(memory_id: str, user: dict[str, Any]) -> dict[str,
     from db import memories_collection
 
     memory_doc = await memories_collection.find_one(
-        await event_derived_query_for_user(user, id=memory_id),
+        {
+            "$and": [
+                await event_derived_query_for_user(user, id=memory_id),
+                {
+                    "$or": [
+                        {"capsule_status": {"$ne": "draft"}},
+                        {"created_by": user["id"]},
+                    ]
+                },
+            ]
+        },
         {"_id": 0},
     )
     if not memory_doc:

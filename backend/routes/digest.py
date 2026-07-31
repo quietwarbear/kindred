@@ -31,7 +31,12 @@ from db import (
     threads_collection,
     users_collection,
 )
-from dependencies import ensure_minimum_role, get_current_user, hidden_event_ids_for_user, now_iso
+from dependencies import (
+    ensure_minimum_role,
+    get_current_user,
+    hidden_event_ids_for_user,
+    now_iso,
+)
 from email_service import build_digest_body, send_community_digest
 
 router = APIRouter(prefix="/api")
@@ -60,17 +65,29 @@ async def _build_digest(community_id: str) -> dict:
     if not community:
         return {}
 
-    member_count = await users_collection.count_documents({"community_id": community_id})
+    member_count = await users_collection.count_documents(
+        {"community_id": community_id}
+    )
 
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     new_members = await users_collection.count_documents(
         {"community_id": community_id, "created_at": {"$gte": week_ago}}
     )
 
-    upcoming = await events_collection.find(
-        {"community_id": community_id},
-        {"_id": 0, "title": 1, "start_at": 1, "location": 1, "hidden_from_user_ids": 1},
-    ).sort("start_at", 1).to_list(15)
+    upcoming = (
+        await events_collection.find(
+            {"community_id": community_id},
+            {
+                "_id": 0,
+                "title": 1,
+                "start_at": 1,
+                "location": 1,
+                "hidden_from_user_ids": 1,
+            },
+        )
+        .sort("start_at", 1)
+        .to_list(15)
+    )
     # Keep each event's hidden-from list internally so we can drop surprise gatherings
     # per-recipient in _send_to_members (the digest is built once, sent to many).
     upcoming_events = [
@@ -83,18 +100,33 @@ async def _build_digest(community_id: str) -> dict:
         for e in upcoming
     ]
 
-    memories = await memories_collection.find(
-        {"community_id": community_id, "created_at": {"$gte": week_ago}},
-        {"_id": 0, "title": 1, "event_id": 1},
-    ).sort("created_at", -1).to_list(4)
-    threads = await threads_collection.find(
-        {"community_id": community_id, "created_at": {"$gte": week_ago}}, {"_id": 0, "title": 1, "category": 1}
-    ).sort("created_at", -1).to_list(4)
+    memories = (
+        await memories_collection.find(
+            {
+                "community_id": community_id,
+                "created_at": {"$gte": week_ago},
+                "capsule_status": {"$ne": "draft"},
+            },
+            {"_id": 0, "title": 1, "event_id": 1},
+        )
+        .sort("created_at", -1)
+        .to_list(4)
+    )
+    threads = (
+        await threads_collection.find(
+            {"community_id": community_id, "created_at": {"$gte": week_ago}},
+            {"_id": 0, "title": 1, "category": 1},
+        )
+        .sort("created_at", -1)
+        .to_list(4)
+    )
 
-    funds_agg = await payments_collection.aggregate([
-        {"$match": {"community_id": community_id, "payment_status": "paid"}},
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
-    ]).to_list(1)
+    funds_agg = await payments_collection.aggregate(
+        [
+            {"$match": {"community_id": community_id, "payment_status": "paid"}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+        ]
+    ).to_list(1)
     funds_raised = round(funds_agg[0]["total"], 2) if funds_agg else 0.0
 
     return {
@@ -128,8 +160,7 @@ async def _visible_digest_for_user(digest: dict, user: dict) -> dict:
         "recent_memories": [
             {key: value for key, value in memory.items() if key != "_event_id"}
             for memory in digest.get("recent_memories", [])
-            if not memory.get("_event_id")
-            or memory.get("_event_id") not in hidden_ids
+            if not memory.get("_event_id") or memory.get("_event_id") not in hidden_ids
         ],
     }
 
@@ -143,7 +174,9 @@ async def _recently_sent(community_id: str) -> bool:
         return False
     try:
         last_dt = datetime.fromisoformat(last)
-        return datetime.now(timezone.utc) - last_dt < timedelta(days=DIGEST_MIN_INTERVAL_DAYS)
+        return datetime.now(timezone.utc) - last_dt < timedelta(
+            days=DIGEST_MIN_INTERVAL_DAYS
+        )
     except (ValueError, TypeError):
         return False
 
@@ -158,13 +191,22 @@ async def _send_to_members(community_id: str, force: bool = False) -> dict:
         return {
             "community_id": community_id,
             "community_name": digest["community_name"],
-            "sent": 0, "skipped": 0, "opted_out": 0,
-            "found": True, "throttled": True,
+            "sent": 0,
+            "skipped": 0,
+            "opted_out": 0,
+            "found": True,
+            "throttled": True,
         }
 
     members = await users_collection.find(
         {"community_id": community_id},
-        {"_id": 0, "id": 1, "email": 1, "digest_opt_out": 1, "digest_unsubscribe_token": 1},
+        {
+            "_id": 0,
+            "id": 1,
+            "email": 1,
+            "digest_opt_out": 1,
+            "digest_unsubscribe_token": 1,
+        },
     ).to_list(2000)
 
     sent = 0
@@ -213,8 +255,12 @@ async def _send_to_members(community_id: str, force: bool = False) -> dict:
 
 
 async def _run_all(force: bool = False) -> dict:
-    communities = await communities_collection.find({}, {"_id": 0, "id": 1}).to_list(5000)
-    results = [await _send_to_members(c["id"], force=force) for c in communities if c.get("id")]
+    communities = await communities_collection.find({}, {"_id": 0, "id": 1}).to_list(
+        5000
+    )
+    results = [
+        await _send_to_members(c["id"], force=force) for c in communities if c.get("id")
+    ]
     return {
         "communities": len(results),
         "total_sent": sum(r.get("sent", 0) for r in results),
@@ -228,7 +274,9 @@ async def digest_preview(current_user: dict[str, Any] = Depends(get_current_user
     """Return the digest data and rendered HTML for the caller's community (no send)."""
     digest = await _build_digest(current_user["community_id"])
     if not digest:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found."
+        )
     visible_digest = await _visible_digest_for_user(digest, current_user)
     return {
         "digest": visible_digest,
@@ -247,7 +295,9 @@ async def digest_send(current_user: dict[str, Any] = Depends(get_current_user)):
 async def digest_run_all(current_user: dict[str, Any] = Depends(get_current_user)):
     """Send the weekly digest to every community (idempotent). Platform-admin only."""
     if not current_user.get("is_platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only."
+        )
     return await _run_all(force=False)
 
 
@@ -255,5 +305,7 @@ async def digest_run_all(current_user: dict[str, Any] = Depends(get_current_user
 async def digest_cron(x_digest_cron_key: str = Header(default="")):
     """Weekly scheduler hook. Auth via the X-Digest-Cron-Key header, not a user token."""
     if not DIGEST_CRON_KEY or x_digest_cron_key != DIGEST_CRON_KEY:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid cron key.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid cron key."
+        )
     return await _run_all(force=False)

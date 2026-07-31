@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from attendee_hub import build_attendee_hub
 from db import events_collection, memories_collection
-from dependencies import get_current_user, get_event_for_user, now_iso
-from models import AttendeeMemoryRequest
+from dependencies import get_current_user, get_event_for_user
+from models import AttendeeMemoryRequest, ReunionMemoryContributionRequest
+from routes.reunion_memories import (
+    CapsuleConflict,
+    CapsuleNotFound,
+    contribution_identity,
+    save_capsule_contribution,
+)
 from rsvp_integrity import RSVPWriteConflict, compare_and_swap_event
 
 router = APIRouter(prefix="/api")
@@ -38,7 +43,6 @@ async def _has_attendee_memory(
             "community_id": current_user["community_id"],
             "event_id": event["id"],
             "created_by": current_user["id"],
-            "source": "reunion_attendee_prompt",
         },
         {"_id": 0, "id": 1},
     )
@@ -127,37 +131,35 @@ async def create_attendee_memory(
     if existing:
         return await _hub(event, current_user)
 
-    # This path deliberately bypasses AI tagging and every external provider.
-    # It uses the existing community memory schema and visibility boundary.
-    operation_source = (
-        f"{current_user['community_id']}:{event_id}:{current_user['id']}:"
-        "reunion_attendee_prompt"
+    # The capsule store rechecks event visibility inside the same transaction
+    # as the memory insert. It deliberately bypasses AI and every provider.
+    _mongo_id, memory_id = contribution_identity(
+        event_id,
+        current_user["id"],
+        current_user["community_id"],
     )
-    operation_hash = hashlib.sha256(operation_source.encode("utf-8")).hexdigest()
-    memory = {
-        "_id": f"attendee-memory:{operation_hash}",
-        "id": operation_hash[:32],
-        "community_id": current_user["community_id"],
-        "created_by": current_user["id"],
-        "created_by_name": current_user.get("full_name", ""),
-        "title": f"A story from {event.get('title', 'our reunion')}"[:160],
-        "description": story,
-        "event_id": event_id,
-        "event_title": event.get("title", ""),
-        "category": "story",
-        "image_data_url": "",
-        "voice_note_data_url": "",
-        "tags": [],
-        "ai_summary": "",
-        "sentiment": "neutral",
-        "mood": "warm",
-        "comments": [],
-        "source": "reunion_attendee_prompt",
-        "created_at": now_iso(),
-    }
-    await memories_collection.update_one(
-        {"_id": memory["_id"]},
-        {"$setOnInsert": memory},
-        upsert=True,
-    )
+    try:
+        await save_capsule_contribution(
+            event_id,
+            ReunionMemoryContributionRequest(
+                story=story,
+                status="published",
+                idempotency_key=f"release4-attendee-prompt:{memory_id}",
+            ),
+            current_user,
+            prompt_retry=True,
+        )
+    except CapsuleNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reunion not found.",
+        ) from exc
+    except CapsuleConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "memory_contribution_conflict",
+                "message": "This contribution changed. Refresh before trying again.",
+            },
+        ) from exc
     return build_attendee_hub(event, current_user, has_memory=True)

@@ -455,7 +455,14 @@ export const ReunionAttendeeHubPage = ({ session }) => {
           <p className="mt-3 text-sm text-muted-foreground">{hub.memory_prompt.question}</p>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">{hub.memory_prompt.sharing_boundary}</p>
           {hub.memory_prompt.completed ? (
-            <p className="mt-5 flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Your reunion story is saved.</p>
+            <div className="mt-5">
+              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Your reunion story is saved.</p>
+              <Button asChild className="mt-4" variant="outline">
+                <Link to={hub.memory_prompt.capsule_path || `/reunion/memories/${eventId}`}>
+                  Open the private reunion capsule
+                </Link>
+              </Button>
+            </div>
           ) : (
             <>
               <Textarea className="mt-5" maxLength={4000} onChange={(event) => setStory(event.target.value)} rows={5} value={story} />
@@ -464,6 +471,11 @@ export const ReunionAttendeeHubPage = ({ session }) => {
               </Button>
             </>
           )}
+          {!hub.memory_prompt.completed ? (
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              After saving, you can revisit and manage your story in the private reunion capsule.
+            </p>
+          ) : null}
         </section>
 
         <section className="archival-card text-center" id="reunion_plan_complete">

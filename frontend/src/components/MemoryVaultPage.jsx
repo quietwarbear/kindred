@@ -11,7 +11,7 @@ import { hapticSuccess, takePhoto, isNative } from "@/lib/native-bridge";
 
 const initialForm = { description: "", event_id: "", title: "" };
 
-export const MemoryVaultPage = ({ token }) => {
+export const MemoryVaultPage = ({ token, user }) => {
   const [events, setEvents] = useState([]);
   const [memories, setMemories] = useState([]);
   const [form, setForm] = useState(initialForm);
@@ -297,6 +297,7 @@ export const MemoryVaultPage = ({ token }) => {
                           <p className="mt-2 text-sm text-muted-foreground">{memory.event_title} · {formatDateTime(memory.created_at)}</p>
                           <p className="mt-3 text-sm leading-7 text-muted-foreground">{memory.description}</p>
                         </div>
+                        {(memory.created_by || memory.created_by_id) === user?.id ? (
                         <div className="flex gap-1 shrink-0">
                           <button className="rounded-full p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" data-testid={`memory-edit-btn-${memory.id}`} onClick={() => setEditingMemory({ id: memory.id, title: memory.title, description: memory.description || "" })}>
                             <Pencil className="h-3.5 w-3.5" />
@@ -305,6 +306,7 @@ export const MemoryVaultPage = ({ token }) => {
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        ) : null}
                       </>
                     )}
                   </div>
