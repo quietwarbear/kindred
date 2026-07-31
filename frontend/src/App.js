@@ -11,6 +11,7 @@ import { LandingPage } from "@/components/LandingPage";
 import { PricingPage } from "@/components/PricingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
+import { OrganizerCommandCenterPage } from "@/components/OrganizerCommandCenterPage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
 import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -286,6 +287,10 @@ function App() {
             <Route
               element={<ReunionActivationPage session={session} />}
               path="/reunion/activate/:eventId"
+            />
+            <Route
+              element={<OrganizerCommandCenterPage session={session} />}
+              path="/reunion/command/:eventId"
             />
             <Route
               element={<AuthRoute authPage={publicAuthPage} session={session} />}

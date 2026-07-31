@@ -205,7 +205,7 @@ export const ReunionActivationPage = ({ session }) => {
                   <Eye className="mr-2 h-4 w-4" /> Preview invitee view
                 </Button>
                 <Button asChild>
-                  <Link to={`/gatherings/${event.id}`}>Open full gathering tools <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                  <Link to={`/reunion/command/${event.id}`}>Open organizer command center <ArrowRight className="ml-2 h-4 w-4" /></Link>
                 </Button>
               </div>
             </div>

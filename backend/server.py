@@ -27,6 +27,7 @@ from routes.federation import router as federation_router
 from routes.finance import router as finance_router
 from routes.health import router as health_router
 from routes.legacy import router as legacy_router
+from routes.organizer import router as organizer_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
 from routes.revenuecat import router as revenuecat_router
@@ -61,6 +62,7 @@ app.include_router(federation_router)
 app.include_router(finance_router)
 app.include_router(health_router)
 app.include_router(legacy_router)
+app.include_router(organizer_router)
 app.include_router(polls_router)
 app.include_router(public_router)
 app.include_router(revenuecat_router)
@@ -286,6 +288,18 @@ async def ensure_indexes():
     await users_collection.create_index(
         [("community_id", ASCENDING), ("email_normalized", ASCENDING)],
         name="community_email_normalized_lookup",
+        sparse=True,
+    )
+    await invites_collection.create_index(
+        [("active_planning_invite_key", ASCENDING)],
+        name="active_planning_team_invite_once",
+        unique=True,
+        sparse=True,
+    )
+    await invites_collection.create_index(
+        [("planning_team_idempotency_key", ASCENDING)],
+        name="planning_team_invite_idempotency",
+        unique=True,
         sparse=True,
     )
 

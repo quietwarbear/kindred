@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from db import communities_collection, events_collection, users_collection
 from dependencies import now_iso
+from event_privacy import serialize_event_for_guest
 from itinerary import (
     ACTIVITY_RESPONSES,
     activity_summaries,
@@ -49,14 +50,18 @@ router = APIRouter(prefix="/api/public")
 class PublicRSVPRequest(BaseModel):
     status: Literal["going", "some", "maybe", "not-going"]
     guests: int = Field(default=0, ge=0, le=50)
-    activity_responses: dict[str, Literal["coming", "not-coming", "maybe"]] = Field(default_factory=dict)
+    activity_responses: dict[str, Literal["coming", "not-coming", "maybe"]] = Field(
+        default_factory=dict
+    )
 
 
 async def _find_event_and_invite(token: str):
     event = await events_collection.find_one({"event_invites.id": token}, {"_id": 0})
     if not event:
         return None, None
-    invite = next((i for i in event.get("event_invites", []) if i.get("id") == token), None)
+    invite = next(
+        (i for i in event.get("event_invites", []) if i.get("id") == token), None
+    )
     if invite and invite.get("invite_source") == "member":
         member_id = invite.get("member_id", "")
         if not member_id and invite.get("email"):
@@ -82,72 +87,17 @@ def _invitation_token(authorization: str | None) -> str:
 
 
 def _public_view(event: dict, invite: dict) -> dict:
-    fmt = event.get("gathering_format", "in-person")
-    summaries = activity_summaries(event)
-    invite_respondent_id, respondent_aliases = public_respondent_identity(invite)
-    own_activity_responses = {
-        response.get("activity_id", ""): response.get("status", "")
-        for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") in respondent_aliases
-    }
-    activities = []
-    for activity in published_activities(event):
-        activity_id = activity.get("id", "")
-        deadline = parse_local_datetime(
-            activity.get("rsvp_deadline", ""),
-            activity.get("timezone") or event.get("timezone", "UTC"),
-        )
-        deadline_value = activity.get("rsvp_deadline", "")
-        response_open = (
-            not deadline_value
-            or bool(deadline and datetime.now(timezone.utc) <= deadline)
-        )
-        activities.append({
-            "id": activity_id,
-            "title": activity.get("title", ""),
-            "description": activity.get("description", ""),
-            "start_at": activity.get("start_at", ""),
-            "end_at": activity.get("end_at", ""),
-            "timezone": activity.get("timezone") or event.get("timezone", "UTC"),
-            "venue_name": activity.get("venue_name", ""),
-            "venue_address": activity.get("venue_address", ""),
-            "venue_detail": activity.get("venue_detail", ""),
-            "map_url": activity.get("map_url", ""),
-            "virtual_link": activity.get("virtual_link", ""),
-            "location_tba": bool(activity.get("location_tba", False)),
-            "capacity": activity.get("capacity"),
-            "rsvp_deadline": activity.get("rsvp_deadline", ""),
-            "response_open": response_open,
-            "attendance_requested": bool(activity.get("attendance_requested", True)),
-            "notes": activity.get("notes", ""),
-            "featured": bool(activity.get("featured", False)),
-            "attendance": summaries.get(activity_id, {}),
-            "my_response": own_activity_responses.get(activity_id, "no-response"),
-        })
-    return {
-        "invitee_name": invite.get("invitee_name", ""),
-        "rsvp_status": invite.get("rsvp_status", "pending"),
-        "gathering": {
-            "title": event.get("title", ""),
-            "start_at": event.get("start_at", ""),
-            "end_at": event.get("end_at", ""),
-            "timezone": event.get("timezone", "UTC"),
-            "location": event.get("location", ""),
-            "gathering_format": fmt,
-            "zoom_link": event.get("zoom_link", "") if fmt in {"online", "hybrid"} else "",
-            "description": event.get("description", ""),
-            "event_template": event.get("event_template", "custom"),
-            "activity_count": len(activities),
-            "activities": activities,
-        },
-    }
+    return serialize_event_for_guest(event, invite)
 
 
 async def _public_rsvp_view(token: str):
     """Minimal gathering + invite info for a held invitation token."""
     event, invite = await _find_event_and_invite(token)
     if not event or not invite:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This invitation link is not valid.",
+        )
     community = await communities_collection.find_one(
         {"id": event.get("community_id")}, {"_id": 0, "name": 1}
     )
@@ -157,9 +107,8 @@ async def _public_rsvp_view(token: str):
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},
     )
-    view["invited_by_name"] = (
-        event.get("created_by_name")
-        or (organizer or {}).get("full_name", "")
+    view["invited_by_name"] = event.get("created_by_name") or (organizer or {}).get(
+        "full_name", ""
     )
     return view
 
@@ -168,7 +117,10 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     """Set the RSVP for this one invitation token."""
     event, invite = await _find_event_and_invite(token)
     if not event or not invite:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This invitation link is not valid.",
+        )
     resolved_member_id = invite.get("member_id", "")
     if (
         not resolved_member_id
@@ -185,37 +137,46 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     def mutate(current_event: dict) -> dict:
         current_invite = next(
             (
-                item for item in current_event.get("event_invites", [])
+                item
+                for item in current_event.get("event_invites", [])
                 if item.get("id") == token
             ),
             None,
         )
         if not current_invite:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This invitation link is not valid.",
+            )
         if resolved_member_id and current_invite.get("invite_source") == "member":
             current_invite["member_id"] = resolved_member_id
         rsvp_uid, respondent_aliases = public_respondent_identity(current_invite)
 
         next_records = [
-            record for record in current_event.get("rsvp_records", [])
+            record
+            for record in current_event.get("rsvp_records", [])
             if record.get("user_id") not in respondent_aliases
         ]
-        next_records.append({
-            "user_id": rsvp_uid,
-            "user_name": current_invite.get("invitee_name", "Guest"),
-            "status": payload.status,
-            "guests": max(0, payload.guests),
-            "updated_at": now_iso(),
-            "via": "public-link",
-        })
+        next_records.append(
+            {
+                "user_id": rsvp_uid,
+                "user_name": current_invite.get("invitee_name", "Guest"),
+                "status": payload.status,
+                "guests": max(0, payload.guests),
+                "updated_at": now_iso(),
+                "via": "public-link",
+            }
+        )
         current_invite["rsvp_status"] = payload.status
 
         published_by_id = {
-            item.get("id"): item for item in published_activities(current_event)
+            item.get("id"): item
+            for item in published_activities(current_event)
             if item.get("attendance_requested", True)
         }
         invalid_activity_ids = [
-            activity_id for activity_id, response in payload.activity_responses.items()
+            activity_id
+            for activity_id, response in payload.activity_responses.items()
             if activity_id not in published_by_id or response not in ACTIVITY_RESPONSES
         ]
         if invalid_activity_ids:
@@ -298,7 +259,10 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
             detail={"code": "rsvp_write_conflict", "message": str(exc)},
         ) from exc
     if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This invitation link is not valid.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This invitation link is not valid.",
+        )
     invite = next(
         item for item in event.get("event_invites", []) if item.get("id") == token
     )
@@ -312,9 +276,8 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},
     )
-    view["invited_by_name"] = (
-        event.get("created_by_name")
-        or (organizer or {}).get("full_name", "")
+    view["invited_by_name"] = event.get("created_by_name") or (organizer or {}).get(
+        "full_name", ""
     )
     view["saved"] = True
     return view
@@ -350,7 +313,15 @@ async def public_rsvp_submit(token: str, payload: PublicRSVPRequest):
 # Linked from the digest email footer. The token is a per-user opaque value.
 # ---------------------------------------------------------------------------
 
-def _digest_pref_page(title: str, message: str, action_label: str, action_href: str, *, post_action: str = "") -> str:
+
+def _digest_pref_page(
+    title: str,
+    message: str,
+    action_label: str,
+    action_href: str,
+    *,
+    post_action: str = "",
+) -> str:
     # If post_action is set, render a real POST form button (the action MUTATES state and
     # must not run on a bare GET — email clients and security scanners prefetch GET links).
     # Otherwise render a plain link (navigation only, safe to prefetch).
@@ -359,7 +330,7 @@ def _digest_pref_page(title: str, message: str, action_label: str, action_href: 
             f'<form method="post" action="{post_action}" style="margin:0;">'
             f'<button type="submit" style="cursor:pointer;border:0;border-radius:999px;'
             f'background:#9A3412;color:#fff;font-size:15px;font-weight:600;padding:12px 28px;">'
-            f'{action_label}</button></form>'
+            f"{action_label}</button></form>"
         )
     else:
         action_html = f'<a href="{action_href}" style="display:inline-block;font-size:14px;color:#9A3412;text-decoration:underline;">{action_label}</a>'
@@ -379,55 +350,86 @@ def _digest_pref_page(title: str, message: str, action_label: str, action_href: 
 async def digest_unsubscribe_confirm(token: str):
     """Show a confirmation page. Does NOT change anything — a bare GET (prefetched by mail
     clients and link scanners) must never silently unsubscribe someone."""
-    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
+    user = await users_collection.find_one(
+        {"digest_unsubscribe_token": token}, {"_id": 0, "id": 1}
+    )
     if not user:
-        return HTMLResponse(_digest_pref_page(
-            "Link not recognized",
-            "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
-            "Open Kindred", "https://www.heykindred.org",
-        ), status_code=404)
-    return HTMLResponse(_digest_pref_page(
-        "Unsubscribe from the weekly digest?",
-        "Confirm below and you'll stop receiving the weekly community digest.",
-        "Unsubscribe me", "", post_action=f"/api/public/digest/unsubscribe/{token}",
-    ))
+        return HTMLResponse(
+            _digest_pref_page(
+                "Link not recognized",
+                "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
+                "Open Kindred",
+                "https://www.heykindred.org",
+            ),
+            status_code=404,
+        )
+    return HTMLResponse(
+        _digest_pref_page(
+            "Unsubscribe from the weekly digest?",
+            "Confirm below and you'll stop receiving the weekly community digest.",
+            "Unsubscribe me",
+            "",
+            post_action=f"/api/public/digest/unsubscribe/{token}",
+        )
+    )
 
 
 @router.post("/digest/unsubscribe/{token}", response_class=HTMLResponse)
 async def digest_unsubscribe(token: str):
     """Opt this user out of weekly digests. Triggered by the confirm-page button (POST)."""
-    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
-    if not user:
-        return HTMLResponse(_digest_pref_page(
-            "Link not recognized",
-            "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
-            "Open Kindred", "https://www.heykindred.org",
-        ), status_code=404)
-    await users_collection.update_one(
-        {"id": user["id"]}, {"$set": {"digest_opt_out": True, "digest_opt_out_at": now_iso()}}
+    user = await users_collection.find_one(
+        {"digest_unsubscribe_token": token}, {"_id": 0, "id": 1}
     )
-    return HTMLResponse(_digest_pref_page(
-        "You're unsubscribed",
-        "You won't receive the weekly community digest anymore. Changed your mind?",
-        "Re-subscribe", "", post_action=f"/api/public/digest/resubscribe/{token}",
-    ))
+    if not user:
+        return HTMLResponse(
+            _digest_pref_page(
+                "Link not recognized",
+                "This unsubscribe link is no longer valid. You can manage notifications inside the app.",
+                "Open Kindred",
+                "https://www.heykindred.org",
+            ),
+            status_code=404,
+        )
+    await users_collection.update_one(
+        {"id": user["id"]},
+        {"$set": {"digest_opt_out": True, "digest_opt_out_at": now_iso()}},
+    )
+    return HTMLResponse(
+        _digest_pref_page(
+            "You're unsubscribed",
+            "You won't receive the weekly community digest anymore. Changed your mind?",
+            "Re-subscribe",
+            "",
+            post_action=f"/api/public/digest/resubscribe/{token}",
+        )
+    )
 
 
 @router.post("/digest/resubscribe/{token}", response_class=HTMLResponse)
 async def digest_resubscribe(token: str):
     """Re-enable weekly digests for this user (POST from the unsubscribe-success page)."""
-    user = await users_collection.find_one({"digest_unsubscribe_token": token}, {"_id": 0, "id": 1})
-    if not user:
-        return HTMLResponse(_digest_pref_page(
-            "Link not recognized",
-            "This link is no longer valid. You can manage notifications inside the app.",
-            "Open Kindred", "https://www.heykindred.org",
-        ), status_code=404)
-    await users_collection.update_one(
-        {"id": user["id"]}, {"$set": {"digest_opt_out": False}, "$unset": {"digest_opt_out_at": ""}}
+    user = await users_collection.find_one(
+        {"digest_unsubscribe_token": token}, {"_id": 0, "id": 1}
     )
-    return HTMLResponse(_digest_pref_page(
-        "Welcome back",
-        "You're subscribed to the weekly community digest again.",
-        "Open Kindred", "https://www.heykindred.org",
-    ))
+    if not user:
+        return HTMLResponse(
+            _digest_pref_page(
+                "Link not recognized",
+                "This link is no longer valid. You can manage notifications inside the app.",
+                "Open Kindred",
+                "https://www.heykindred.org",
+            ),
+            status_code=404,
+        )
+    await users_collection.update_one(
+        {"id": user["id"]},
+        {"$set": {"digest_opt_out": False}, "$unset": {"digest_opt_out_at": ""}},
+    )
+    return HTMLResponse(
+        _digest_pref_page(
+            "Welcome back",
+            "You're subscribed to the weekly community digest again.",
+            "Open Kindred",
+            "https://www.heykindred.org",
+        )
+    )

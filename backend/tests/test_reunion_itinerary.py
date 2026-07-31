@@ -116,18 +116,27 @@ def test_dst_boundary_uses_primary_timezone():
 
 
 def test_nonexistent_and_ambiguous_wall_times_require_an_explicit_offset():
-    assert parse_local_datetime(
-        "2027-03-14T02:30:00",
-        "America/New_York",
-    ) is None
-    assert parse_local_datetime(
-        "2027-11-07T01:30:00",
-        "America/New_York",
-    ) is None
-    assert parse_local_datetime(
-        "2027-11-07T01:30:00-05:00",
-        "America/New_York",
-    ) is not None
+    assert (
+        parse_local_datetime(
+            "2027-03-14T02:30:00",
+            "America/New_York",
+        )
+        is None
+    )
+    assert (
+        parse_local_datetime(
+            "2027-11-07T01:30:00",
+            "America/New_York",
+        )
+        is None
+    )
+    assert (
+        parse_local_datetime(
+            "2027-11-07T01:30:00-05:00",
+            "America/New_York",
+        )
+        is not None
+    )
 
 
 def test_deadline_validation_fails_closed_and_day_keys_use_the_intended_zone():
@@ -140,19 +149,26 @@ def test_deadline_validation_fails_closed_and_day_keys_use_the_intended_zone():
     assert validate_activity(invalid_deadline, "America/New_York") == [
         "RSVP deadline must be a valid, unambiguous date and time in the activity timezone."
     ]
-    assert local_day_key(
-        "2027-07-19T01:00:00Z",
-        "America/New_York",
-    ) == "2027-07-18"
+    assert (
+        local_day_key(
+            "2027-07-19T01:00:00Z",
+            "America/New_York",
+        )
+        == "2027-07-18"
+    )
 
 
 def test_only_published_structured_activities_reach_public_itinerary():
     visible = activity("visible", "2027-07-18T10:00:00", "2027-07-18T11:00:00")
-    draft = {**activity("draft", "2027-07-18T12:00:00", "2027-07-18T13:00:00"), "visibility": "draft"}
+    draft = {
+        **activity("draft", "2027-07-18T12:00:00", "2027-07-18T13:00:00"),
+        "visibility": "draft",
+    }
     legacy = {"id": "legacy", "title": "Legacy", "time_label": "Later"}
-    assert [item["id"] for item in published_activities({"agenda": [draft, legacy, visible]})] == [
-        "visible"
-    ]
+    assert [
+        item["id"]
+        for item in published_activities({"agenda": [draft, legacy, visible]})
+    ] == ["visible"]
 
 
 def test_activity_counts_party_size_capacity_and_no_response():
@@ -180,11 +196,13 @@ def test_activity_counts_party_size_capacity_and_no_response():
 
 def test_member_and_public_aliases_are_counted_once_after_safe_reconciliation():
     event = {
-        "event_invites": [{
-            "id": "synthetic-invite",
-            "member_id": "member-1",
-            "invite_source": "member",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-invite",
+                "member_id": "member-1",
+                "invite_source": "member",
+            }
+        ],
         "activity_rsvps": [
             {
                 "activity_id": "dinner",
@@ -210,7 +228,10 @@ def test_member_and_public_aliases_are_counted_once_after_safe_reconciliation():
 
 def test_activity_choices_suggest_but_do_not_overwrite_explicit_overall_response():
     assert derive_overall_suggestion("", {"a": "coming", "b": "not-coming"}) == "some"
-    assert derive_overall_suggestion("", {"a": "not-coming", "b": "not-coming"}) == "not-going"
+    assert (
+        derive_overall_suggestion("", {"a": "not-coming", "b": "not-coming"})
+        == "not-going"
+    )
     assert derive_overall_suggestion("going", {"a": "not-coming"}) == "going"
     assert derive_overall_suggestion("maybe", {"a": "coming"}) == "maybe"
 
@@ -226,32 +247,47 @@ def test_mixed_activity_responses_can_be_edited_without_touching_other_people():
         "invite:a",
         [{"activity_id": "dinner", "respondent_id": "invite:a", "status": "coming"}],
     )
-    assert next(
-        item for item in updated
-        if item["activity_id"] == "dinner" and item["respondent_id"] == "invite:a"
-    )["status"] == "coming"
-    assert next(
-        item for item in updated
-        if item["activity_id"] == "outing" and item["respondent_id"] == "invite:a"
-    )["status"] == "coming"
-    assert next(
-        item for item in updated
-        if item["activity_id"] == "dinner" and item["respondent_id"] == "invite:b"
-    )["status"] == "coming"
+    assert (
+        next(
+            item
+            for item in updated
+            if item["activity_id"] == "dinner" and item["respondent_id"] == "invite:a"
+        )["status"]
+        == "coming"
+    )
+    assert (
+        next(
+            item
+            for item in updated
+            if item["activity_id"] == "outing" and item["respondent_id"] == "invite:a"
+        )["status"]
+        == "coming"
+    )
+    assert (
+        next(
+            item
+            for item in updated
+            if item["activity_id"] == "dinner" and item["respondent_id"] == "invite:b"
+        )["status"]
+        == "coming"
+    )
 
 
 def test_routes_preserve_history_and_keep_public_rosters_aggregate_only():
     events_route = (ROOT / "routes" / "events.py").read_text()
     public_route = (ROOT / "routes" / "public.py").read_text()
+    privacy = (ROOT / "event_privacy.py").read_text()
     assert '@router.put("/events/{event_id}/agenda/{activity_id}"' in events_route
-    assert '"revision_history": list(source.get("revision_history") or [])' in (
-        ROOT / "itinerary.py"
-    ).read_text()
+    assert (
+        '"revision_history": list(source.get("revision_history") or [])'
+        in (ROOT / "itinerary.py").read_text()
+    )
     assert '"visibility"] = "archived"' in events_route
     assert "confirm_responses: bool = Query(False)" in events_route
     assert '@router.get("/events/{event_id}/operations")' in events_route
     assert '"activity_rosters": rosters' in events_route
-    assert '"attendance": summaries.get(activity_id, {})' in public_route
+    assert "return serialize_event_for_guest(event, invite)" in public_route
+    assert '"attendance": summaries.get(activity_id, {})' in privacy
     assert '"activity_rosters"' not in public_route
     assert '"activity_rsvps": activity_responses' in public_route
     detail_page = (

@@ -47,6 +47,15 @@ test("declares every deliberate reunion funnel event", () => {
     "activity_rsvp_updated",
     "itinerary_viewed",
     "activity_roster_viewed",
+    "command_center_viewed",
+    "next_action_viewed",
+    "next_action_completed",
+    "invitation_share_initiated",
+    "reminder_preflight_passed",
+    "reminder_preflight_failed",
+    "planning_team_setup_started",
+    "planning_team_setup_completed",
+    "organizer_returned_after_first_rsvp",
   ]);
 });
 
