@@ -58,6 +58,7 @@ async def _activation_context(
             "community_id": community_id,
             "event_template": "reunion",
             "hidden_from_user_ids": {"$ne": current_user["id"]},
+            "publication_state": {"$ne": "organizer_draft"},
         },
         {"_id": 0},
     ).to_list(200)

@@ -16,6 +16,8 @@ from db import (
     guest_family_claims_collection,
     invitation_redelivery_operations_collection,
     invites_collection,
+    next_gathering_operations_collection,
+    reunion_recaps_collection,
     sso_codes_collection,
     users_collection,
 )
@@ -37,6 +39,7 @@ from routes.organizer import router as organizer_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
 from routes.reunion_memories import router as reunion_memories_router
+from routes.reunion_recap import router as reunion_recap_router
 from routes.revenuecat import router as revenuecat_router
 from routes.resend_webhooks import router as resend_webhooks_router
 from routes.steward import router as steward_router
@@ -76,6 +79,7 @@ app.include_router(organizer_router)
 app.include_router(polls_router)
 app.include_router(public_router)
 app.include_router(reunion_memories_router)
+app.include_router(reunion_recap_router)
 app.include_router(revenuecat_router)
 app.include_router(resend_webhooks_router)
 app.include_router(steward_router)
@@ -318,6 +322,21 @@ async def ensure_indexes():
     await family_access_requests_collection.create_index(
         [("community_id", ASCENDING), ("applicant_user_id", ASCENDING)],
         name="family_access_one_request_per_member",
+        unique=True,
+    )
+    await reunion_recaps_collection.create_index(
+        [("event_id", ASCENDING)],
+        name="reunion_recap_event_once",
+        unique=True,
+    )
+    await next_gathering_operations_collection.create_index(
+        [("operation_hash", ASCENDING)],
+        name="next_gathering_operation_once",
+        unique=True,
+    )
+    await next_gathering_operations_collection.create_index(
+        [("created_event_id", ASCENDING)],
+        name="next_gathering_created_event_once",
         unique=True,
     )
     await family_access_requests_collection.create_index(

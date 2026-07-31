@@ -64,17 +64,21 @@ from courtyard_helpers import ROLE_TOOLING, build_default_subyards, build_planni
 from db import (
     communities_collection,
     events_collection,
+    family_access_requests_collection,
+    guest_family_claims_collection,
     invites_collection,
     notification_events_collection,
     notification_preferences_collection,
     password_resets_collection,
     polls_collection,
+    reunion_recaps_collection,
     sso_codes_collection,
     announcements_collection,
     budget_plans_collection,
     chat_rooms_collection,
     kinships_collection,
     memories_collection,
+    next_gathering_operations_collection,
     payments_collection,
     subyards_collection,
     threads_collection,
@@ -954,6 +958,46 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         {"$pull": {"options.$[].voter_ids": user_id}},
     )
 
+    # Applicant-owned continuity records follow account deletion without
+    # undoing any already-established community state. The remaining request
+    # row is a non-identifying categorical organizer audit tombstone.
+    await guest_family_claims_collection.delete_many({"claimed_by_user_id": user_id})
+    await family_access_requests_collection.update_many(
+        {"applicant_user_id": user_id, "status": "pending"},
+        {"$set": {"status": "cancelled", "updated_at": now_iso()}},
+    )
+    await family_access_requests_collection.update_many(
+        {"applicant_user_id": user_id},
+        {
+            "$set": {
+                "applicant_user_id": f"deleted:{uuid.uuid4().hex}",
+                "applicant_tombstone": True,
+                "updated_at": now_iso(),
+            },
+            "$unset": {
+                "applicant_name": "",
+                "relationship_fingerprint": "",
+                "submission_operation_hash": "",
+            },
+        },
+    )
+    # Recap text remains family content, but its author link is irreversibly
+    # replaced with a categorical tombstone. Draft lineage remains intact.
+    await reunion_recaps_collection.update_many(
+        {"author_user_id": user_id},
+        {
+            "$set": {"author_tombstone": True, "updated_at": now_iso()},
+            "$unset": {"author_user_id": "", "updated_by_user_id": ""},
+        },
+    )
+    await next_gathering_operations_collection.update_many(
+        {"created_by_user_id": user_id},
+        {
+            "$set": {"creator_tombstone": True},
+            "$unset": {"created_by_user_id": ""},
+        },
+    )
+
     if is_owner and member_count <= 1:
         await events_collection.delete_many({"community_id": community_id})
         await announcements_collection.delete_many({"community_id": community_id})
@@ -961,6 +1005,10 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         await subyards_collection.delete_many({"community_id": community_id})
         await kinships_collection.delete_many({"community_id": community_id})
         await memories_collection.delete_many({"community_id": community_id})
+        await reunion_recaps_collection.delete_many({"community_id": community_id})
+        await next_gathering_operations_collection.delete_many({"community_id": community_id})
+        await family_access_requests_collection.delete_many({"community_id": community_id})
+        await guest_family_claims_collection.delete_many({"community_id": community_id})
         await threads_collection.delete_many({"community_id": community_id})
         await payments_collection.delete_many({"community_id": community_id})
         await travel_plans_collection.delete_many({"community_id": community_id})

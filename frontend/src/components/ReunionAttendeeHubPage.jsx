@@ -300,6 +300,23 @@ export const ReunionAttendeeHubPage = ({ session }) => {
           ) : null}
         </header>
 
+        {hub.recap?.completion_state === "ready" ? (
+          <section className="archival-card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-testid="attendee-recap-card">
+            <div>
+              <p className="eyebrow-text">After the reunion</p>
+              <h2 className="mt-2 font-display text-3xl">The reunion has concluded</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {hub.recap.state === "published"
+                  ? "Revisit the published itinerary, your participation, safe family totals, and the existing memory capsule."
+                  : "The organizers are preparing the private family recap. Your existing memories remain available."}
+              </p>
+            </div>
+            {hub.recap.state === "published" ? (
+              <Button asChild><Link to={`/reunion/recap/${eventId}`}>Open recap <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.25fr_0.75fr]">
             <div className="p-6 sm:p-8">
