@@ -22,6 +22,7 @@ export const isSensitiveContentRoute = () => (
   typeof window !== "undefined"
   && (
     /^\/family\/activate\/?$/i.test(window.location.pathname)
+    || /^\/family\/join\/?$/i.test(window.location.pathname)
     || /^\/reunion\/(?:activate|command|hub|memories)\//i.test(window.location.pathname)
   )
 );
@@ -143,6 +144,11 @@ export const REUNION_EVENTS = Object.freeze([
   "family_space_activation_deferred",
   "family_space_activated",
   "family_space_activation_conflict",
+  "guest_family_access_started",
+  "guest_family_access_submitted",
+  "guest_family_access_status_viewed",
+  "guest_family_access_cancelled",
+  "guest_family_access_decided",
 ]);
 
 const FAMILY_ACTIVATION_EVENTS = new Set([
@@ -151,6 +157,26 @@ const FAMILY_ACTIVATION_EVENTS = new Set([
   "family_space_activated",
   "family_space_activation_conflict",
 ]);
+
+const FAMILY_ACCESS_EVENTS = new Set([
+  "guest_family_access_started",
+  "guest_family_access_submitted",
+  "guest_family_access_status_viewed",
+  "guest_family_access_cancelled",
+  "guest_family_access_decided",
+]);
+
+const FAMILY_ACCESS_CATEGORIES = Object.freeze({
+  source: new Set(["public_rsvp", "family_access_boundary", "organizer_command_center"]),
+  request_state: new Set(["none", "pending", "approved", "declined", "cancelled", "expired", "conflict"]),
+  decision: new Set(["approved", "declined"]),
+});
+
+const safeFamilyAccessProperties = (properties) => Object.fromEntries(
+  Object.entries(properties).filter(
+    ([key, value]) => typeof value === "string" && FAMILY_ACCESS_CATEGORIES[key]?.has(value)
+  )
+);
 
 const FAMILY_ACTIVATION_CATEGORIES = Object.freeze({
   source: new Set(["family_activation", "organizer_command_center"]),
@@ -205,6 +231,10 @@ export function trackReunionEvent(name, properties = {}) {
   if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
   if (FAMILY_ACTIVATION_EVENTS.has(name)) {
     posthog.capture(name, safeFamilyActivationProperties(properties));
+    return;
+  }
+  if (FAMILY_ACCESS_EVENTS.has(name)) {
+    posthog.capture(name, safeFamilyAccessProperties(properties));
     return;
   }
   const safeProperties = Object.fromEntries(

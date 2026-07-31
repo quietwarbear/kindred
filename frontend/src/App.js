@@ -15,6 +15,7 @@ import { OrganizerCommandCenterPage } from "@/components/OrganizerCommandCenterP
 import { ReunionAttendeeHubPage } from "@/components/ReunionAttendeeHubPage";
 import { ReunionMemoryCapsulePage } from "@/components/ReunionMemoryCapsulePage";
 import { FamilySpaceActivationPage } from "@/components/FamilySpaceActivationPage";
+import { GuestFamilyAccessPage } from "@/components/GuestFamilyAccessPage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
 import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -72,6 +73,7 @@ const AuthRoute = ({ session, authPage }) => {
   const intent = new URLSearchParams(location.search).get("intent");
   if (!session?.token) return authPage;
   if (intent === "reunion") return <Navigate replace to="/reunion/start" />;
+  if (intent === "family-access") return <Navigate replace to="/family/join" />;
   return <Navigate replace to="/dashboard" />;
 };
 
@@ -255,9 +257,10 @@ function App() {
     handleAuthSuccess({ ...payload, token: session.token });
   };
 
-  const handleNativeGoogleSignIn = useCallback(async () => {
+  const handleNativeGoogleSignIn = useCallback(async (intent = "") => {
     if (!isNative()) return;
-    const authUrl = `${process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app"}/api/auth/google/start?redirect_uri=${encodeURIComponent(MOBILE_GOOGLE_CALLBACK_URL)}`;
+    const callbackUrl = intent === "family-access" ? `${MOBILE_GOOGLE_CALLBACK_URL}?intent=family-access` : MOBILE_GOOGLE_CALLBACK_URL;
+    const authUrl = `${process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app"}/api/auth/google/start?redirect_uri=${encodeURIComponent(callbackUrl)}`;
     try {
       const { Browser } = await import("@capacitor/browser");
       await Browser.open({ url: authUrl, presentationStyle: "popover" });
@@ -306,6 +309,10 @@ function App() {
             <Route
               element={<FamilySpaceActivationPage onSessionRefresh={handleSessionRefresh} session={session} />}
               path="/family/activate"
+            />
+            <Route
+              element={<GuestFamilyAccessPage onSessionRefresh={handleSessionRefresh} session={session} />}
+              path="/family/join"
             />
             <Route
               element={<AuthRoute authPage={publicAuthPage} session={session} />}

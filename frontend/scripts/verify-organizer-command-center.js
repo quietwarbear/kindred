@@ -213,6 +213,11 @@ async function configurePage(page, evidence, authorize = true) {
             })
           : jsonResponse(request, { detail: 'Organizer access required.' }, 403);
       }
+      if (requestUrl.pathname === '/api/family-access/organizer/requests') {
+        return authorize
+          ? jsonResponse(request, { requests: [] })
+          : jsonResponse(request, { detail: 'Organizer access required.' }, 403);
+      }
       if (requestUrl.pathname === `/api/events/${EVENT_ID}/command-center`) {
         return authorize
           ? jsonResponse(request, commandCenter)

@@ -81,6 +81,8 @@ export const OrganizerCommandCenterPage = ({ session }) => {
   const [planningTeam, setPlanningTeam] = useState({ assigned: [], pending_invitations: [] });
   const [preview, setPreview] = useState(null);
   const [familyReadiness, setFamilyReadiness] = useState(null);
+  const [familyAccessRequests, setFamilyAccessRequests] = useState([]);
+  const [familyAccessBusy, setFamilyAccessBusy] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -95,18 +97,23 @@ export const OrganizerCommandCenterPage = ({ session }) => {
     if (!session?.token || !eventId) return;
     setLoadError("");
     try {
-      const [commandPayload, eventPayload, membersPayload, planningTeamPayload, familyPayload] = await Promise.all([
+      const [commandPayload, eventPayload, membersPayload, planningTeamPayload, familyPayload, familyAccessPayload] = await Promise.all([
         apiRequest(`/events/${eventId}/command-center`, { token: session.token }),
         apiRequest(`/events/${eventId}`, { token: session.token }),
         apiRequest("/community/members", { token: session.token }),
         apiRequest(`/events/${eventId}/planning-team`, { token: session.token }),
         apiRequest("/family-space/activation", { token: session.token }),
+        apiRequest("/family-access/organizer/requests", { token: session.token }).catch((error) => {
+          if (error.response?.status === 404) return { requests: [] };
+          throw error;
+        }),
       ]);
       setCommand(commandPayload);
       setEvent(eventPayload);
       setMembers(membersPayload.members || []);
       setPlanningTeam(planningTeamPayload);
       setFamilyReadiness(familyPayload);
+      setFamilyAccessRequests(familyAccessPayload.requests || []);
     } catch (error) {
       setLoadError(
         error.response?.status === 403
@@ -313,6 +320,38 @@ export const OrganizerCommandCenterPage = ({ session }) => {
     }
   };
 
+  const decideFamilyAccess = async (request, decision) => {
+    const busyKey = `${request.request_reference}:${decision}`;
+    setFamilyAccessBusy(busyKey);
+    const storageKey = `kindred:family-access-decision:${busyKey}`;
+    let idempotencyKey = window.sessionStorage.getItem(storageKey);
+    if (!idempotencyKey) {
+      idempotencyKey = `family-access-decision:${window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`}`;
+      window.sessionStorage.setItem(storageKey, idempotencyKey);
+    }
+    try {
+      const result = await apiRequest("/family-access/organizer/decision", {
+        method: "POST", token: session.token,
+        data: {
+          request_reference: request.request_reference,
+          decision,
+          expected_revision: request.revision,
+          idempotency_key: idempotencyKey,
+        },
+      });
+      window.sessionStorage.removeItem(storageKey);
+      trackReunionEvent("guest_family_access_decided", {
+        source: "organizer_command_center", request_state: result.status, decision,
+      });
+      toast.success(`Family access request ${result.status}.`);
+      await load();
+    } catch (error) {
+      toast.error(error.response?.data?.detail?.message || "This request changed. Refresh before deciding.");
+    } finally {
+      setFamilyAccessBusy("");
+    }
+  };
+
   if (loading) {
     return (
       <div className="app-canvas flex min-h-screen items-center justify-center" aria-busy="true">
@@ -429,6 +468,35 @@ export const OrganizerCommandCenterPage = ({ session }) => {
             <StatusCard detail="Canonical responses" label="Responded" testId="command-response-responded" value={command.responses.responded} />
             <StatusCard detail="Safe aggregate only" label="Still missing" testId="command-response-missing" value={command.responses.missing} />
             <StatusCard detail={command.responses.reconciles ? "Counts reconcile" : "Needs review"} label="Integrity" testId="command-response-integrity" value={command.responses.reconciles ? "Confirmed" : "Check"} />
+          </div>
+        </section>
+
+        <section className="archival-card" id="family-access" data-testid="organizer-family-access-requests">
+          <div className="flex items-start gap-3">
+            <LockKeyhole className="mt-1 h-5 w-5 text-primary" />
+            <div>
+              <p className="eyebrow-text">Family access requests</p>
+              <h2 className="mt-2 font-display text-3xl">Approve one canonical member</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
+                These guests authenticated after using their private reunion relationship. Email is not proof of membership, and cross-family accounts fail closed.
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 space-y-3">
+            {familyAccessRequests.length ? familyAccessRequests.map((request) => (
+              <article className="soft-panel flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" key={request.request_reference}>
+                <div>
+                  <p className="font-semibold">{request.applicant_name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{request.status} · {request.requested_at ? new Date(request.requested_at).toLocaleDateString() : "Recently"}</p>
+                </div>
+                {request.status === "pending" ? (
+                  <div className="flex gap-2">
+                    <Button disabled={Boolean(familyAccessBusy)} onClick={() => decideFamilyAccess(request, "approved")} size="sm" type="button">Approve</Button>
+                    <Button disabled={Boolean(familyAccessBusy)} onClick={() => decideFamilyAccess(request, "declined")} size="sm" type="button" variant="outline">Decline</Button>
+                  </div>
+                ) : <span className="text-sm font-semibold capitalize text-muted-foreground">{request.status}</span>}
+              </article>
+            )) : <p className="text-sm text-muted-foreground">No guest family-access requests yet.</p>}
           </div>
         </section>
 
