@@ -256,11 +256,30 @@ export const PublicRSVPPage = () => {
       ) : null}
 
       {saved ? (
-        <section className="rounded-2xl bg-emerald-50 px-5 py-6">
+        <section className="rounded-2xl bg-emerald-50 px-5 py-6" data-testid="public-rsvp-confirmation">
           <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-700" />
           <h2 className="mt-3 text-xl font-semibold text-emerald-900">Your reunion response is saved.</h2>
-          <p className="mt-2 text-base text-emerald-800">Return to this private invitation link anytime to update the whole response in one place.</p>
-          <button className="mt-4 font-semibold text-emerald-900 underline" onClick={() => { setSaved(false); setStep(1); }} type="button">Edit my response</button>
+          <div className="mx-auto mt-4 max-w-xl rounded-xl bg-white/70 p-4 text-left text-sm text-emerald-950">
+            <p><strong>Overall:</strong> {OVERALL_OPTIONS.find((option) => option.value === overall)?.label}</p>
+            {activities.length ? (
+              <div className="mt-3 space-y-2">
+                {activities.map((activity) => (
+                  <div className="border-t border-emerald-200 pt-2" key={activity.id}>
+                    <p className="flex items-center justify-between gap-3">
+                      <span>{activity.title}</span>
+                      <span className="font-semibold">{ACTIVITY_OPTIONS.find((option) => option.value === activityResponses[activity.id])?.label || "No response"}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-800">
+                      {formatMoment(activity.start_at, activity.timezone, { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                      {" · "}{activity.attendance?.coming || 0} coming · {activity.attendance?.maybe || 0} maybe
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <p className="mt-3 text-sm text-emerald-800">The published itinerary and safe attendance totals above remain available through this private invitation.</p>
+          <button className="mt-4 font-semibold text-emerald-900 underline" onClick={() => { setSaved(false); setStep(1); }} type="button">Revise my response</button>
         </section>
       ) : null}
 
@@ -404,18 +423,18 @@ export const PublicRSVPPage = () => {
       </section>
 
       <div className="mt-5 text-sm text-slate-500">
-        <p>No account or app is required to respond. Want family chat, photos, stories, and ongoing access?</p>
+        <p>No account or app is required to respond. Already part of a Kindred community?</p>
         <a
           className="mt-2 inline-flex font-semibold text-rose-700 underline"
           data-testid="public-rsvp-account-link"
-          href="/login?intent=guest"
+          href="/login"
           onClick={() => trackReunionEvent("guest_account_started", { source: "public_rsvp" })}
         >
-          Sign in or start an account
+          Sign in to Kindred
         </a>
         <span className="mx-2">·</span>
         <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app</a>
-        <p className="mt-2 text-xs leading-5">New guests still need a private community invitation from the organizer.</p>
+        <p className="mt-2 text-xs leading-5">An account does not grant access to this family’s private community. Community access always requires a separate private invitation from an authorized organizer.</p>
       </div>
     </>
   );

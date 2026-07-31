@@ -92,6 +92,12 @@ export const GatheringsPage = ({ token, user }) => {
 
   const loadData = useCallback(async () => {
     try {
+      if (!canCreate) {
+        const eventPayload = await apiRequest("/events", { token });
+        setEvents(eventPayload || []);
+        setActiveEventId((current) => current || eventPayload?.[0]?.id || "");
+        return;
+      }
       const [templatePayload, subyardPayload, memberPayload, eventPayload, reminderPayload, travelPayload] = await Promise.all([
         apiRequest("/gatherings/templates", { token }),
         apiRequest("/subyards", { token }),
@@ -110,7 +116,7 @@ export const GatheringsPage = ({ token, user }) => {
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to load gathering planner.");
     }
-  }, [token]);
+  }, [canCreate, token]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -233,6 +239,44 @@ export const GatheringsPage = ({ token, user }) => {
     () => travelPlans.filter((item) => item.event_id === activeEventId),
     [activeEventId, travelPlans]
   );
+
+  if (!canCreate) {
+    return (
+      <div className="space-y-6" data-testid="attendee-gatherings-list">
+        <section className="archival-card">
+          <p className="eyebrow-text">Your gatherings</p>
+          <h2 className="mt-3 font-display text-3xl text-foreground sm:text-4xl">
+            Reunion plans, responses, and ways to help.
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
+            Open a reunion to see its published itinerary, your own response, safe attendance totals, and your commitments.
+          </p>
+        </section>
+        <section className="grid gap-4 md:grid-cols-2">
+          {events.map((eventItem) => (
+            <article className="archival-card" key={eventItem.id}>
+              <p className="eyebrow-text">{eventItem.event_template === "reunion" ? "Reunion" : "Gathering"}</p>
+              <h3 className="mt-2 font-display text-3xl">{eventItem.title}</h3>
+              <p className="mt-3 text-sm text-muted-foreground">{formatDateTime(eventItem.start_at)} · {eventItem.location || "Location to be announced"}</p>
+              <Button
+                className="mt-5"
+                onClick={() => navigate(eventItem.event_template === "reunion" ? `/reunion/hub/${eventItem.id}` : `/gatherings/${eventItem.id}`)}
+                type="button"
+              >
+                {eventItem.event_template === "reunion" ? "Open my reunion hub" : "Open gathering"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </article>
+          ))}
+          {!events.length ? (
+            <div className="soft-panel">
+              <p className="text-sm text-muted-foreground">No visible gatherings are scheduled yet.</p>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -41,6 +41,7 @@ test("declares every deliberate reunion funnel event", () => {
     "guest_account_started",
     "community_activated",
     "memory_prompt_completed",
+    "memory_prompt_started",
     "reunion_multiday_enabled",
     "itinerary_activity_created",
     "itinerary_activity_published",
@@ -56,6 +57,10 @@ test("declares every deliberate reunion funnel event", () => {
     "planning_team_setup_started",
     "planning_team_setup_completed",
     "organizer_returned_after_first_rsvp",
+    "reunion_hub_viewed",
+    "attendee_next_action_viewed",
+    "contribution_claimed",
+    "contribution_released",
   ]);
 });
 

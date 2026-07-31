@@ -17,6 +17,7 @@ from db import (
     users_collection,
 )
 from routes.activity import router as activity_router
+from routes.attendee import router as attendee_router
 from routes.auth import router as auth_router
 from routes.communications import router as communications_router
 from routes.care import router as care_router
@@ -52,6 +53,7 @@ async def root():
 # Include all domain routers
 app.include_router(api_root)
 app.include_router(activity_router)
+app.include_router(attendee_router)
 app.include_router(auth_router)
 app.include_router(care_router)
 app.include_router(community_router)

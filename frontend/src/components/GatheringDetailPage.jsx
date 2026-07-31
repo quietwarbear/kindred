@@ -41,6 +41,11 @@ export const GatheringDetailPage = ({ token, user }) => {
 
   const loadData = useCallback(async () => {
     try {
+      if (!["host", "organizer"].includes(user?.role)) {
+        const eventPayload = await apiRequest(`/events/${id}`, { token });
+        setEvent(eventPayload);
+        return;
+      }
       const [eventPayload, memberPayload, travelPayload] = await Promise.all([
         apiRequest(`/events/${id}`, { token }),
         apiRequest("/community/members", { token }),
@@ -56,11 +61,20 @@ export const GatheringDetailPage = ({ token, user }) => {
     } finally {
       setLoading(false);
     }
-  }, [id, token, navigate]);
+  }, [id, token, navigate, user?.role]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (
+      event?.event_template === "reunion"
+      && !["host", "organizer"].includes(user?.role)
+    ) {
+      navigate(`/reunion/hub/${event.id}`, { replace: true });
+    }
+  }, [event?.event_template, event?.id, navigate, user?.role]);
 
   const mergeEvent = (nextEvent) => setEvent(nextEvent);
 
