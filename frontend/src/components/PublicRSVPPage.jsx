@@ -434,7 +434,7 @@ export const PublicRSVPPage = () => {
         </a>
         <span className="mx-2">·</span>
         <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app</a>
-        <p className="mt-2 text-xs leading-5">An account does not grant access to this family’s private community. Community access always requires a separate private invitation from an authorized organizer.</p>
+        <p className="mt-2 text-xs leading-5">Shared reunion memories require both an account and a separate private invitation to the community. This RSVP link cannot open or add to the family’s memory capsule, and an account alone does not grant community access.</p>
       </div>
     </>
   );

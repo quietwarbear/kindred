@@ -61,6 +61,11 @@ test("declares every deliberate reunion funnel event", () => {
     "attendee_next_action_viewed",
     "contribution_claimed",
     "contribution_released",
+    "reunion_capsule_viewed",
+    "memory_contribution_started",
+    "memory_contribution_saved",
+    "memory_contribution_withdrawn",
+    "reunion_capsule_next_action_viewed",
   ]);
 });
 

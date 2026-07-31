@@ -497,6 +497,185 @@ async def _run_campaign():
     assert attendee_memory["tags"] == []
     assert attendee_memory["ai_summary"] == ""
 
+    capsule_path = f"/api/events/{sensitive_event['id']}/memory-capsule"
+    member_capsule = await _request_as(MEMBER, "GET", capsule_path)
+    assert member_capsule.status_code == 200
+    member_capsule_body = member_capsule.json()
+    assert member_capsule_body["memory_count"] == 1
+    assert member_capsule_body["own_contribution"]["status"] == "published"
+    assert "event_invites" not in str(member_capsule_body)
+    assert "community_id" not in str(member_capsule_body)
+
+    outsider_capsule = await _request_as(OUTSIDER, "GET", capsule_path)
+    assert outsider_capsule.status_code == 404
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://kindred.invalid",
+    ) as anonymous_client:
+        anonymous_capsule = await anonymous_client.get(capsule_path)
+    assert anonymous_capsule.status_code == 401
+
+    forged_capsule = await _request_as(
+        MEMBER,
+        "POST",
+        "/api/events/forged-reunion/memory-capsule/contribution",
+        json={
+            "story": "Synthetic forged association attempt.",
+            "status": "published",
+            "idempotency_key": "forged-association-attempt-0001",
+        },
+    )
+    assert forged_capsule.status_code == 404
+    assert (
+        await memories_collection.count_documents({"event_id": "forged-reunion"}) == 0
+    )
+
+    draft_path = f"{capsule_path}/contribution"
+    draft_payload = {
+        "story": "Synthetic private draft marker.",
+        "status": "draft",
+        "idempotency_key": "capsule-identical-create-0001",
+    }
+    identical_drafts = await asyncio.gather(
+        _request_as(second_member, "POST", draft_path, json=draft_payload),
+        _request_as(second_member, "POST", draft_path, json=draft_payload),
+    )
+    assert [response.status_code for response in identical_drafts] == [200, 200]
+    draft_capsule = identical_drafts[0].json()
+    assert draft_capsule["own_contribution"]["status"] == "draft"
+    draft_id = draft_capsule["own_contribution"]["id"]
+    assert (
+        await memories_collection.count_documents(
+            {
+                "event_id": sensitive_event["id"],
+                "created_by": second_member["id"],
+            }
+        )
+        == 1
+    )
+
+    divergent_retry = await _request_as(
+        second_member,
+        "POST",
+        draft_path,
+        json={
+            **draft_payload,
+            "story": "Divergent synthetic retry.",
+        },
+    )
+    assert divergent_retry.status_code == 409
+
+    general_memories = await _request_as(MEMBER, "GET", "/api/memories")
+    assert general_memories.status_code == 200
+    assert draft_id not in {row["id"] for row in general_memories.json()}
+    draft_search = await _request_as(
+        MEMBER,
+        "GET",
+        "/api/memory/search",
+        params={"q": "private draft marker"},
+    )
+    assert draft_search.status_code == 200
+    assert draft_search.json()["memories"] == []
+    draft_profile = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/kinship/person/{second_member['id']}",
+    )
+    assert draft_profile.status_code == 200
+    assert draft_profile.json()["memories"] == []
+    draft_health = await _request_as(MEMBER, "GET", "/api/community/health")
+    assert draft_health.status_code == 200
+    assert draft_health.json()["archive"]["memories"] == 1
+    draft_export = await _request_as(MEMBER, "GET", "/api/timeline/export")
+    assert draft_export.status_code == 200
+    assert draft_id not in str(draft_export.json())
+
+    generic_draft_edit = await _request_as(
+        MEMBER,
+        "PUT",
+        f"/api/memories/{draft_id}",
+        json={"title": "Synthetic unauthorized edit."},
+    )
+    assert generic_draft_edit.status_code == 404
+    generic_draft_comment = await _request_as(
+        MEMBER,
+        "POST",
+        f"/api/memories/{draft_id}/comments",
+        json={"text": "Synthetic unauthorized comment."},
+    )
+    assert generic_draft_comment.status_code == 404
+
+    other_edit = await _request_as(
+        MEMBER,
+        "PUT",
+        f"{draft_path}/{draft_id}",
+        json={
+            "story": "Synthetic unauthorized edit.",
+            "status": "published",
+            "idempotency_key": "capsule-other-edit-attempt-0001",
+        },
+    )
+    assert other_edit.status_code == 404
+
+    publish_draft = await _request_as(
+        second_member,
+        "PUT",
+        f"{draft_path}/{draft_id}",
+        json={
+            "story": "Synthetic published capsule story.",
+            "status": "published",
+            "idempotency_key": "capsule-publish-draft-0001",
+        },
+    )
+    assert publish_draft.status_code == 200
+    assert publish_draft.json()["memory_count"] == 2
+
+    withdrawal_payload = {"idempotency_key": "capsule-withdrawal-0001"}
+    withdrawn = await _request_as(
+        second_member,
+        "DELETE",
+        f"{draft_path}/{draft_id}",
+        json=withdrawal_payload,
+    )
+    repeated_withdrawal = await _request_as(
+        second_member,
+        "DELETE",
+        f"{draft_path}/{draft_id}",
+        json=withdrawal_payload,
+    )
+    assert withdrawn.status_code == 200
+    assert repeated_withdrawal.status_code == 200
+    assert await memories_collection.find_one({"id": draft_id}) is None
+
+    await events_collection.update_one(
+        {"id": sensitive_event["id"]},
+        {"$addToSet": {"hidden_from_user_ids": second_member["id"]}},
+    )
+    hidden_association = await _request_as(
+        second_member,
+        "POST",
+        draft_path,
+        json={
+            "story": "Synthetic hidden association attempt.",
+            "status": "published",
+            "idempotency_key": "capsule-hidden-association-0001",
+        },
+    )
+    assert hidden_association.status_code == 404
+    assert (
+        await memories_collection.count_documents(
+            {
+                "event_id": sensitive_event["id"],
+                "created_by": second_member["id"],
+            }
+        )
+        == 0
+    )
+    await events_collection.update_one(
+        {"id": sensitive_event["id"]},
+        {"$pull": {"hidden_from_user_ids": second_member["id"]}},
+    )
+
     planner = {
         "id": "synthetic-planner",
         "community_id": COMMUNITY_ID,
@@ -758,8 +937,17 @@ async def _run_campaign():
             "event_id": hidden_event["id"],
         },
     )
-    assert hidden_memory.status_code == 200
-    assert hidden_memory.json()["event_title"] == ""
+    assert hidden_memory.status_code == 404
+    assert (
+        await memories_collection.count_documents(
+            {
+                "event_id": hidden_event["id"],
+                "created_by": MEMBER["id"],
+                "title": "Synthetic private-association check",
+            }
+        )
+        == 0
+    )
     for path in (
         "/api/memories",
         "/api/memory/search?q=Surprise",

@@ -229,6 +229,16 @@ class AttendeeMemoryRequest(BaseModel):
     story: str = Field(min_length=1, max_length=4000)
 
 
+class ReunionMemoryContributionRequest(BaseModel):
+    story: str = Field(min_length=1, max_length=4000)
+    status: Literal["draft", "published"] = "published"
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
+class ReunionMemoryOperationRequest(BaseModel):
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
 class RSVPRequest(BaseModel):
     status: Literal["going", "some", "maybe", "not-going"]
     user_email: str = ""

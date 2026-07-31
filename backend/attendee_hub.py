@@ -243,6 +243,7 @@ def build_attendee_hub(
                 "It is not published to the open web."
             ),
             "completed": has_memory,
+            "capsule_path": f"/reunion/memories/{event.get('id', '')}",
         },
         "next_action": next_attendee_action(
             overall_status=overall_status,
