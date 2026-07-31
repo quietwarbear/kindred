@@ -13,11 +13,12 @@ import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
-
 if not os.environ.get("KINDRED_DISPOSABLE_MONGO_URL"):
     pytest.skip("A disposable MongoDB instance is required.", allow_module_level=True)
 if os.environ.get("MONGO_URL") != os.environ.get("KINDRED_DISPOSABLE_MONGO_URL"):
-    raise RuntimeError("Refusing to run database incident tests against a non-disposable MongoDB URL.")
+    raise RuntimeError(
+        "Refusing to run database incident tests against a non-disposable MongoDB URL."
+    )
 if not os.environ.get("DB_NAME", "").startswith("kindred_disposable_"):
     raise RuntimeError("Disposable database name must start with kindred_disposable_.")
 
@@ -25,6 +26,7 @@ from db import (  # noqa: E402
     budget_plans_collection,
     communities_collection,
     events_collection,
+    invites_collection,
     legacy_table_collection,
     memories_collection,
     notification_events_collection,
@@ -38,7 +40,6 @@ import routes.public as public_routes  # noqa: E402
 from routes.events import create_event, update_rsvp  # noqa: E402
 from routes.public import PublicRSVPRequest, public_rsvp_submit  # noqa: E402
 from server import app, ensure_indexes  # noqa: E402
-
 
 COMMUNITY_ID = "synthetic-community"
 HOST = {
@@ -88,31 +89,30 @@ async def _request_as(user, method, path, **kwargs):
 
 async def _run_campaign():
     await events_collection.database.drop_collection(events_collection.name)
+    await invites_collection.database.drop_collection(invites_collection.name)
     await users_collection.database.drop_collection(users_collection.name)
     await communities_collection.database.drop_collection(communities_collection.name)
     await notification_events_collection.database.drop_collection(
         notification_events_collection.name
     )
     await memories_collection.database.drop_collection(memories_collection.name)
-    await travel_plans_collection.database.drop_collection(
-        travel_plans_collection.name
-    )
-    await budget_plans_collection.database.drop_collection(
-        budget_plans_collection.name
-    )
-    await legacy_table_collection.database.drop_collection(
-        legacy_table_collection.name
-    )
+    await travel_plans_collection.database.drop_collection(travel_plans_collection.name)
+    await budget_plans_collection.database.drop_collection(budget_plans_collection.name)
+    await legacy_table_collection.database.drop_collection(legacy_table_collection.name)
     await ensure_indexes()
-    await communities_collection.insert_one({
-        "id": COMMUNITY_ID,
-        "name": "Synthetic Community",
-    })
-    await legacy_table_collection.insert_one({
-        "id": "synthetic-legacy-config",
-        "community_id": COMMUNITY_ID,
-        "base_url": "https://example.invalid",
-    })
+    await communities_collection.insert_one(
+        {
+            "id": COMMUNITY_ID,
+            "name": "Synthetic Community",
+        }
+    )
+    await legacy_table_collection.insert_one(
+        {
+            "id": "synthetic-legacy-config",
+            "community_id": COMMUNITY_ID,
+            "base_url": "https://example.invalid",
+        }
+    )
     await users_collection.insert_many([HOST.copy(), MEMBER.copy(), OUTSIDER.copy()])
 
     sensitive_event = {
@@ -128,30 +128,36 @@ async def _run_campaign():
         "location": "Synthetic Venue",
         "event_template": "reunion",
         "gathering_format": "in-person",
-        "event_invites": [{
-            "id": "synthetic-bearer-credential",
-            "member_id": MEMBER["id"],
-            "invite_source": "member",
-            "invitee_name": MEMBER["full_name"],
-            "email": MEMBER["email"],
-            "note": "Synthetic private note",
-            "share_message": "Synthetic private invitation message",
-            "rsvp_status": "going",
-        }],
-        "rsvp_records": [{
-            "user_id": MEMBER["id"],
-            "user_name": MEMBER["full_name"],
-            "status": "going",
-            "guests": 1,
-            "updated_at": "2027-01-01T00:00:00+00:00",
-        }],
-        "activity_rsvps": [{
-            "activity_id": "synthetic-private-activity",
-            "respondent_id": MEMBER["id"],
-            "display_name": MEMBER["full_name"],
-            "status": "coming",
-            "party_size": 2,
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-bearer-credential",
+                "member_id": MEMBER["id"],
+                "invite_source": "member",
+                "invitee_name": MEMBER["full_name"],
+                "email": MEMBER["email"],
+                "note": "Synthetic private note",
+                "share_message": "Synthetic private invitation message",
+                "rsvp_status": "going",
+            }
+        ],
+        "rsvp_records": [
+            {
+                "user_id": MEMBER["id"],
+                "user_name": MEMBER["full_name"],
+                "status": "going",
+                "guests": 1,
+                "updated_at": "2027-01-01T00:00:00+00:00",
+            }
+        ],
+        "activity_rsvps": [
+            {
+                "activity_id": "synthetic-private-activity",
+                "respondent_id": MEMBER["id"],
+                "display_name": MEMBER["full_name"],
+                "status": "coming",
+                "party_size": 2,
+            }
+        ],
         "activity_rsvp_summaries": {},
         "agenda": [],
         "rsvp_revision": 0,
@@ -166,51 +172,61 @@ async def _run_campaign():
         "end_at": (hidden_start + timedelta(hours=2)).isoformat(),
         "hidden_from_user_ids": [MEMBER["id"]],
         "recurrence_frequency": "weekly",
-        "event_invites": [{
-            "id": "synthetic-hidden-invite",
-            "member_id": MEMBER["id"],
-            "invite_source": "member",
-            "invitee_name": MEMBER["full_name"],
-            "email": MEMBER["email"],
-            "rsvp_status": "pending",
-        }],
-        "rsvp_records": [{
-            "user_id": MEMBER["id"],
-            "user_name": MEMBER["full_name"],
-            "status": "going",
-            "guests": 0,
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-hidden-invite",
+                "member_id": MEMBER["id"],
+                "invite_source": "member",
+                "invitee_name": MEMBER["full_name"],
+                "email": MEMBER["email"],
+                "rsvp_status": "pending",
+            }
+        ],
+        "rsvp_records": [
+            {
+                "user_id": MEMBER["id"],
+                "user_name": MEMBER["full_name"],
+                "status": "going",
+                "guests": 0,
+            }
+        ],
         "activity_rsvps": [],
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(hidden_event.copy())
-    await memories_collection.insert_one({
-        "id": "synthetic-hidden-memory",
-        "community_id": COMMUNITY_ID,
-        "event_id": hidden_event["id"],
-        "event_title": hidden_event["title"],
-        "title": "Synthetic Surprise Memory",
-        "description": "Synthetic hidden-event memory details",
-        "created_by": HOST["id"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    await travel_plans_collection.insert_one({
-        "id": "synthetic-hidden-travel",
-        "community_id": COMMUNITY_ID,
-        "event_id": hidden_event["id"],
-        "title": "Synthetic Surprise Travel",
-        "details": "Synthetic hidden travel details",
-        "amount_estimate": 100,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    await budget_plans_collection.insert_one({
-        "id": "synthetic-hidden-budget",
-        "community_id": COMMUNITY_ID,
-        "event_id": hidden_event["id"],
-        "title": "Synthetic Surprise Budget",
-        "target_amount": 500,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    await memories_collection.insert_one(
+        {
+            "id": "synthetic-hidden-memory",
+            "community_id": COMMUNITY_ID,
+            "event_id": hidden_event["id"],
+            "event_title": hidden_event["title"],
+            "title": "Synthetic Surprise Memory",
+            "description": "Synthetic hidden-event memory details",
+            "created_by": HOST["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    await travel_plans_collection.insert_one(
+        {
+            "id": "synthetic-hidden-travel",
+            "community_id": COMMUNITY_ID,
+            "event_id": hidden_event["id"],
+            "title": "Synthetic Surprise Travel",
+            "details": "Synthetic hidden travel details",
+            "amount_estimate": 100,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    await budget_plans_collection.insert_one(
+        {
+            "id": "synthetic-hidden-budget",
+            "community_id": COMMUNITY_ID,
+            "event_id": hidden_event["id"],
+            "title": "Synthetic Surprise Budget",
+            "target_amount": 500,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -226,9 +242,7 @@ async def _run_campaign():
             headers={"Authorization": "Bearer synthetic-bearer-credential"},
             json={"status": "going", "guests": 1, "activity_responses": {}},
         )
-        legacy_path = await client.get(
-            "/api/public/rsvp/synthetic-bearer-credential"
-        )
+        legacy_path = await client.get("/api/public/rsvp/synthetic-bearer-credential")
         hidden_public_view = await client.get(
             "/api/public/rsvp",
             headers={"Authorization": "Bearer synthetic-hidden-invite"},
@@ -246,6 +260,239 @@ async def _run_campaign():
     assert legacy_path.status_code == 404
     assert hidden_public_view.status_code == 404
     assert hidden_public_submit.status_code == 404
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://kindred.invalid",
+    ) as client:
+        anonymous_command = await client.get(
+            f"/api/events/{sensitive_event['id']}/command-center"
+        )
+    assert anonymous_command.status_code == 401
+    member_command = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/command-center",
+    )
+    assert member_command.status_code == 403
+    platform_admin_member = {
+        **MEMBER,
+        "id": "synthetic-platform-admin",
+        "is_platform_admin": True,
+    }
+    platform_admin_command = await _request_as(
+        platform_admin_member,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/command-center",
+    )
+    assert platform_admin_command.status_code == 403
+    cross_community_command = await _request_as(
+        OUTSIDER,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/command-center",
+    )
+    assert cross_community_command.status_code == 404
+    hidden_organizer = {**MEMBER, "role": "organizer"}
+    hidden_command = await _request_as(
+        hidden_organizer,
+        "GET",
+        f"/api/events/{hidden_event['id']}/command-center",
+    )
+    assert hidden_command.status_code == 404
+    organizer_command = await _request_as(
+        HOST,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/command-center",
+    )
+    assert organizer_command.status_code == 200
+    command_text = str(organizer_command.json())
+    assert organizer_command.json()["responses"]["reconciles"] is True
+    assert organizer_command.json()["responses"]["total"] == 1
+    assert organizer_command.json()["responses"]["missing"] == 0
+    assert "synthetic-bearer-credential" not in command_text
+    assert MEMBER["email"] not in command_text
+    assert MEMBER["full_name"] not in command_text
+    organizer_preview = await _request_as(
+        HOST,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/guest-preview",
+    )
+    assert organizer_preview.status_code == 200
+    preview_text = str(organizer_preview.json())
+    assert "synthetic-bearer-credential" not in preview_text
+    assert MEMBER["email"] not in preview_text
+    assert "Synthetic private" not in preview_text
+
+    planner = {
+        "id": "synthetic-planner",
+        "community_id": COMMUNITY_ID,
+        "full_name": "Synthetic Planner",
+        "email": "planner@example.invalid",
+        "email_normalized": "planner@example.invalid",
+        "role": "organizer",
+    }
+    ordinary_planning_candidate = {
+        "id": "synthetic-ordinary-planning-candidate",
+        "community_id": COMMUNITY_ID,
+        "full_name": "Synthetic Ordinary Member",
+        "email": "ordinary@example.com",
+        "email_normalized": "ordinary@example.com",
+        "role": "member",
+    }
+    await users_collection.insert_many(
+        [planner.copy(), ordinary_planning_candidate.copy()]
+    )
+    ordinary_member_assignment = await _request_as(
+        HOST,
+        "POST",
+        f"/api/events/{sensitive_event['id']}/planning-team/invitations",
+        json={
+            "email": ordinary_planning_candidate["email"].upper(),
+            "idempotency_key": "planner-member-attempt-0001",
+        },
+    )
+    assert ordinary_member_assignment.status_code == 409
+    assert (await users_collection.find_one({"id": ordinary_planning_candidate["id"]}))[
+        "role"
+    ] == "member"
+
+    invitation_path = f"/api/events/{sensitive_event['id']}/planning-team/invitations"
+    concurrent_invites = await asyncio.gather(
+        _request_as(
+            HOST,
+            "POST",
+            invitation_path,
+            json={
+                "email": "NEW.PLANNER@example.com",
+                "idempotency_key": "planner-invite-concurrent-0001",
+            },
+        ),
+        _request_as(
+            HOST,
+            "POST",
+            invitation_path,
+            json={
+                "email": "new.planner@EXAMPLE.COM",
+                "idempotency_key": "planner-invite-concurrent-0002",
+            },
+        ),
+    )
+    assert [response.status_code for response in concurrent_invites] == [200, 200]
+    assert (
+        await invites_collection.count_documents(
+            {
+                "planning_event_id": sensitive_event["id"],
+                "email_normalized": "new.planner@example.com",
+                "status": "pending",
+            }
+        )
+        == 1
+    )
+    idempotent_retry = await _request_as(
+        HOST,
+        "POST",
+        invitation_path,
+        json={
+            "email": "new.planner@example.com",
+            "idempotency_key": "planner-invite-concurrent-0001",
+        },
+    )
+    assert idempotent_retry.status_code == 200
+    planning_team_view = await _request_as(
+        HOST,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/planning-team",
+    )
+    assert planning_team_view.status_code == 200
+    pending_invitation = planning_team_view.json()["pending_invitations"][0]
+    assert pending_invitation["email"] == "new.planner@example.com"
+    assert "code" not in str(planning_team_view.json())
+    revoke_invitation = await _request_as(
+        HOST,
+        "DELETE",
+        (
+            f"/api/events/{sensitive_event['id']}/planning-team/invitations/"
+            f"{pending_invitation['id']}"
+        ),
+    )
+    assert revoke_invitation.status_code == 200
+    assert (
+        await invites_collection.count_documents(
+            {
+                "planning_event_id": sensitive_event["id"],
+                "status": "pending",
+            }
+        )
+        == 0
+    )
+
+    assignment_path = f"/api/events/{sensitive_event['id']}/planning-team/assignments"
+    concurrent_assignments = await asyncio.gather(
+        _request_as(
+            HOST,
+            "POST",
+            assignment_path,
+            json={
+                "member_id": planner["id"],
+                "idempotency_key": "planner-assignment-concurrent-0001",
+            },
+        ),
+        _request_as(
+            HOST,
+            "POST",
+            assignment_path,
+            json={
+                "member_id": planner["id"],
+                "idempotency_key": "planner-assignment-concurrent-0002",
+            },
+        ),
+    )
+    assert [response.status_code for response in concurrent_assignments] == [200, 200]
+    assigned_event = await events_collection.find_one({"id": sensitive_event["id"]})
+    assert assigned_event["planning_team_member_ids"] == [planner["id"]]
+    revoke_assignment = await _request_as(
+        HOST,
+        "DELETE",
+        (
+            f"/api/events/{sensitive_event['id']}/planning-team/assignments/"
+            f"{planner['id']}"
+        ),
+    )
+    assert revoke_assignment.status_code == 200
+    assigned_event = await events_collection.find_one({"id": sensitive_event["id"]})
+    assert assigned_event.get("planning_team_member_ids", []) == []
+    hidden_assignment = await _request_as(
+        hidden_organizer,
+        "POST",
+        f"/api/events/{hidden_event['id']}/planning-team/assignments",
+        json={
+            "member_id": planner["id"],
+            "idempotency_key": "planner-hidden-attempt-0001",
+        },
+    )
+    assert hidden_assignment.status_code == 404
+    cross_community_assignment = await _request_as(
+        OUTSIDER,
+        "POST",
+        assignment_path,
+        json={
+            "member_id": planner["id"],
+            "idempotency_key": "planner-cross-community-0001",
+        },
+    )
+    assert cross_community_assignment.status_code == 404
+
+    before_reminder = await events_collection.find_one({"id": sensitive_event["id"]})
+    reminder_preflight = await _request_as(
+        HOST,
+        "POST",
+        f"/api/events/{sensitive_event['id']}/reminders/preflight",
+        json={"idempotency_key": "reminder-preflight-no-mutation-0001"},
+    )
+    assert reminder_preflight.status_code == 200
+    assert reminder_preflight.json()["available"] is False
+    after_reminder = await events_collection.find_one({"id": sensitive_event["id"]})
+    assert before_reminder == after_reminder
 
     for path in ("/api/events", f"/api/events/{sensitive_event['id']}"):
         member_response = await _request_as(MEMBER, "GET", path)
@@ -275,10 +522,11 @@ async def _run_campaign():
             else [organizer_response.json()]
         )
         organizer_event = next(
-            event for event in organizer_events
-            if event["id"] == sensitive_event["id"]
+            event for event in organizer_events if event["id"] == sensitive_event["id"]
         )
-        assert organizer_event["event_invites"][0]["id"] == "synthetic-bearer-credential"
+        assert (
+            organizer_event["event_invites"][0]["id"] == "synthetic-bearer-credential"
+        )
         assert organizer_event["rsvp_records"][0]["user_id"] == MEMBER["id"]
 
     member_timeline = await _request_as(MEMBER, "GET", "/api/timeline/archive")
@@ -374,25 +622,29 @@ async def _run_campaign():
         **sensitive_event,
         "id": "synthetic-hide-write-race",
         "title": "Synthetic Race Gathering",
-        "event_invites": [{
-            "id": "synthetic-race-public",
-            "member_id": MEMBER["id"],
-            "invite_source": "member",
-            "invitee_name": MEMBER["full_name"],
-            "email": MEMBER["email"],
-            "rsvp_status": "pending",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-race-public",
+                "member_id": MEMBER["id"],
+                "invite_source": "member",
+                "invitee_name": MEMBER["full_name"],
+                "email": MEMBER["email"],
+                "rsvp_status": "pending",
+            }
+        ],
         "rsvp_records": [],
         "activity_rsvps": [],
-        "agenda": [{
-            "id": "synthetic-race-activity",
-            "title": "Synthetic Race Activity",
-            "start_at": (hidden_start + timedelta(hours=1)).isoformat(),
-            "end_at": (hidden_start + timedelta(hours=2)).isoformat(),
-            "timezone": "UTC",
-            "visibility": "published",
-            "attendance_requested": True,
-        }],
+        "agenda": [
+            {
+                "id": "synthetic-race-activity",
+                "title": "Synthetic Race Activity",
+                "start_at": (hidden_start + timedelta(hours=1)).isoformat(),
+                "end_at": (hidden_start + timedelta(hours=2)).isoformat(),
+                "timezone": "UTC",
+                "visibility": "published",
+                "attendance_requested": True,
+            }
+        ],
         "hidden_from_user_ids": [],
         "rsvp_revision": 0,
     }
@@ -490,60 +742,62 @@ async def _run_campaign():
         anonymous = await client.get(f"/api/events/{sensitive_event['id']}")
     assert anonymous.status_code == 401
 
-    await notification_events_collection.insert_many([
-        {
-            "id": "synthetic-organizer-rsvp-notification",
-            "community_id": COMMUNITY_ID,
-            "event_type": "event-rsvp",
-            "title": "RSVP updated",
-            "description": f"{MEMBER['full_name']} is attending.",
-            "audience_scope": "organizer",
-            "read_by_user_ids": [],
-            "created_at": "2099-01-02T00:00:00+00:00",
-        },
-        {
-            "id": "synthetic-community-notification",
-            "community_id": COMMUNITY_ID,
-            "event_type": "event-create",
-            "title": "Community gathering",
-            "description": "A gathering was created.",
-            "audience_scope": "community",
-            "read_by_user_ids": [],
-            "created_at": "2099-01-01T00:00:00+00:00",
-        },
-        {
-            "id": "synthetic-legacy-rsvp-notification",
-            "community_id": COMMUNITY_ID,
-            "event_type": "rsvp-update",
-            "title": "Legacy RSVP updated",
-            "description": f"{MEMBER['full_name']} is attending.",
-            "audience_scope": "event",
-            "read_by_user_ids": [],
-            "created_at": "2099-01-03T00:00:00+00:00",
-        },
-        {
-            "id": "synthetic-hidden-invite-notification",
-            "community_id": COMMUNITY_ID,
-            "event_type": "event-invite",
-            "title": f"Invites prepared for {hidden_event['title']}",
-            "description": "Synthetic hidden invitation details.",
-            "related_id": hidden_event["id"],
-            "audience_scope": "event",
-            "read_by_user_ids": [],
-            "created_at": "2099-01-04T00:00:00+00:00",
-        },
-        {
-            "id": "synthetic-hidden-reminder-notification",
-            "community_id": COMMUNITY_ID,
-            "event_type": "reminder-send",
-            "title": f"Reminders prepared for {hidden_event['title']}",
-            "description": "Synthetic hidden reminder details.",
-            "related_id": hidden_event["id"],
-            "audience_scope": "event",
-            "read_by_user_ids": [],
-            "created_at": "2099-01-05T00:00:00+00:00",
-        },
-    ])
+    await notification_events_collection.insert_many(
+        [
+            {
+                "id": "synthetic-organizer-rsvp-notification",
+                "community_id": COMMUNITY_ID,
+                "event_type": "event-rsvp",
+                "title": "RSVP updated",
+                "description": f"{MEMBER['full_name']} is attending.",
+                "audience_scope": "organizer",
+                "read_by_user_ids": [],
+                "created_at": "2099-01-02T00:00:00+00:00",
+            },
+            {
+                "id": "synthetic-community-notification",
+                "community_id": COMMUNITY_ID,
+                "event_type": "event-create",
+                "title": "Community gathering",
+                "description": "A gathering was created.",
+                "audience_scope": "community",
+                "read_by_user_ids": [],
+                "created_at": "2099-01-01T00:00:00+00:00",
+            },
+            {
+                "id": "synthetic-legacy-rsvp-notification",
+                "community_id": COMMUNITY_ID,
+                "event_type": "rsvp-update",
+                "title": "Legacy RSVP updated",
+                "description": f"{MEMBER['full_name']} is attending.",
+                "audience_scope": "event",
+                "read_by_user_ids": [],
+                "created_at": "2099-01-03T00:00:00+00:00",
+            },
+            {
+                "id": "synthetic-hidden-invite-notification",
+                "community_id": COMMUNITY_ID,
+                "event_type": "event-invite",
+                "title": f"Invites prepared for {hidden_event['title']}",
+                "description": "Synthetic hidden invitation details.",
+                "related_id": hidden_event["id"],
+                "audience_scope": "event",
+                "read_by_user_ids": [],
+                "created_at": "2099-01-04T00:00:00+00:00",
+            },
+            {
+                "id": "synthetic-hidden-reminder-notification",
+                "community_id": COMMUNITY_ID,
+                "event_type": "reminder-send",
+                "title": f"Reminders prepared for {hidden_event['title']}",
+                "description": "Synthetic hidden reminder details.",
+                "related_id": hidden_event["id"],
+                "audience_scope": "event",
+                "read_by_user_ids": [],
+                "created_at": "2099-01-05T00:00:00+00:00",
+            },
+        ]
+    )
     for path in ("/api/activity-feed", "/api/notifications/history"):
         host_feed = await _request_as(HOST, "GET", path)
         member_feed = await _request_as(MEMBER, "GET", path)
@@ -618,17 +872,19 @@ async def _run_campaign():
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(concurrency_event.copy())
-    await asyncio.gather(*[
-        public_rsvp_submit(
-            f"synthetic-concurrent-{index:02d}",
-            PublicRSVPRequest(
-                status="going",
-                guests=index % 3,
-                activity_responses={"synthetic-activity": "coming"},
-            ),
-        )
-        for index in range(invite_count)
-    ])
+    await asyncio.gather(
+        *[
+            public_rsvp_submit(
+                f"synthetic-concurrent-{index:02d}",
+                PublicRSVPRequest(
+                    status="going",
+                    guests=index % 3,
+                    activity_responses={"synthetic-activity": "coming"},
+                ),
+            )
+            for index in range(invite_count)
+        ]
+    )
     persisted = await events_collection.find_one(
         {"id": concurrency_event["id"]},
         {"_id": 0},
@@ -636,8 +892,7 @@ async def _run_campaign():
     assert len(persisted["rsvp_records"]) == invite_count
     assert len(persisted["activity_rsvps"]) == invite_count
     assert all(
-        invite["rsvp_status"] == "going"
-        for invite in persisted["event_invites"]
+        invite["rsvp_status"] == "going" for invite in persisted["event_invites"]
     )
     assert persisted["rsvp_revision"] == invite_count
 
@@ -648,13 +903,15 @@ async def _run_campaign():
     legacy_member_event = {
         **sensitive_event,
         "id": "synthetic-legacy-member-event",
-        "event_invites": [{
-            "id": "synthetic-legacy-member-invite",
-            "invite_source": "member",
-            "invitee_name": MEMBER["full_name"],
-            "email": MEMBER["email"],
-            "rsvp_status": "pending",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-legacy-member-invite",
+                "invite_source": "member",
+                "invitee_name": MEMBER["full_name"],
+                "email": MEMBER["email"],
+                "rsvp_status": "pending",
+            }
+        ],
         "rsvp_records": [],
         "activity_rsvps": [],
         "agenda": [activity],
@@ -687,13 +944,15 @@ async def _run_campaign():
     guest_identity_event = {
         **sensitive_event,
         "id": "synthetic-guest-identity-event",
-        "event_invites": [{
-            "id": "synthetic-guest-identity-invite",
-            "invite_source": "guest",
-            "invitee_name": "Synthetic Unrelated Guest",
-            "email": MEMBER["email"],
-            "rsvp_status": "pending",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-guest-identity-invite",
+                "invite_source": "guest",
+                "invitee_name": "Synthetic Unrelated Guest",
+                "email": MEMBER["email"],
+                "rsvp_status": "pending",
+            }
+        ],
         "rsvp_records": [],
         "activity_rsvps": [],
         "agenda": [activity],
@@ -731,16 +990,18 @@ async def _run_campaign():
         create_event(idempotent_payload, HOST),
     )
     assert first["id"] == retry["id"]
-    assert await events_collection.count_documents({
-        "community_id": COMMUNITY_ID,
-        "created_by": HOST["id"],
-        "client_request_id": "synthetic-idempotency-key",
-    }) == 1
+    assert (
+        await events_collection.count_documents(
+            {
+                "community_id": COMMUNITY_ID,
+                "created_by": HOST["id"],
+                "client_request_id": "synthetic-idempotency-key",
+            }
+        )
+        == 1
+    )
 
-    indexes = {
-        index["name"]: index
-        async for index in events_collection.list_indexes()
-    }
+    indexes = {index["name"]: index async for index in events_collection.list_indexes()}
     assert indexes["event_invitation_token_lookup"]["unique"] is True
     assert indexes["event_creation_idempotency"]["unique"] is True
     explain = await events_collection.database.command(
@@ -789,14 +1050,16 @@ async def _run_campaign():
         "timezone": "UTC",
         "event_invites": [],
         "rsvp_records": [],
-        "agenda": [{
-            "id": "synthetic-inherited-timezone-activity",
-            "title": "Inherited local time",
-            "start_at": "2027-11-07T01:30:00",
-            "end_at": "2027-11-07T03:30:00",
-            "timezone": "",
-            "visibility": "published",
-        }],
+        "agenda": [
+            {
+                "id": "synthetic-inherited-timezone-activity",
+                "title": "Inherited local time",
+                "start_at": "2027-11-07T01:30:00",
+                "end_at": "2027-11-07T03:30:00",
+                "timezone": "",
+                "visibility": "published",
+            }
+        ],
     }
     await events_collection.insert_one(inherited_timezone_event.copy())
     ambiguous_timezone_update = await _request_as(
@@ -817,10 +1080,12 @@ async def _run_campaign():
 
     await events_collection.update_one(
         {"id": inherited_timezone_event["id"]},
-        {"$set": {
-            "agenda.0.start_at": "2027-03-14T02:30:00",
-            "agenda.0.end_at": "2027-03-14T04:30:00",
-        }},
+        {
+            "$set": {
+                "agenda.0.start_at": "2027-03-14T02:30:00",
+                "agenda.0.end_at": "2027-03-14T04:30:00",
+            }
+        },
     )
     nonexistent_timezone_update = await _request_as(
         HOST,
@@ -860,7 +1125,8 @@ async def _run_campaign():
     )
     assert timezone_override.status_code == 200
     timezone_activity = next(
-        item for item in timezone_override.json()["agenda"]
+        item
+        for item in timezone_override.json()["agenda"]
         if item["title"] == "Synthetic Timezone Override"
     )
     assert timezone_activity["timezone"] == "Pacific/Honolulu"
@@ -869,13 +1135,15 @@ async def _run_campaign():
         {"id": deadline_event["id"]},
         {"_id": 0},
     )
-    deadline_event["event_invites"] = [{
-        "id": "synthetic-future-deadline-invite",
-        "invite_source": "guest",
-        "invitee_name": "Synthetic Future Guest",
-        "email": "future@example.invalid",
-        "rsvp_status": "pending",
-    }]
+    deadline_event["event_invites"] = [
+        {
+            "id": "synthetic-future-deadline-invite",
+            "invite_source": "guest",
+            "invitee_name": "Synthetic Future Guest",
+            "email": "future@example.invalid",
+            "rsvp_status": "pending",
+        }
+    ]
     await events_collection.replace_one(
         {"id": deadline_event["id"]},
         deadline_event,
@@ -892,20 +1160,24 @@ async def _run_campaign():
     expired = {
         **sensitive_event,
         "id": "synthetic-expired-event",
-        "event_invites": [{
-            "id": "synthetic-expired-invite",
-            "invite_source": "guest",
-            "invitee_name": "Synthetic Guest",
-            "email": "expired@example.invalid",
-            "rsvp_status": "pending",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-expired-invite",
+                "invite_source": "guest",
+                "invitee_name": "Synthetic Guest",
+                "email": "expired@example.invalid",
+                "rsvp_status": "pending",
+            }
+        ],
         "rsvp_records": [],
-        "agenda": [{
-            **activity,
-            "rsvp_deadline": (
-                datetime.now(timezone.utc) - timedelta(hours=1)
-            ).isoformat(),
-        }],
+        "agenda": [
+            {
+                **activity,
+                "rsvp_deadline": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).isoformat(),
+            }
+        ],
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(expired.copy())
@@ -922,17 +1194,21 @@ async def _run_campaign():
     invalid_stored_deadline = {
         **expired,
         "id": "synthetic-invalid-stored-deadline-event",
-        "event_invites": [{
-            "id": "synthetic-invalid-stored-deadline-invite",
-            "invite_source": "guest",
-            "invitee_name": "Synthetic Guest",
-            "email": "invalid-deadline@example.invalid",
-            "rsvp_status": "pending",
-        }],
-        "agenda": [{
-            **activity,
-            "rsvp_deadline": "not-a-date",
-        }],
+        "event_invites": [
+            {
+                "id": "synthetic-invalid-stored-deadline-invite",
+                "invite_source": "guest",
+                "invitee_name": "Synthetic Guest",
+                "email": "invalid-deadline@example.invalid",
+                "rsvp_status": "pending",
+            }
+        ],
+        "agenda": [
+            {
+                **activity,
+                "rsvp_deadline": "not-a-date",
+            }
+        ],
     }
     await events_collection.insert_one(invalid_stored_deadline.copy())
     with pytest.raises(HTTPException) as invalid_exc:

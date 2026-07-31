@@ -275,9 +275,31 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
 }
 
 (async () => {
-  const liveResponse = await fetch(API_URL);
-  if (!liveResponse.ok) throw new Error(`Live plans API returned ${liveResponse.status}`);
-  const livePlans = await liveResponse.text();
+  const offline = process.env.KINDRED_OFFLINE_BROWSER === '1';
+  const offlineAmounts = {
+    seedling: { free: { amount: 0, recurring: false, label: 'Free' } },
+    sapling: { monthly: { amount: 9.99 }, annual: { amount: 89.99 } },
+    oak: { monthly: { amount: 19.99 }, annual: { amount: 179.99 } },
+    redwood: { monthly: { amount: 39.99 }, annual: { amount: 359.99 } },
+    'elder-grove': {},
+  };
+  const offlinePayload = {
+    plans: Object.entries(offlineAmounts).map(([id, billingOptions]) => ({
+      id,
+      name: id.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' '),
+      tagline: 'Synthetic local browser-verification plan.',
+      features: ['Synthetic local browser-verification feature'],
+      billing_options: billingOptions,
+      custom_pricing: id === 'elder-grove',
+    })),
+  };
+  const livePlans = offline
+    ? JSON.stringify(offlinePayload)
+    : await (async () => {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error(`Live plans API returned ${response.status}`);
+      return response.text();
+    })();
   const livePayload = JSON.parse(livePlans);
   const expectedAmounts = {
     sapling: { monthly: 9.99, annual: 89.99 },

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -21,12 +20,12 @@ def test_reunion_flow_preserves_the_existing_security_boundary():
 
 def test_public_rsvp_remains_minimal_and_identifies_the_organizer():
     public = read("backend/routes/public.py")
+    privacy = read("backend/event_privacy.py")
     events = read("backend/routes/events.py")
-    public_view = public.split("def _public_view", 1)[1].split(
-        "async def _public_rsvp_view", 1
-    )[0]
+    public_view = privacy.split("def serialize_event_for_guest", 1)[1]
     assert '"created_by_name": current_user["full_name"]' in events
     assert '"event_template": event.get("event_template", "custom")' in public_view
+    assert "return serialize_event_for_guest(event, invite)" in public
     assert 'view["invited_by_name"]' in public
     for forbidden in ["member_count", "event_invites", "rsvp_records", "community_id"]:
         assert forbidden not in public_view
@@ -69,7 +68,7 @@ def test_invitation_credentials_stay_out_of_new_request_urls_and_worker_caches()
     worker = read("frontend/public/sw.js")
     backend = read("backend/routes/public.py")
     assert 'path="/rsvp"' in app
-    assert 'fetch(`${API_URL}/public/rsvp`' in page
+    assert "fetch(`${API_URL}/public/rsvp`" in page
     assert "/public/rsvp/${token}" not in page
     assert "/rsvp#${encodeURIComponent(invitationId)}" in transport
     assert "Authorization: `Bearer ${token}`" in transport
@@ -87,7 +86,7 @@ def test_fragment_invitation_blocks_pre_react_third_party_scripts():
     css = read("frontend/src/index.css")
     landing = read("frontend/src/components/LandingPage.jsx")
     assert "window.__kindredSensitiveInvitationRoute" in html
-    assert r'^\/rsvp\/?$' in html
+    assert r"^\/rsvp\/?$" in html
     assert "Boolean(window.location.hash)" in html
     assert html.count("!window.__kindredSensitiveInvitationRoute") >= 3
     for third_party in [

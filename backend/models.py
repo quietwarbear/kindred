@@ -240,7 +240,9 @@ class EventCreateRequest(BaseModel):
     event_template: str = "custom"
     gathering_format: str = "in-person"
     max_attendees: int = 50
-    recurrence_frequency: Literal["none", "daily", "weekly", "monthly", "yearly"] = "none"
+    recurrence_frequency: Literal["none", "daily", "weekly", "monthly", "yearly"] = (
+        "none"
+    )
     recurrence_count: int = 4
     subyard_id: str = ""
     assigned_roles: list[str] = Field(default_factory=list)
@@ -278,6 +280,20 @@ class EventRoleAssignmentRequest(BaseModel):
 
 class EventMeetingLinkRequest(BaseModel):
     meeting_link: str = ""
+
+
+class PlanningTeamInvitationRequest(BaseModel):
+    email: EmailStr
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
+class PlanningTeamAssignmentRequest(BaseModel):
+    member_id: str = Field(min_length=1, max_length=100)
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
+class ReminderPreflightRequest(BaseModel):
+    idempotency_key: str = Field(min_length=16, max_length=128)
 
 
 class EventPublic(BaseModel):

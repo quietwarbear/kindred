@@ -108,6 +108,15 @@ export const REUNION_EVENTS = Object.freeze([
   "activity_rsvp_updated",
   "itinerary_viewed",
   "activity_roster_viewed",
+  "command_center_viewed",
+  "next_action_viewed",
+  "next_action_completed",
+  "invitation_share_initiated",
+  "reminder_preflight_passed",
+  "reminder_preflight_failed",
+  "planning_team_setup_started",
+  "planning_team_setup_completed",
+  "organizer_returned_after_first_rsvp",
 ]);
 
 const SAFE_REUNION_PROPERTY_KEYS = new Set([
@@ -124,6 +133,11 @@ const SAFE_REUNION_PROPERTY_KEYS = new Set([
   "day_number",
   "response_category",
   "actor_type",
+  "action_code",
+  "result",
+  "planning_team_state",
+  "reminder_code",
+  "return_reason",
 ]);
 
 // Acquisition events must never contain family content, names, emails,

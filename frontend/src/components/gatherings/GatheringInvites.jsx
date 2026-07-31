@@ -11,9 +11,15 @@ import { toast } from "@/components/ui/sonner";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
 
-const ShareMessageButton = ({ text, testId }) => {
+const ShareMessageButton = ({ isReunion, text, testId }) => {
   const [copied, setCopied] = useState(false);
   const handleShare = async () => {
+    if (isReunion) {
+      trackReunionEvent("invitation_share_initiated", {
+        source: "gathering_invites",
+        status: navigator.share ? "native_share" : "copy",
+      });
+    }
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch { /* cancelled */ }
     }
@@ -158,7 +164,11 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
             {invite.share_message && (
               <div className="mt-2 flex items-start gap-2">
                 <p className="flex-1 text-sm leading-7 text-muted-foreground" data-testid={`gatherings-event-invite-message-${invite.id}`}>{invite.share_message}</p>
-                <ShareMessageButton text={invite.share_message} testId={`gatherings-event-invite-share-${invite.id}`} />
+                <ShareMessageButton
+                  isReunion={event.event_template === "reunion"}
+                  text={invite.share_message}
+                  testId={`gatherings-event-invite-share-${invite.id}`}
+                />
               </div>
             )}
             <CopyRsvpLinkButton inviteId={invite.id} isReunion={event.event_template === "reunion"} />
