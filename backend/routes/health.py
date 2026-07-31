@@ -57,6 +57,7 @@ async def community_health(current_user: dict[str, Any] = Depends(get_current_us
         {
             "community_id": community_id,
             "hidden_from_user_ids": {"$ne": current_user["id"]},
+            "publication_state": {"$ne": "organizer_draft"},
         },
         {"_id": 0, "rsvp_records": 1, "volunteer_slots": 1},
     ).to_list(3000)

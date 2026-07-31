@@ -76,7 +76,29 @@ test("declares every deliberate reunion funnel event", () => {
     "guest_family_access_status_viewed",
     "guest_family_access_cancelled",
     "guest_family_access_decided",
+    "reunion_recap_viewed",
+    "reunion_recap_published",
+    "reunion_memory_continued",
+    "next_gathering_started",
   ]);
+});
+
+test("reunion recap analytics keep only bounded categories", () => {
+  trackReunionEvent("next_gathering_started", {
+    viewer_role: "organizer",
+    recap_state: "published",
+    next_action_category: "continue_planning",
+    message: "Private family message",
+    reunion_title: "Private reunion",
+    event_id: "private-event",
+    start_at: "2027-01-01T00:00:00Z",
+    url: "https://example.invalid/private",
+  });
+  expect(posthog.capture).toHaveBeenCalledWith("next_gathering_started", {
+    viewer_role: "organizer",
+    recap_state: "published",
+    next_action_category: "continue_planning",
+  });
 });
 
 test("guest family access analytics keep only bounded categories", () => {
@@ -129,6 +151,8 @@ test("sensitive reunion and activation pages drop autocapture and replay snapsho
   expect(sanitizeAnalyticsEvent({ event: "$snapshot", properties: {} })).toBeNull();
   expect(sanitizeAnalyticsEvent({ event: "family_space_activated", properties: {} })).not.toBeNull();
   window.history.replaceState({}, "", "/reunion/memories/synthetic-event");
+  expect(isSensitiveContentRoute()).toBe(true);
+  window.history.replaceState({}, "", "/reunion/recap/synthetic-event");
   expect(isSensitiveContentRoute()).toBe(true);
   window.history.replaceState({}, "", "/family/join");
   expect(isSensitiveContentRoute()).toBe(true);

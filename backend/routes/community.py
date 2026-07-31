@@ -133,6 +133,7 @@ async def get_overview(current_user: dict[str, Any] = Depends(get_current_user))
             {
                 "community_id": community_id,
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             },
             {"_id": 0},
         )
@@ -195,6 +196,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
             {
                 "community_id": community_id,
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             },
             {"_id": 0},
         )
@@ -268,6 +270,7 @@ async def courtyard_home(current_user: dict[str, Any] = Depends(get_current_user
                 "community_id": community_id,
                 "subyard_id": subyard["id"],
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             }
         )
         active_courtyards.append(
@@ -679,6 +682,7 @@ async def kinship_person(
                 "community_id": community_id,
                 "rsvp_records.user_id": user_id,
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             },
             {"_id": 0, "id": 1, "title": 1, "start_at": 1, "location": 1},
         )

@@ -23,7 +23,7 @@ export const isSensitiveContentRoute = () => (
   && (
     /^\/family\/activate\/?$/i.test(window.location.pathname)
     || /^\/family\/join\/?$/i.test(window.location.pathname)
-    || /^\/reunion\/(?:activate|command|hub|memories)\//i.test(window.location.pathname)
+    || /^\/reunion\/(?:activate|command|hub|memories|recap)\//i.test(window.location.pathname)
   )
 );
 
@@ -149,7 +149,30 @@ export const REUNION_EVENTS = Object.freeze([
   "guest_family_access_status_viewed",
   "guest_family_access_cancelled",
   "guest_family_access_decided",
+  "reunion_recap_viewed",
+  "reunion_recap_published",
+  "reunion_memory_continued",
+  "next_gathering_started",
 ]);
+
+const REUNION_RECAP_EVENTS = new Set([
+  "reunion_recap_viewed",
+  "reunion_recap_published",
+  "reunion_memory_continued",
+  "next_gathering_started",
+]);
+
+const REUNION_RECAP_CATEGORIES = Object.freeze({
+  viewer_role: new Set(["member", "organizer"]),
+  recap_state: new Set(["not_ready", "ready", "published", "unpublished", "legacy_conflict"]),
+  next_action_category: new Set(["memory_capsule", "continue_planning", "family_home"]),
+});
+
+const safeReunionRecapProperties = (properties) => Object.fromEntries(
+  Object.entries(properties).filter(
+    ([key, value]) => typeof value === "string" && REUNION_RECAP_CATEGORIES[key]?.has(value)
+  )
+);
 
 const FAMILY_ACTIVATION_EVENTS = new Set([
   "family_space_activation_viewed",
@@ -235,6 +258,10 @@ export function trackReunionEvent(name, properties = {}) {
   }
   if (FAMILY_ACCESS_EVENTS.has(name)) {
     posthog.capture(name, safeFamilyAccessProperties(properties));
+    return;
+  }
+  if (REUNION_RECAP_EVENTS.has(name)) {
+    posthog.capture(name, safeReunionRecapProperties(properties));
     return;
   }
   const safeProperties = Object.fromEntries(

@@ -14,6 +14,7 @@ import { PublicRSVPPage } from "@/components/PublicRSVPPage";
 import { OrganizerCommandCenterPage } from "@/components/OrganizerCommandCenterPage";
 import { ReunionAttendeeHubPage } from "@/components/ReunionAttendeeHubPage";
 import { ReunionMemoryCapsulePage } from "@/components/ReunionMemoryCapsulePage";
+import { ReunionRecapPage } from "@/components/ReunionRecapPage";
 import { FamilySpaceActivationPage } from "@/components/FamilySpaceActivationPage";
 import { GuestFamilyAccessPage } from "@/components/GuestFamilyAccessPage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
@@ -305,6 +306,10 @@ function App() {
             <Route
               element={<ReunionMemoryCapsulePage session={session} />}
               path="/reunion/memories/:eventId"
+            />
+            <Route
+              element={<ReunionRecapPage session={session} />}
+              path="/reunion/recap/:eventId"
             />
             <Route
               element={<FamilySpaceActivationPage onSessionRefresh={handleSessionRefresh} session={session} />}

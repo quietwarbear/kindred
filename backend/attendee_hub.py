@@ -14,6 +14,7 @@ from typing import Any
 from event_privacy import rsvp_summary
 from itinerary import activity_summaries, parse_local_datetime, published_activities
 from rsvp_integrity import member_invite_aliases
+from reunion_recap import reunion_completion
 
 ATTENDEE_ACTION_PRIORITY = (
     "respond_to_reunion",
@@ -244,6 +245,9 @@ def build_attendee_hub(
             ),
             "completed": has_memory,
             "capsule_path": f"/reunion/memories/{event.get('id', '')}",
+        },
+        "recap": {
+            "completion_state": reunion_completion(event)["state"],
         },
         "next_action": next_attendee_action(
             overall_status=overall_status,

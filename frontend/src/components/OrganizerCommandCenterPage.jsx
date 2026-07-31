@@ -421,6 +421,17 @@ export const OrganizerCommandCenterPage = ({ session }) => {
           </section>
         ) : null}
 
+        {command.recap?.completion_state === "ready" ? (
+          <section className="archival-card flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" data-testid="command-center-recap-card">
+            <div>
+              <p className="eyebrow-text">Reunion concluded</p>
+              <h2 className="mt-2 font-display text-3xl">Review the private family recap</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Publish an optional family message, review safe participation totals, or explicitly begin the next gathering.</p>
+            </div>
+            <Button asChild><Link to={`/reunion/recap/${eventId}`}>Open recap and continuity <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+          </section>
+        ) : null}
+
         <section className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.2fr_0.8fr]">
             <div className="p-6 sm:p-8">

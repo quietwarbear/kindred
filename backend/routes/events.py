@@ -180,6 +180,7 @@ async def gatherings_reminders(
             {
                 "community_id": current_user["community_id"],
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             },
             {"_id": 0},
         )
@@ -196,6 +197,7 @@ async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
             {
                 "community_id": current_user["community_id"],
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
+                "publication_state": {"$ne": "organizer_draft"},
             },
             {"_id": 0},
         )
@@ -332,7 +334,11 @@ async def ai_plan_gathering(
     community = await get_community_for_user(current_user)
     recent = (
         await events_collection.find(
-            {"community_id": current_user["community_id"]}, {"_id": 0, "title": 1}
+            {
+                "community_id": current_user["community_id"],
+                "publication_state": {"$ne": "organizer_draft"},
+            },
+            {"_id": 0, "title": 1},
         )
         .sort("start_at", -1)
         .to_list(5)

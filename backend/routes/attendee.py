@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from attendee_hub import build_attendee_hub
-from db import events_collection, memories_collection
+from db import events_collection, memories_collection, reunion_recaps_collection
 from dependencies import get_current_user, get_event_for_user
 from models import AttendeeMemoryRequest, ReunionMemoryContributionRequest
 from routes.reunion_memories import (
@@ -17,6 +17,7 @@ from routes.reunion_memories import (
     save_capsule_contribution,
 )
 from rsvp_integrity import RSVPWriteConflict, compare_and_swap_event
+from reunion_recap import recap_state
 
 router = APIRouter(prefix="/api")
 
@@ -53,11 +54,17 @@ async def _hub(
     event: dict[str, Any],
     current_user: dict[str, Any],
 ) -> dict[str, Any]:
-    return build_attendee_hub(
+    hub = build_attendee_hub(
         event,
         current_user,
         has_memory=await _has_attendee_memory(event, current_user),
     )
+    recap = await reunion_recaps_collection.find_one(
+        {"event_id": event["id"], "community_id": current_user["community_id"]},
+        {"_id": 0, "state": 1},
+    )
+    hub["recap"]["state"] = recap_state(event, recap)
+    return hub
 
 
 @router.get("/events/{event_id}/attendee-hub")

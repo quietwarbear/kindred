@@ -306,21 +306,29 @@ def visible_event_query_for_user(
     **extra_filters: Any,
 ) -> dict[str, Any]:
     """Scope an event query to records the authenticated user may know exist."""
-    return {
+    query = {
         "community_id": user["community_id"],
         "hidden_from_user_ids": {"$ne": user["id"]},
         **extra_filters,
     }
+    if user.get("role") not in {"host", "organizer"}:
+        query["publication_state"] = {"$ne": "organizer_draft"}
+    return query
 
 
 async def hidden_event_ids_for_user(user: dict[str, Any]) -> list[str]:
     """Return event ids concealed from this user in their current community."""
     from db import events_collection
 
+    concealed_conditions: list[dict[str, Any]] = [
+        {"hidden_from_user_ids": user["id"]}
+    ]
+    if user.get("role") not in {"host", "organizer"}:
+        concealed_conditions.append({"publication_state": "organizer_draft"})
     events = await events_collection.find(
         {
             "community_id": user["community_id"],
-            "hidden_from_user_ids": user["id"],
+            "$or": concealed_conditions,
         },
         {"_id": 0, "id": 1},
     ).to_list(length=None)
@@ -373,9 +381,11 @@ async def notification_query_for_user(
             {"audience_scope": {"$ne": "organizer"}},
             {"event_type": {"$nin": sorted(SENSITIVE_NAMED_RSVP_EVENT_TYPES)}},
         ])
-        hidden_ids = await hidden_event_ids_for_user(user)
-        if hidden_ids:
-            conditions.append({"related_id": {"$nin": hidden_ids}})
+    # Event concealment applies to every role. A platform or organizer flag is
+    # never a side door into a reunion that explicitly excludes this account.
+    hidden_ids = await hidden_event_ids_for_user(user)
+    if hidden_ids:
+        conditions.append({"related_id": {"$nin": hidden_ids}})
     return conditions[0] if len(conditions) == 1 else {"$and": conditions}
 
 
@@ -542,6 +552,11 @@ async def get_event_for_user(event_id: str, user: dict[str, Any]) -> dict[str, A
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     # Surprise gatherings: invisible to the guest(s) of honor on every single-event path.
     if user["id"] in (event_doc.get("hidden_from_user_ids") or []):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    if (
+        event_doc.get("publication_state") == "organizer_draft"
+        and user.get("role") not in {"host", "organizer"}
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     return event_doc
 

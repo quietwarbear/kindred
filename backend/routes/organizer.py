@@ -38,6 +38,7 @@ from organizer_command_center import (
     canonical_response_summary,
 )
 from organizer_reminders import reminder_preflight, validate_idempotency_key
+from reunion_recap import reunion_completion
 
 router = APIRouter(prefix="/api")
 
@@ -172,11 +173,13 @@ async def command_center(
         member_ids_by_email=context["member_ids_by_email"],
     )
     preflight = reminder_preflight(invitation_count=responses["missing"])
-    return build_command_center(
+    result = build_command_center(
         event,
         **context,
         reminder_preflight=preflight,
     )
+    result["recap"] = {"completion_state": reunion_completion(event)["state"]}
+    return result
 
 
 @router.get("/events/{event_id}/guest-preview")

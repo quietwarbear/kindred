@@ -76,7 +76,10 @@ async def _build_digest(community_id: str) -> dict:
 
     upcoming = (
         await events_collection.find(
-            {"community_id": community_id},
+            {
+                "community_id": community_id,
+                "publication_state": {"$ne": "organizer_draft"},
+            },
             {
                 "_id": 0,
                 "title": 1,
