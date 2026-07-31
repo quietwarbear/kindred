@@ -213,6 +213,7 @@ class VolunteerSlotRequest(BaseModel):
 
 class VolunteerSignupRequest(BaseModel):
     slot_id: str
+    idempotency_key: str = Field(default="", max_length=128)
 
 
 class PotluckItemRequest(BaseModel):
@@ -221,6 +222,11 @@ class PotluckItemRequest(BaseModel):
 
 class PotluckClaimRequest(BaseModel):
     item_id: str
+    idempotency_key: str = Field(default="", max_length=128)
+
+
+class AttendeeMemoryRequest(BaseModel):
+    story: str = Field(min_length=1, max_length=4000)
 
 
 class RSVPRequest(BaseModel):

@@ -15,16 +15,28 @@ from itinerary import (
     parse_local_datetime,
     published_activities,
 )
-from rsvp_integrity import public_respondent_identity
+from rsvp_integrity import member_invite_aliases, public_respondent_identity
 
 ORGANIZER_ROLES = {"host", "organizer"}
 SENSITIVE_EVENT_FIELDS = {
     "activity_rsvps",
+    "attendee_hub_reviewed_by",
     "attendees",
+    "assigned_roles",
+    "checklist",
+    "client_request_id",
     "event_invites",
     "event_role_assignments",
+    "hidden_from_member_ids",
+    "hidden_from_user_ids",
+    "planning_checklist",
+    "planning_team_member_ids",
     "role_assignments",
     "rsvp_records",
+    "rsvp_revision",
+    "special_focus",
+    "suggested_contribution",
+    "travel_coordination_notes",
 }
 
 
@@ -65,21 +77,71 @@ def serialize_event_for_user(
         return view
 
     user_id = user.get("id", "")
-    own_overall = next(
-        (
-            record
-            for record in event.get("rsvp_records", [])
-            if record.get("user_id") == user_id
-        ),
-        None,
+    aliases = member_invite_aliases(event, user)
+    own_matches = [
+        record
+        for record in event.get("rsvp_records", [])
+        if record.get("user_id") in aliases
+    ]
+    own_overall = (
+        max(own_matches, key=lambda record: record.get("updated_at", ""))
+        if own_matches
+        else None
     )
     view["my_rsvp_status"] = (own_overall or {}).get("status", "")
     view["my_rsvp_guests"] = max(0, int((own_overall or {}).get("guests", 0) or 0))
     view["my_activity_responses"] = {
         response.get("activity_id", ""): response.get("status", "")
         for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") == user_id and response.get("activity_id")
+        if response.get("respondent_id") in aliases and response.get("activity_id")
     }
+    view["agenda"] = deepcopy(published_activities(event))
+    published_ids = {
+        activity.get("id") for activity in view["agenda"] if activity.get("id")
+    }
+    view["activity_rsvp_summaries"] = {
+        activity_id: summary
+        for activity_id, summary in activity_summaries(event).items()
+        if activity_id in published_ids
+    }
+    view["potluck_items"] = [
+        {
+            "id": item.get("id", ""),
+            "item_name": item.get("item_name", ""),
+            "claimed": bool(item.get("assigned_to_id") or item.get("assigned_to")),
+            "is_mine": (
+                item.get("assigned_to_id") == user_id
+                or (
+                    not item.get("assigned_to_id")
+                    and item.get("assigned_to")
+                    and item.get("assigned_to") == user.get("full_name")
+                )
+            ),
+        }
+        for item in event.get("potluck_items", [])
+    ]
+    view["volunteer_slots"] = []
+    for slot in event.get("volunteer_slots", []):
+        assigned_ids = list(dict.fromkeys(slot.get("assigned_member_ids") or []))
+        assigned_names = list(dict.fromkeys(slot.get("assigned_members") or []))
+        needed_count = max(1, int(slot.get("needed_count", 1) or 1))
+        filled_count = min(
+            max(len(assigned_ids), len(assigned_names)),
+            needed_count,
+        )
+        view["volunteer_slots"].append(
+            {
+                "id": slot.get("id", ""),
+                "title": slot.get("title", ""),
+                "needed_count": needed_count,
+                "filled_count": filled_count,
+                "openings": max(0, needed_count - filled_count),
+                "is_mine": (
+                    user_id in assigned_ids
+                    or (not assigned_ids and user.get("full_name") in assigned_names)
+                ),
+            }
+        )
     for field in SENSITIVE_EVENT_FIELDS:
         view.pop(field, None)
     return view

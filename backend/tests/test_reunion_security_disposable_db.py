@@ -34,7 +34,12 @@ from db import (  # noqa: E402
     users_collection,
 )
 from dependencies import get_current_user  # noqa: E402
-from models import AgendaItemRequest, EventCreateRequest, RSVPRequest  # noqa: E402
+from models import (  # noqa: E402
+    AgendaItemRequest,
+    EventCreateRequest,
+    PotluckClaimRequest,
+    RSVPRequest,
+)
 import routes.events as events_routes  # noqa: E402
 import routes.public as public_routes  # noqa: E402
 from routes.events import create_event, update_rsvp  # noqa: E402
@@ -159,7 +164,46 @@ async def _run_campaign():
             }
         ],
         "activity_rsvp_summaries": {},
-        "agenda": [],
+        "agenda": [
+            {
+                "id": "synthetic-published-activity",
+                "title": "Synthetic Published Activity",
+                "description": "Synthetic attendee-visible description",
+                "start_at": "2027-07-20T12:00:00-04:00",
+                "end_at": "2027-07-20T13:00:00-04:00",
+                "timezone": "America/New_York",
+                "visibility": "published",
+                "attendance_requested": False,
+            },
+            {
+                "id": "synthetic-private-activity",
+                "title": "Synthetic Draft Activity",
+                "description": "Synthetic organizer-only agenda detail",
+                "start_at": "2027-07-20T14:00:00-04:00",
+                "end_at": "2027-07-20T15:00:00-04:00",
+                "timezone": "America/New_York",
+                "visibility": "draft",
+                "attendance_requested": True,
+            },
+        ],
+        "potluck_items": [
+            {
+                "id": "synthetic-open-dish",
+                "item_name": "Synthetic Ice",
+                "assigned_to": "",
+            }
+        ],
+        "volunteer_slots": [
+            {
+                "id": "synthetic-volunteer-slot",
+                "title": "Synthetic Welcome Table",
+                "needed_count": 1,
+                "assigned_members": [],
+            }
+        ],
+        "planning_checklist": [{"title": "Synthetic private planning task"}],
+        "planning_team_member_ids": [],
+        "travel_coordination_notes": "Synthetic private travel detail",
         "rsvp_revision": 0,
     }
     await events_collection.insert_one(sensitive_event.copy())
@@ -322,6 +366,136 @@ async def _run_campaign():
     assert "synthetic-bearer-credential" not in preview_text
     assert MEMBER["email"] not in preview_text
     assert "Synthetic private" not in preview_text
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://kindred.invalid",
+    ) as client:
+        anonymous_hub = await client.get(
+            f"/api/events/{sensitive_event['id']}/attendee-hub"
+        )
+    assert anonymous_hub.status_code == 401
+    member_hub = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/attendee-hub",
+    )
+    assert member_hub.status_code == 200
+    hub_payload = member_hub.json()
+    assert hub_payload["rsvp"]["my_status"] == "going"
+    assert [item["id"] for item in hub_payload["itinerary"]["activities"]] == [
+        "synthetic-published-activity"
+    ]
+    assert hub_payload["next_action"]["code"] == "choose_contribution"
+    hub_text = str(hub_payload)
+    for private_value in (
+        "synthetic-bearer-credential",
+        MEMBER["email"],
+        "Synthetic organizer-only agenda detail",
+        "Synthetic private planning task",
+        "Synthetic private travel detail",
+    ):
+        assert private_value not in hub_text
+    hidden_hub = await _request_as(
+        MEMBER,
+        "GET",
+        f"/api/events/{hidden_event['id']}/attendee-hub",
+    )
+    assert hidden_hub.status_code == 404
+    cross_community_hub = await _request_as(
+        OUTSIDER,
+        "GET",
+        f"/api/events/{sensitive_event['id']}/attendee-hub",
+    )
+    assert cross_community_hub.status_code == 404
+
+    second_member = {
+        "id": "synthetic-member-2",
+        "community_id": COMMUNITY_ID,
+        "full_name": "Synthetic Second Member",
+        "email": "member-2@example.invalid",
+        "role": "member",
+    }
+    await users_collection.insert_one(second_member.copy())
+    final_opening_results = await asyncio.gather(
+        events_routes.claim_potluck_item(
+            sensitive_event["id"],
+            PotluckClaimRequest(
+                item_id="synthetic-open-dish",
+                idempotency_key="synthetic-claim-member-1",
+            ),
+            MEMBER,
+        ),
+        events_routes.claim_potluck_item(
+            sensitive_event["id"],
+            PotluckClaimRequest(
+                item_id="synthetic-open-dish",
+                idempotency_key="synthetic-claim-member-2",
+            ),
+            second_member,
+        ),
+        return_exceptions=True,
+    )
+    assert (
+        sum(not isinstance(result, Exception) for result in final_opening_results) == 1
+    )
+    losing_claim = next(
+        result for result in final_opening_results if isinstance(result, HTTPException)
+    )
+    assert losing_claim.status_code == 409
+    claimed_event = await events_collection.find_one(
+        {"id": sensitive_event["id"]},
+        {"_id": 0},
+    )
+    winning_member_id = claimed_event["potluck_items"][0]["assigned_to_id"]
+    winning_member = MEMBER if winning_member_id == MEMBER["id"] else second_member
+    retry_claim = await events_routes.claim_potluck_item(
+        sensitive_event["id"],
+        PotluckClaimRequest(
+            item_id="synthetic-open-dish",
+            idempotency_key="synthetic-claim-retry",
+        ),
+        winning_member,
+    )
+    assert retry_claim["potluck_items"][0]["is_mine"] is True
+
+    memory_path = f"/api/events/{sensitive_event['id']}/attendee-hub/memory"
+    memory_retries = await asyncio.gather(
+        _request_as(
+            MEMBER,
+            "POST",
+            memory_path,
+            json={"story": "A synthetic attendee story."},
+        ),
+        _request_as(
+            MEMBER,
+            "POST",
+            memory_path,
+            json={"story": "A synthetic attendee story."},
+        ),
+    )
+    assert [response.status_code for response in memory_retries] == [200, 200]
+    assert (
+        await memories_collection.count_documents(
+            {
+                "community_id": COMMUNITY_ID,
+                "event_id": sensitive_event["id"],
+                "created_by": MEMBER["id"],
+                "source": "reunion_attendee_prompt",
+            }
+        )
+        == 1
+    )
+    attendee_memory = await memories_collection.find_one(
+        {
+            "event_id": sensitive_event["id"],
+            "created_by": MEMBER["id"],
+            "source": "reunion_attendee_prompt",
+        },
+        {"_id": 0},
+    )
+    assert attendee_memory["tags"] == []
+    assert attendee_memory["ai_summary"] == ""
 
     planner = {
         "id": "synthetic-planner",
@@ -699,6 +873,30 @@ async def _run_campaign():
         {"_id": 0},
     )
     assert raced_doc["activity_rsvps"] == []
+
+    await events_collection.update_one(
+        {"id": race_event["id"]},
+        {"$set": {"hidden_from_user_ids": []}},
+    )
+    events_routes.compare_and_swap_event = hide_before_compare
+    try:
+        raced_contribution = await _request_as(
+            MEMBER,
+            "POST",
+            f"/api/events/{race_event['id']}/potluck-claim",
+            json={
+                "item_id": "synthetic-open-dish",
+                "idempotency_key": "synthetic-hidden-contribution-race",
+            },
+        )
+    finally:
+        events_routes.compare_and_swap_event = original_compare_and_swap
+    assert raced_contribution.status_code == 404
+    raced_doc = await events_collection.find_one(
+        {"id": race_event["id"]},
+        {"_id": 0},
+    )
+    assert raced_doc["potluck_items"][0].get("assigned_to_id", "") == ""
 
     await events_collection.update_one(
         {"id": race_event["id"]},

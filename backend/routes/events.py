@@ -8,7 +8,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo.errors import DuplicateKeyError
 
-from courtyard_helpers import build_planning_checklist, build_recurring_dates, build_role_suggestions
+from courtyard_helpers import (
+    build_planning_checklist,
+    build_recurring_dates,
+    build_role_suggestions,
+)
 from db import events_collection, users_collection
 from event_privacy import serialize_event_for_user
 from dependencies import (
@@ -94,21 +98,23 @@ def _agenda_activity_from_payload(
 
 def _event_invite_message(event_doc: dict[str, Any], rsvp_link: str) -> str:
     published = [
-        item for item in event_doc.get("agenda", [])
+        item
+        for item in event_doc.get("agenda", [])
         if item.get("visibility") == "published"
     ]
     date_label = event_doc.get("start_at", "")
     if event_doc.get("end_at"):
         date_label = f"{date_label} through {event_doc['end_at']}"
-    activity_label = (
-        f" {len(published)} planned activities."
-        if published else ""
+    activity_label = f" {len(published)} planned activities." if published else ""
+    featured = next(
+        (item for item in published if item.get("featured")),
+        published[0] if published else None,
     )
-    featured = next((item for item in published if item.get("featured")), published[0] if published else None)
     featured_label = f" First up: {featured.get('title')}." if featured else ""
     virtual_label = (
         f" Join online: {event_doc.get('zoom_link', '')}"
-        if event_doc.get("gathering_format") in {"online", "hybrid"} and event_doc.get("zoom_link")
+        if event_doc.get("gathering_format") in {"online", "hybrid"}
+        and event_doc.get("zoom_link")
         else ""
     )
     return (
@@ -126,16 +132,27 @@ async def gathering_templates(current_user: dict[str, Any] = Depends(get_current
 
 
 @router.post("/gatherings/{event_id}/send-reminders")
-async def send_gathering_reminders(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def send_gathering_reminders(
+    event_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
-    pending_invites = [invite for invite in event_doc.get("event_invites", []) if invite.get("rsvp_status", "pending") == "pending"]
-    delivery_status = "email-ready" if os.environ.get("RESEND_API_KEY") else "connection-ready"
+    pending_invites = [
+        invite
+        for invite in event_doc.get("event_invites", [])
+        if invite.get("rsvp_status", "pending") == "pending"
+    ]
+    delivery_status = (
+        "email-ready" if os.environ.get("RESEND_API_KEY") else "connection-ready"
+    )
     sent_at = now_iso()
     for invite in pending_invites:
         invite["reminder_sent_at"] = sent_at
         invite["reminder_delivery_status"] = delivery_status
-    await events_collection.update_one({"id": event_id}, {"$set": {"event_invites": event_doc.get("event_invites", [])}})
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$set": {"event_invites": event_doc.get("event_invites", [])}},
+    )
     await log_notification_event(
         community_id=current_user["community_id"],
         actor_name=current_user["full_name"],
@@ -144,32 +161,47 @@ async def send_gathering_reminders(event_id: str, current_user: dict[str, Any] =
         description=f"{len(pending_invites)} recurring invite reminder(s) prepared.",
         related_id=event_id,
         audience_scope=(
-            "organizer"
-            if event_doc.get("hidden_from_user_ids")
-            else "event"
+            "organizer" if event_doc.get("hidden_from_user_ids") else "event"
         ),
     )
-    return {"sent_count": len(pending_invites), "delivery_status": delivery_status, "event": event_doc}
+    return {
+        "sent_count": len(pending_invites),
+        "delivery_status": delivery_status,
+        "event": event_doc,
+    }
 
 
 @router.get("/gatherings/reminders")
-async def gatherings_reminders(current_user: dict[str, Any] = Depends(get_current_user)):
-    events = await events_collection.find(
-        {
-            "community_id": current_user["community_id"],
-            "hidden_from_user_ids": {"$ne": current_user["id"]},
-        },
-        {"_id": 0},
-    ).sort("start_at", 1).to_list(200)
+async def gatherings_reminders(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    events = (
+        await events_collection.find(
+            {
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            {"_id": 0},
+        )
+        .sort("start_at", 1)
+        .to_list(200)
+    )
     return {"reminders": build_invite_reminders_for_user(current_user, events)}
 
 
 @router.get("/events")
 async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
-    events = await events_collection.find(
-        {"community_id": current_user["community_id"], "hidden_from_user_ids": {"$ne": current_user["id"]}},
-        {"_id": 0},
-    ).sort("start_at", 1).to_list(200)
+    events = (
+        await events_collection.find(
+            {
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            {"_id": 0},
+        )
+        .sort("start_at", 1)
+        .to_list(200)
+    )
     return [
         serialize_event_for_user(_event_with_activity_summaries(event), current_user)
         for event in events
@@ -177,13 +209,21 @@ async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
 
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def get_event(
+    event_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     event_doc = await get_event_for_user(event_id, current_user)
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.put("/events/{event_id}", response_model=EventPublic)
-async def update_event(event_id: str, payload: EventUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def update_event(
+    event_id: str,
+    payload: EventUpdateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     updates = {}
@@ -240,17 +280,18 @@ async def update_event(event_id: str, payload: EventUpdateRequest, current_user:
             if activity.get("timezone"):
                 continue
             if not any(
-                activity.get(field)
-                for field in ("start_at", "end_at", "rsvp_deadline")
+                activity.get(field) for field in ("start_at", "end_at", "rsvp_deadline")
             ):
                 continue
             errors = validate_activity(activity, prospective_timezone)
             if errors:
-                inherited_errors.append({
-                    "activity_id": activity.get("id", ""),
-                    "title": activity.get("title", ""),
-                    "errors": errors,
-                })
+                inherited_errors.append(
+                    {
+                        "activity_id": activity.get("id", ""),
+                        "title": activity.get("title", ""),
+                        "errors": errors,
+                    }
+                )
         if inherited_errors:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -266,11 +307,15 @@ async def update_event(event_id: str, payload: EventUpdateRequest, current_user:
     if updates:
         await events_collection.update_one({"id": event_id}, {"$set": updates})
         event_doc.update(updates)
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.delete("/events/{event_id}")
-async def delete_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def delete_event(
+    event_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     ensure_minimum_role(current_user, "organizer")
     await get_event_for_user(event_id, current_user)
     await events_collection.delete_one({"id": event_id})
@@ -278,26 +323,40 @@ async def delete_event(event_id: str, current_user: dict[str, Any] = Depends(get
 
 
 @router.post("/gatherings/ai-plan")
-async def ai_plan_gathering(payload: GatheringPlanRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def ai_plan_gathering(
+    payload: GatheringPlanRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     """Turn a one-sentence ask into a structured, ready-to-create gathering plan (draft)."""
     ensure_minimum_role(current_user, "organizer")
     community = await get_community_for_user(current_user)
-    recent = await events_collection.find(
-        {"community_id": current_user["community_id"]}, {"_id": 0, "title": 1}
-    ).sort("start_at", -1).to_list(5)
+    recent = (
+        await events_collection.find(
+            {"community_id": current_user["community_id"]}, {"_id": 0, "title": 1}
+        )
+        .sort("start_at", -1)
+        .to_list(5)
+    )
     api_key = os.environ.get("OPENAI_API_KEY", "")
     model = os.environ.get("GEMINI_MODEL", "gpt-4o-mini")
-    plan = await generate_gathering_plan(api_key, model, {
-        "prompt": (payload.prompt or "").strip(),
-        "community_name": community.get("name", ""),
-        "community_type": community.get("community_type", "community"),
-        "recent_gatherings": [e.get("title", "") for e in recent if e.get("title")],
-    })
+    plan = await generate_gathering_plan(
+        api_key,
+        model,
+        {
+            "prompt": (payload.prompt or "").strip(),
+            "community_name": community.get("name", ""),
+            "community_type": community.get("community_type", "community"),
+            "recent_gatherings": [e.get("title", "") for e in recent if e.get("title")],
+        },
+    )
     return {"plan": plan, "ai_enabled": bool(api_key)}
 
 
 @router.post("/events", response_model=EventPublic)
-async def create_event(payload: EventCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def create_event(
+    payload: EventCreateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     client_request_id = payload.client_request_id.strip()
     if client_request_id:
@@ -341,7 +400,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         subyard_doc = await get_subyard_for_user(payload.subyard_id, current_user)
         subyard_name = subyard_doc["name"]
 
-    assigned_roles = payload.assigned_roles or build_role_suggestions(payload.event_template)
+    assigned_roles = payload.assigned_roles or build_role_suggestions(
+        payload.event_template
+    )
     series_id = str(uuid.uuid4()) if payload.recurrence_frequency != "none" else ""
     created_at = now_iso()
     normalized_agenda = []
@@ -377,7 +438,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "subyard_id": payload.subyard_id,
         "subyard_name": subyard_name,
         "assigned_roles": assigned_roles,
-        "planning_checklist": build_planning_checklist(payload.event_template, payload.gathering_format),
+        "planning_checklist": build_planning_checklist(
+            payload.event_template, payload.gathering_format
+        ),
         "travel_coordination_notes": (payload.travel_coordination_notes or "").strip(),
         "suggested_contribution": float(payload.suggested_contribution or 0.0),
         "recurrence_frequency": payload.recurrence_frequency,
@@ -395,12 +458,19 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
         "activity_rsvps": [],
         "activity_rsvp_summaries": {},
         "volunteer_slots": [
-            {"id": str(uuid.uuid4()), "title": s.get("title", ""), "needed_count": int(s.get("needed_count", 1) or 1), "assigned_members": []}
-            for s in (payload.volunteer_slots or []) if isinstance(s, dict) and s.get("title")
+            {
+                "id": str(uuid.uuid4()),
+                "title": s.get("title", ""),
+                "needed_count": int(s.get("needed_count", 1) or 1),
+                "assigned_members": [],
+            }
+            for s in (payload.volunteer_slots or [])
+            if isinstance(s, dict) and s.get("title")
         ],
         "potluck_items": [
             {"id": str(uuid.uuid4()), "item_name": str(p).strip(), "assigned_to": ""}
-            for p in (payload.potluck_items or []) if str(p).strip()
+            for p in (payload.potluck_items or [])
+            if str(p).strip()
         ],
         "rsvp_records": [],
         "created_at": created_at,
@@ -428,7 +498,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             current_user,
         )
 
-    recurring_dates = build_recurring_dates(payload.start_at, payload.recurrence_frequency)
+    recurring_dates = build_recurring_dates(
+        payload.start_at, payload.recurrence_frequency
+    )
     if recurring_dates:
         recurring_docs = []
         for index, next_start in enumerate(recurring_dates, start=1):
@@ -455,7 +527,9 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
                     # Recurring instances must not collide with that unique
                     # retry-safety record.
                     "client_request_id": "",
-                    "planning_checklist": build_planning_checklist(payload.event_template, payload.gathering_format),
+                    "planning_checklist": build_planning_checklist(
+                        payload.event_template, payload.gathering_format
+                    ),
                     "created_at": now_iso(),
                 }
             )
@@ -472,17 +546,24 @@ async def create_event(payload: EventCreateRequest, current_user: dict[str, Any]
             related_id=event_doc["id"],
             audience_scope="community",
         )
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/rsvp")
-async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def update_rsvp(
+    event_id: str,
+    payload: RSVPRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     await get_event_for_user(event_id, current_user)
 
     def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
         aliases = member_invite_aliases(event_doc, current_user)
         next_records = [
-            record for record in event_doc.get("rsvp_records", [])
+            record
+            for record in event_doc.get("rsvp_records", [])
             if record.get("user_id") not in aliases
         ]
         next_records.append(
@@ -496,13 +577,10 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
         )
         event_invites = event_doc.get("event_invites", [])
         for invite in event_invites:
-            if (
-                invite.get("member_id") == current_user["id"]
-                or (
-                    invite.get("invite_source") == "member"
-                    and normalize_email(invite.get("email", ""))
-                    == normalize_email(current_user.get("email", ""))
-                )
+            if invite.get("member_id") == current_user["id"] or (
+                invite.get("invite_source") == "member"
+                and normalize_email(invite.get("email", ""))
+                == normalize_email(current_user.get("email", ""))
             ):
                 invite["member_id"] = current_user["id"]
                 invite["rsvp_status"] = payload.status
@@ -527,7 +605,9 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
             detail={"code": "rsvp_write_conflict", "message": str(exc)},
         ) from exc
     if not event_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
     await log_notification_event(
         community_id=current_user["community_id"],
         actor_name=current_user["full_name"],
@@ -537,18 +617,25 @@ async def update_rsvp(event_id: str, payload: RSVPRequest, current_user: dict[st
         related_id=event_id,
         audience_scope="organizer",
     )
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/reveal", response_model=EventPublic)
-async def reveal_event(event_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+async def reveal_event(
+    event_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
     """Lift the surprise: un-hide a gathering from its guest(s) of honor, and announce it."""
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     was_hidden = bool(event_doc.get("hidden_from_user_ids"))
     # Reveal this event and any recurring instances in its series.
     await events_collection.update_many(
-        {"community_id": current_user["community_id"], "$or": [{"id": event_id}, {"parent_event_id": event_id}]},
+        {
+            "community_id": current_user["community_id"],
+            "$or": [{"id": event_id}, {"parent_event_id": event_id}],
+        },
         {"$set": {"hidden_from_user_ids": []}},
     )
     if was_hidden:
@@ -562,20 +649,34 @@ async def reveal_event(event_id: str, current_user: dict[str, Any] = Depends(get
             audience_scope="community",
         )
     event_doc["hidden_from_user_ids"] = []
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/meeting-link", response_model=EventPublic)
-async def save_meeting_link(event_id: str, payload: EventMeetingLinkRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def save_meeting_link(
+    event_id: str,
+    payload: EventMeetingLinkRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     event_doc["zoom_link"] = payload.zoom_link.strip()
-    await events_collection.update_one({"id": event_id}, {"$set": {"zoom_link": event_doc["zoom_link"]}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"zoom_link": event_doc["zoom_link"]}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/invites", response_model=EventPublic)
-async def create_event_invites(event_id: str, payload: EventInviteCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def create_event_invites(
+    event_id: str,
+    payload: EventInviteCreateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     existing_invites = event_doc.get("event_invites", [])
@@ -585,7 +686,10 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
 
     if payload.member_ids:
         members = await users_collection.find(
-            {"community_id": current_user["community_id"], "id": {"$in": payload.member_ids}},
+            {
+                "community_id": current_user["community_id"],
+                "id": {"$in": payload.member_ids},
+            },
             {"_id": 0, "password_hash": 0},
         ).to_list(500)
         for member in members:
@@ -604,7 +708,11 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                     "status": "invited",
                     "rsvp_status": "pending",
                     "note": (payload.note or "").strip(),
-                    "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
+                    "zoom_link": (
+                        event_doc.get("zoom_link", "")
+                        if event_doc.get("gathering_format") in {"online", "hybrid"}
+                        else ""
+                    ),
                     "share_message": _event_invite_message(event_doc, rsvp_link),
                     "delivery_status": "ready-for-email",
                     "created_at": now_iso(),
@@ -627,7 +735,11 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
                 "status": "invited",
                 "rsvp_status": "pending",
                 "note": (payload.note or "").strip(),
-                "zoom_link": event_doc.get("zoom_link", "") if event_doc.get("gathering_format") in {"online", "hybrid"} else "",
+                "zoom_link": (
+                    event_doc.get("zoom_link", "")
+                    if event_doc.get("gathering_format") in {"online", "hybrid"}
+                    else ""
+                ),
                 "share_message": _event_invite_message(event_doc, rsvp_link),
                 "delivery_status": "ready-for-email",
                 "created_at": now_iso(),
@@ -639,10 +751,12 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
     await events_collection.update_one(
         {"id": event_id},
-        {"$set": {
-            "event_invites": invite_records,
-            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
-        }},
+        {
+            "$set": {
+                "event_invites": invite_records,
+                "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+            }
+        },
     )
     await log_notification_event(
         community_id=current_user["community_id"],
@@ -652,16 +766,20 @@ async def create_event_invites(event_id: str, payload: EventInviteCreateRequest,
         description=f"{len(invite_records)} invite record(s) currently attached to this gathering.",
         related_id=event_id,
         audience_scope=(
-            "organizer"
-            if event_doc.get("hidden_from_user_ids")
-            else "event"
+            "organizer" if event_doc.get("hidden_from_user_ids") else "event"
         ),
     )
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/role-assignments", response_model=EventPublic)
-async def assign_event_roles(event_id: str, payload: EventRoleAssignmentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def assign_event_roles(
+    event_id: str,
+    payload: EventRoleAssignmentRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     assignments = event_doc.get("event_role_assignments", [])
@@ -684,15 +802,29 @@ async def assign_event_roles(event_id: str, payload: EventRoleAssignmentRequest,
             break
 
     if not updated:
-        assignments.append({"id": str(uuid.uuid4()), "role_name": payload.role_name.strip(), "assignees": normalized_assignees})
+        assignments.append(
+            {
+                "id": str(uuid.uuid4()),
+                "role_name": payload.role_name.strip(),
+                "assignees": normalized_assignees,
+            }
+        )
 
     event_doc["event_role_assignments"] = assignments
-    await events_collection.update_one({"id": event_id}, {"$set": {"event_role_assignments": assignments}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"event_role_assignments": assignments}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/agenda", response_model=EventPublic)
-async def add_agenda_item(event_id: str, payload: AgendaItemRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_agenda_item(
+    event_id: str,
+    payload: AgendaItemRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     agenda = event_doc.get("agenda", [])
@@ -704,17 +836,27 @@ async def add_agenda_item(event_id: str, payload: AgendaItemRequest, current_use
             created_at=now_iso(),
         )
     )
-    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("time_label", ""), item.get("title", "")))
+    agenda.sort(
+        key=lambda item: (
+            item.get("start_at") or "9999",
+            item.get("time_label", ""),
+            item.get("title", ""),
+        )
+    )
     event_doc["agenda"] = agenda
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
     await events_collection.update_one(
         {"id": event_id},
-        {"$set": {
-            "agenda": agenda,
-            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
-        }},
+        {
+            "$set": {
+                "agenda": agenda,
+                "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+            }
+        },
     )
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.put("/events/{event_id}/agenda/{activity_id}", response_model=EventPublic)
@@ -729,7 +871,10 @@ async def update_agenda_activity(
     agenda = event_doc.get("agenda", [])
     existing = next((item for item in agenda if item.get("id") == activity_id), None)
     if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Itinerary activity not found.",
+        )
 
     replacement = _agenda_activity_from_payload(
         payload,
@@ -740,31 +885,50 @@ async def update_agenda_activity(
     changed_schedule = any(
         existing.get(key) != replacement.get(key)
         for key in (
-            "start_at", "end_at", "timezone", "venue_name", "venue_address",
-            "venue_detail", "map_url", "virtual_link", "location_tba",
+            "start_at",
+            "end_at",
+            "timezone",
+            "venue_name",
+            "venue_address",
+            "venue_detail",
+            "map_url",
+            "virtual_link",
+            "location_tba",
         )
     )
     history = list(existing.get("revision_history") or [])
     if changed_schedule:
-        history.append({
-            "changed_at": now_iso(),
-            "start_at": existing.get("start_at", ""),
-            "end_at": existing.get("end_at", ""),
-            "timezone": existing.get("timezone", ""),
-            "venue_name": existing.get("venue_name", ""),
-            "venue_address": existing.get("venue_address", ""),
-            "venue_detail": existing.get("venue_detail", ""),
-        })
+        history.append(
+            {
+                "changed_at": now_iso(),
+                "start_at": existing.get("start_at", ""),
+                "end_at": existing.get("end_at", ""),
+                "timezone": existing.get("timezone", ""),
+                "venue_name": existing.get("venue_name", ""),
+                "venue_address": existing.get("venue_address", ""),
+                "venue_detail": existing.get("venue_detail", ""),
+            }
+        )
     replacement["revision_history"] = history[-20:]
     replacement["updated_at"] = now_iso()
     agenda = [replacement if item.get("id") == activity_id else item for item in agenda]
-    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("time_label", ""), item.get("title", "")))
+    agenda.sort(
+        key=lambda item: (
+            item.get("start_at") or "9999",
+            item.get("time_label", ""),
+            item.get("title", ""),
+        )
+    )
     event_doc["agenda"] = agenda
     await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
-@router.post("/events/{event_id}/agenda/{activity_id}/duplicate", response_model=EventPublic)
+@router.post(
+    "/events/{event_id}/agenda/{activity_id}/duplicate", response_model=EventPublic
+)
 async def duplicate_agenda_activity(
     event_id: str,
     activity_id: str,
@@ -772,9 +936,15 @@ async def duplicate_agenda_activity(
 ):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
-    source = next((item for item in event_doc.get("agenda", []) if item.get("id") == activity_id), None)
+    source = next(
+        (item for item in event_doc.get("agenda", []) if item.get("id") == activity_id),
+        None,
+    )
     if not source:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Itinerary activity not found.",
+        )
     duplicate = normalize_activity(
         {
             **source,
@@ -788,13 +958,19 @@ async def duplicate_agenda_activity(
         activity_id=str(uuid.uuid4()),
     )
     agenda = [*event_doc.get("agenda", []), duplicate]
-    agenda.sort(key=lambda item: (item.get("start_at") or "9999", item.get("title", "")))
+    agenda.sort(
+        key=lambda item: (item.get("start_at") or "9999", item.get("title", ""))
+    )
     event_doc["agenda"] = agenda
     await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
-@router.post("/events/{event_id}/agenda/{activity_id}/publish", response_model=EventPublic)
+@router.post(
+    "/events/{event_id}/agenda/{activity_id}/publish", response_model=EventPublic
+)
 async def publish_agenda_activity(
     event_id: str,
     activity_id: str,
@@ -805,7 +981,10 @@ async def publish_agenda_activity(
     agenda = event_doc.get("agenda", [])
     activity = next((item for item in agenda if item.get("id") == activity_id), None)
     if not activity:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Itinerary activity not found.",
+        )
     errors = validate_activity(activity, event_doc.get("timezone", "UTC"))
     if errors:
         raise HTTPException(
@@ -815,7 +994,9 @@ async def publish_agenda_activity(
     activity["visibility"] = "published"
     activity["updated_at"] = now_iso()
     await events_collection.update_one({"id": event_id}, {"$set": {"agenda": agenda}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.delete("/events/{event_id}/agenda/{activity_id}", response_model=EventPublic)
@@ -827,11 +1008,18 @@ async def delete_agenda_activity(
 ):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
-    activity = next((item for item in event_doc.get("agenda", []) if item.get("id") == activity_id), None)
+    activity = next(
+        (item for item in event_doc.get("agenda", []) if item.get("id") == activity_id),
+        None,
+    )
     if not activity:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Itinerary activity not found.",
+        )
     response_count = sum(
-        1 for item in event_doc.get("activity_rsvps", [])
+        1
+        for item in event_doc.get("activity_rsvps", [])
         if item.get("activity_id") == activity_id
     )
     if response_count and not confirm_responses:
@@ -848,18 +1036,23 @@ async def delete_agenda_activity(
         activity["archived_at"] = now_iso()
     else:
         event_doc["agenda"] = [
-            item for item in event_doc.get("agenda", [])
+            item
+            for item in event_doc.get("agenda", [])
             if item.get("id") != activity_id
         ]
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
     await events_collection.update_one(
         {"id": event_id},
-        {"$set": {
-            "agenda": event_doc.get("agenda", []),
-            "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
-        }},
+        {
+            "$set": {
+                "agenda": event_doc.get("agenda", []),
+                "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
+            }
+        },
     )
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/activity-rsvp")
@@ -870,12 +1063,16 @@ async def update_activity_rsvp(
 ):
     await get_event_for_user(event_id, current_user)
     if payload.status not in ACTIVITY_RESPONSES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid activity response.")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid activity response.",
+        )
 
     def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
         activity = next(
             (
-                item for item in event_doc.get("agenda", [])
+                item
+                for item in event_doc.get("agenda", [])
                 if item.get("id") == payload.activity_id
                 and item.get("visibility") == "published"
                 and item.get("attendance_requested", True)
@@ -883,15 +1080,16 @@ async def update_activity_rsvp(
             None,
         )
         if not activity:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activity RSVP is unavailable.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Activity RSVP is unavailable.",
+            )
         deadline_value = activity.get("rsvp_deadline", "")
         deadline = parse_local_datetime(
             deadline_value,
             activity.get("timezone") or event_doc.get("timezone", "UTC"),
         )
-        if deadline_value and (
-            not deadline or datetime.now(timezone.utc) > deadline
-        ):
+        if deadline_value and (not deadline or datetime.now(timezone.utc) > deadline):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -939,8 +1137,12 @@ async def update_activity_rsvp(
             detail={"code": "rsvp_write_conflict", "message": str(exc)},
         ) from exc
     if not event_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.get("/events/{event_id}/operations")
@@ -951,7 +1153,8 @@ async def reunion_operations(
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     agenda = [
-        item for item in event_doc.get("agenda", [])
+        item
+        for item in event_doc.get("agenda", [])
         if item.get("visibility") != "archived"
     ]
     responses = canonical_activity_responses(event_doc)
@@ -962,7 +1165,8 @@ async def reunion_operations(
             item.get("start_at", ""),
             item.get("timezone") or event_doc.get("timezone", "UTC"),
         )
-        for item in agenda if item.get("id") and item.get("start_at")
+        for item in agenda
+        if item.get("id") and item.get("start_at")
     }
     day_people: dict[str, dict[str, dict[str, Any]]] = {}
     for response in responses:
@@ -975,9 +1179,11 @@ async def reunion_operations(
         combined_status = (
             "coming"
             if "coming" in {existing_person.get("status"), response_status}
-            else "maybe"
-            if "maybe" in {existing_person.get("status"), response_status}
-            else response_status
+            else (
+                "maybe"
+                if "maybe" in {existing_person.get("status"), response_status}
+                else response_status
+            )
         )
         day_people[day][respondent_id] = {
             "status": combined_status,
@@ -988,10 +1194,15 @@ async def reunion_operations(
         }
     day_summaries = {
         day: {
-            "coming": sum(1 for person in people.values() if person["status"] == "coming"),
-            "maybe": sum(1 for person in people.values() if person["status"] == "maybe"),
+            "coming": sum(
+                1 for person in people.values() if person["status"] == "coming"
+            ),
+            "maybe": sum(
+                1 for person in people.values() if person["status"] == "maybe"
+            ),
             "party_size": sum(
-                person["party_size"] for person in people.values()
+                person["party_size"]
+                for person in people.values()
                 if person["status"] == "coming"
             ),
         }
@@ -1011,7 +1222,8 @@ async def reunion_operations(
                 "party_size": max(1, int(response.get("party_size", 1) or 1)),
                 "updated_at": response.get("updated_at", ""),
             }
-            for response in responses if response.get("activity_id") == activity_id
+            for response in responses
+            if response.get("activity_id") == activity_id
         ]
     recent = sorted(
         [
@@ -1020,7 +1232,9 @@ async def reunion_operations(
                     item.get("activity_id", "overall"),
                     item.get("respondent_id") or item.get("user_id", ""),
                 ),
-                "display_name": item.get("display_name") or item.get("user_name") or "Invited guest",
+                "display_name": item.get("display_name")
+                or item.get("user_name")
+                or "Invited guest",
                 "status": item.get("status", ""),
                 "updated_at": item.get("updated_at", ""),
             }
@@ -1034,7 +1248,8 @@ async def reunion_operations(
         "timezone": event_doc.get("timezone", "UTC"),
         "total_invitees": len(event_doc.get("event_invites", [])),
         "unanswered_invitations": sum(
-            1 for invite in event_doc.get("event_invites", [])
+            1
+            for invite in event_doc.get("event_invites", [])
             if invite.get("rsvp_status", "pending") == "pending"
         ),
         "overall": {
@@ -1046,7 +1261,8 @@ async def reunion_operations(
         "activity_rosters": rosters,
         "overlaps": overlap_pairs(agenda, event_doc.get("timezone", "UTC")),
         "missing_venue_activity_ids": [
-            item.get("id") for item in agenda
+            item.get("id")
+            for item in agenda
             if not item.get("location_tba")
             and not item.get("venue_name")
             and not item.get("virtual_link")
@@ -1056,18 +1272,37 @@ async def reunion_operations(
 
 
 @router.post("/events/{event_id}/checklist-items", response_model=EventPublic)
-async def add_checklist_item(event_id: str, payload: ChecklistItemRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_checklist_item(
+    event_id: str,
+    payload: ChecklistItemRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     checklist = event_doc.get("planning_checklist", [])
-    checklist.append({"id": str(uuid.uuid4()), "category": payload.category.strip(), "title": payload.title.strip(), "completed": False})
+    checklist.append(
+        {
+            "id": str(uuid.uuid4()),
+            "category": payload.category.strip(),
+            "title": payload.title.strip(),
+            "completed": False,
+        }
+    )
     event_doc["planning_checklist"] = checklist
-    await events_collection.update_one({"id": event_id}, {"$set": {"planning_checklist": checklist}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"planning_checklist": checklist}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/checklist-toggle")
-async def toggle_checklist_item(event_id: str, payload: ChecklistToggleRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def toggle_checklist_item(
+    event_id: str,
+    payload: ChecklistToggleRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     event_doc = await get_event_for_user(event_id, current_user)
     checklist = event_doc.get("planning_checklist", [])
     updated = False
@@ -1077,65 +1312,323 @@ async def toggle_checklist_item(event_id: str, payload: ChecklistToggleRequest, 
             updated = True
             break
     if not updated:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Checklist item not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Checklist item not found."
+        )
     event_doc["planning_checklist"] = checklist
-    await events_collection.update_one({"id": event_id}, {"$set": {"planning_checklist": checklist}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"planning_checklist": checklist}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/volunteer-slots", response_model=EventPublic)
-async def add_volunteer_slot(event_id: str, payload: VolunteerSlotRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_volunteer_slot(
+    event_id: str,
+    payload: VolunteerSlotRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     slots = event_doc.get("volunteer_slots", [])
-    slots.append({"id": str(uuid.uuid4()), "title": payload.title.strip(), "needed_count": payload.needed_count, "assigned_members": []})
+    slots.append(
+        {
+            "id": str(uuid.uuid4()),
+            "title": payload.title.strip(),
+            "needed_count": payload.needed_count,
+            "assigned_members": [],
+        }
+    )
     event_doc["volunteer_slots"] = slots
-    await events_collection.update_one({"id": event_id}, {"$set": {"volunteer_slots": slots}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"volunteer_slots": slots}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/volunteer-signup")
-async def volunteer_signup(event_id: str, payload: VolunteerSignupRequest, current_user: dict[str, Any] = Depends(get_current_user)):
-    event_doc = await get_event_for_user(event_id, current_user)
-    slots = event_doc.get("volunteer_slots", [])
-    updated = False
-    for slot in slots:
-        assigned_members = slot.get("assigned_members", [])
-        if slot.get("id") == payload.slot_id and current_user["full_name"] not in assigned_members and len(assigned_members) < slot.get("needed_count", 1):
-            assigned_members.append(current_user["full_name"])
-            slot["assigned_members"] = assigned_members
-            updated = True
-            break
-    if not updated:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This volunteer slot is already full or unavailable.")
-    event_doc["volunteer_slots"] = slots
-    await events_collection.update_one({"id": event_id}, {"$set": {"volunteer_slots": slots}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+async def volunteer_signup(
+    event_id: str,
+    payload: VolunteerSignupRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    await get_event_for_user(event_id, current_user)
+
+    def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
+        slots = [dict(slot) for slot in event_doc.get("volunteer_slots", [])]
+        slot = next((item for item in slots if item.get("id") == payload.slot_id), None)
+        if not slot:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "contribution_unavailable",
+                    "message": "This volunteer role is unavailable.",
+                },
+            )
+        assigned_ids = list(dict.fromkeys(slot.get("assigned_member_ids") or []))
+        assigned_names = list(dict.fromkeys(slot.get("assigned_members") or []))
+        already_mine = current_user["id"] in assigned_ids or (
+            not assigned_ids and current_user.get("full_name") in assigned_names
+        )
+        if already_mine:
+            return {"volunteer_slots": slots}
+        needed = max(1, int(slot.get("needed_count", 1) or 1))
+        if max(len(assigned_ids), len(assigned_names)) >= needed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "contribution_full",
+                    "message": "This volunteer role was just filled.",
+                },
+            )
+        assigned_ids.append(current_user["id"])
+        assigned_names.append(current_user.get("full_name", ""))
+        slot["assigned_member_ids"] = assigned_ids
+        slot["assigned_members"] = assigned_names
+        return {"volunteer_slots": slots}
+
+    try:
+        event_doc = await compare_and_swap_event(
+            events_collection,
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "contribution_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
+
+
+@router.post("/events/{event_id}/volunteer-release")
+async def volunteer_release(
+    event_id: str,
+    payload: VolunteerSignupRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    await get_event_for_user(event_id, current_user)
+
+    def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
+        slots = [dict(slot) for slot in event_doc.get("volunteer_slots", [])]
+        slot = next((item for item in slots if item.get("id") == payload.slot_id), None)
+        if not slot:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "contribution_unavailable",
+                    "message": "This volunteer role is unavailable.",
+                },
+            )
+        assigned_ids = list(dict.fromkeys(slot.get("assigned_member_ids") or []))
+        assigned_names = list(dict.fromkeys(slot.get("assigned_members") or []))
+        owns_by_id = current_user["id"] in assigned_ids
+        owns_legacy = (
+            not assigned_ids and current_user.get("full_name") in assigned_names
+        )
+        if owns_by_id:
+            assigned_ids = [
+                value for value in assigned_ids if value != current_user["id"]
+            ]
+            assigned_names = [
+                value
+                for value in assigned_names
+                if value != current_user.get("full_name")
+            ]
+        elif owns_legacy:
+            assigned_names = [
+                value
+                for value in assigned_names
+                if value != current_user.get("full_name")
+            ]
+        slot["assigned_member_ids"] = assigned_ids
+        slot["assigned_members"] = assigned_names
+        return {"volunteer_slots": slots}
+
+    try:
+        event_doc = await compare_and_swap_event(
+            events_collection,
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "contribution_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/potluck-items", response_model=EventPublic)
-async def add_potluck_item(event_id: str, payload: PotluckItemRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def add_potluck_item(
+    event_id: str,
+    payload: PotluckItemRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
     items = event_doc.get("potluck_items", [])
-    items.append({"id": str(uuid.uuid4()), "item_name": payload.item_name.strip(), "assigned_to": ""})
+    items.append(
+        {
+            "id": str(uuid.uuid4()),
+            "item_name": payload.item_name.strip(),
+            "assigned_to": "",
+        }
+    )
     event_doc["potluck_items"] = items
-    await events_collection.update_one({"id": event_id}, {"$set": {"potluck_items": items}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+    await events_collection.update_one(
+        {"id": event_id}, {"$set": {"potluck_items": items}}
+    )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
 
 
 @router.post("/events/{event_id}/potluck-claim")
-async def claim_potluck_item(event_id: str, payload: PotluckClaimRequest, current_user: dict[str, Any] = Depends(get_current_user)):
-    event_doc = await get_event_for_user(event_id, current_user)
-    items = event_doc.get("potluck_items", [])
-    claimed = False
-    for item in items:
-        if item.get("id") == payload.item_id and not item.get("assigned_to"):
-            item["assigned_to"] = current_user["full_name"]
-            claimed = True
-            break
-    if not claimed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This potluck item is already claimed or unavailable.")
-    event_doc["potluck_items"] = items
-    await events_collection.update_one({"id": event_id}, {"$set": {"potluck_items": items}})
-    return serialize_event_for_user(_event_with_activity_summaries(event_doc), current_user)
+async def claim_potluck_item(
+    event_id: str,
+    payload: PotluckClaimRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    await get_event_for_user(event_id, current_user)
+
+    def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
+        items = [dict(item) for item in event_doc.get("potluck_items", [])]
+        item = next(
+            (value for value in items if value.get("id") == payload.item_id), None
+        )
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "contribution_unavailable",
+                    "message": "This potluck item is unavailable.",
+                },
+            )
+        assigned_id = str(item.get("assigned_to_id") or "")
+        assigned_name = str(item.get("assigned_to") or "")
+        if assigned_id == current_user["id"] or (
+            not assigned_id and assigned_name == current_user.get("full_name")
+        ):
+            return {"potluck_items": items}
+        if assigned_id or assigned_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "contribution_claimed",
+                    "message": "This potluck item was just claimed.",
+                },
+            )
+        item["assigned_to_id"] = current_user["id"]
+        item["assigned_to"] = current_user.get("full_name", "")
+        return {"potluck_items": items}
+
+    try:
+        event_doc = await compare_and_swap_event(
+            events_collection,
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "contribution_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
+
+
+@router.post("/events/{event_id}/potluck-release")
+async def release_potluck_item(
+    event_id: str,
+    payload: PotluckClaimRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    await get_event_for_user(event_id, current_user)
+
+    def mutate(event_doc: dict[str, Any]) -> dict[str, Any]:
+        items = [dict(item) for item in event_doc.get("potluck_items", [])]
+        item = next(
+            (value for value in items if value.get("id") == payload.item_id), None
+        )
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "contribution_unavailable",
+                    "message": "This potluck item is unavailable.",
+                },
+            )
+        assigned_id = str(item.get("assigned_to_id") or "")
+        assigned_name = str(item.get("assigned_to") or "")
+        owns = assigned_id == current_user["id"] or (
+            not assigned_id and assigned_name == current_user.get("full_name")
+        )
+        if owns:
+            item["assigned_to_id"] = ""
+            item["assigned_to"] = ""
+        elif assigned_id or assigned_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "contribution_not_owned",
+                    "message": "Only the person who claimed this item can release it.",
+                },
+            )
+        return {"potluck_items": items}
+
+    try:
+        event_doc = await compare_and_swap_event(
+            events_collection,
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "hidden_from_user_ids": {"$ne": current_user["id"]},
+            },
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "contribution_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
