@@ -13,6 +13,7 @@ class CommunityBootstrapRequest(BaseModel):
     location: str = ""
     description: str = ""
     motto: str = ""
+    creation_mode: Literal["standard", "reunion_first"] = "standard"
 
 
 class InviteRegistrationRequest(BaseModel):
@@ -121,6 +122,13 @@ class GoogleOnboardingRequest(BaseModel):
     first_gathering_start_at: str | None = None
     first_gathering_location: str = ""
     invite_emails: list[str] = []
+    creation_mode: Literal["standard", "reunion_first"] = "standard"
+
+
+class FamilySpaceActivationRequest(BaseModel):
+    family_space_name: str
+    expected_revision: int
+    idempotency_key: str
 
 
 class CommunityPublic(BaseModel):
@@ -134,6 +142,10 @@ class CommunityPublic(BaseModel):
     owner_user_id: str = ""
     member_count: int = 0
     created_at: str = ""
+    lifecycle_state: Literal["provisional", "active", "legacy_unchanged"] = (
+        "legacy_unchanged"
+    )
+    lifecycle_revision: int = 0
 
 
 class UserPublic(BaseModel):

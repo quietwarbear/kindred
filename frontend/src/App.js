@@ -14,6 +14,7 @@ import { PublicRSVPPage } from "@/components/PublicRSVPPage";
 import { OrganizerCommandCenterPage } from "@/components/OrganizerCommandCenterPage";
 import { ReunionAttendeeHubPage } from "@/components/ReunionAttendeeHubPage";
 import { ReunionMemoryCapsulePage } from "@/components/ReunionMemoryCapsulePage";
+import { FamilySpaceActivationPage } from "@/components/FamilySpaceActivationPage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
 import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -301,6 +302,10 @@ function App() {
             <Route
               element={<ReunionMemoryCapsulePage session={session} />}
               path="/reunion/memories/:eventId"
+            />
+            <Route
+              element={<FamilySpaceActivationPage onSessionRefresh={handleSessionRefresh} session={session} />}
+              path="/family/activate"
             />
             <Route
               element={<AuthRoute authPage={publicAuthPage} session={session} />}

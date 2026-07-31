@@ -147,6 +147,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
             full_name: draft.organizer_name,
             community_name: provisionalCommunityName(draft),
             community_type: "family reunion",
+            creation_mode: "reunion_first",
             location: draft.location,
           },
         });

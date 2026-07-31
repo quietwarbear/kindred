@@ -27,6 +27,7 @@ from dependencies import (
     now_iso,
 )
 from event_privacy import serialize_event_for_guest
+from family_space_activation import public_community_display_name
 from models import (
     PlanningTeamAssignmentRequest,
     PlanningTeamInvitationRequest,
@@ -194,9 +195,9 @@ async def guest_preview(
     )
     community = await communities_collection.find_one(
         {"id": current_user["community_id"]},
-        {"_id": 0, "name": 1},
+        {"_id": 0, "name": 1, "lifecycle_state": 1},
     )
-    preview["community_name"] = (community or {}).get("name", "")
+    preview["community_name"] = public_community_display_name(community)
     preview["invited_by_name"] = event.get("created_by_name", "")
     return preview
 

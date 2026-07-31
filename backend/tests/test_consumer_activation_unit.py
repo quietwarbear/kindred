@@ -216,10 +216,41 @@ async def test_confirmed_organizer_activation_is_idempotent(synthetic_store):
     assert retry_user["community_id"] == first_community["id"]
     assert retry_community["id"] == first_community["id"]
     assert len(synthetic_store.communities.documents) == 1
+    assert first_community["lifecycle_state"] == "active"
+    assert first_community["lifecycle_revision"] == 0
     assert (
         synthetic_store.communities.documents[0]["_id"]
         == synthetic_store.communities.documents[0]["id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_reunion_first_organizer_activation_starts_provisional(synthetic_store):
+    user = {
+        "id": "synthetic-reunion-user",
+        "email": "reunion-organizer@example.invalid",
+        "full_name": "Synthetic Reunion Organizer",
+        "role": "member",
+        "community_id": "",
+        "community_ids": [],
+        "auth_provider": "google",
+        "onboarding_completed": False,
+    }
+    synthetic_store.users.documents.append(deepcopy(user))
+
+    claimed_user, community = await auth._ensure_confirmed_organizer_community(
+        GoogleOnboardingRequest(
+            full_name="Synthetic Reunion Organizer",
+            community_name="Internal Reunion Planning Name",
+            community_type="family reunion",
+            creation_mode="reunion_first",
+        ),
+        user,
+    )
+
+    assert claimed_user["community_id"] == community["id"]
+    assert community["lifecycle_state"] == "provisional"
+    assert community["lifecycle_revision"] == 0
 
 
 @pytest.mark.asyncio

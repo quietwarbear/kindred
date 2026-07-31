@@ -194,6 +194,25 @@ async function configurePage(page, evidence, authorize = true) {
       if (requestUrl.pathname === '/api/subscriptions/plans') {
         return jsonResponse(request, { plans: [] });
       }
+      if (requestUrl.pathname === '/api/family-space/activation') {
+        return authorize
+          ? jsonResponse(request, {
+              lifecycle_state: 'provisional',
+              lifecycle_revision: 0,
+              readiness_status: 'ready',
+              ready: true,
+              aggregate_counts: {
+                reunions: 1,
+                verified_invitations: 3,
+                accepted_responses: 2,
+                non_host_participants: 1,
+              },
+              unmet_requirements: [],
+              elapsed_bucket: 'week_2_plus',
+              next_action: 'activate_family_space',
+            })
+          : jsonResponse(request, { detail: 'Organizer access required.' }, 403);
+      }
       if (requestUrl.pathname === `/api/events/${EVENT_ID}/command-center`) {
         return authorize
           ? jsonResponse(request, commandCenter)

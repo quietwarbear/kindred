@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from pymongo import ASCENDING
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse, JSONResponse
+from family_space_activation import public_community_display_name
 
 from db import (
     client,
@@ -26,6 +27,7 @@ from routes.digest import router as digest_router
 from routes.events import router as events_router
 from routes.federation import router as federation_router
 from routes.finance import router as finance_router
+from routes.family_space import router as family_space_router
 from routes.health import router as health_router
 from routes.legacy import router as legacy_router
 from routes.organizer import router as organizer_router
@@ -63,6 +65,7 @@ app.include_router(digest_router)
 app.include_router(events_router)
 app.include_router(federation_router)
 app.include_router(finance_router)
+app.include_router(family_space_router)
 app.include_router(health_router)
 app.include_router(legacy_router)
 app.include_router(organizer_router)
@@ -194,10 +197,13 @@ async def invite_landing(code: str):
     community_name = "a Kindred Community"
     if invite:
         community = await communities_collection.find_one(
-            {"id": invite["community_id"]}, {"_id": 0, "name": 1}
+            {"id": invite["community_id"]},
+            {"_id": 0, "name": 1, "lifecycle_state": 1},
         )
         if community:
-            community_name = community["name"]
+            community_name = (
+                public_community_display_name(community) or "a Kindred Community"
+            )
         html = INVITE_HTML.replace("{community_name}", community_name).replace(
             "{code}", invite["code"]
         )

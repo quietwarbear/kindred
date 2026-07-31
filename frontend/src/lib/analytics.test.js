@@ -13,6 +13,7 @@ import posthog from "posthog-js";
 import {
   initAnalytics,
   identifyUser,
+  isSensitiveContentRoute,
   isSensitiveInvitationRoute,
   redactInvitationPaths,
   REUNION_EVENTS,
@@ -66,7 +67,49 @@ test("declares every deliberate reunion funnel event", () => {
     "memory_contribution_saved",
     "memory_contribution_withdrawn",
     "reunion_capsule_next_action_viewed",
+    "family_space_activation_viewed",
+    "family_space_activation_deferred",
+    "family_space_activated",
+    "family_space_activation_conflict",
   ]);
+});
+
+test("family activation analytics accept only bounded categories and counts", () => {
+  trackReunionEvent("family_space_activation_viewed", {
+    source: "family_activation",
+    readiness_category: "ready",
+    verified_invite_count: 3,
+    accepted_count: 2,
+    non_host_participation_count: 1,
+    elapsed_day_bucket: "2_7",
+    family_space_name: "Private Family Name",
+    community_id: "private-community",
+    event_id: "private-event",
+    email: "private@example.invalid",
+    url: "https://example.invalid/private",
+    result: "arbitrary free form",
+    reunion_count: 1001,
+  });
+  expect(posthog.capture).toHaveBeenCalledWith("family_space_activation_viewed", {
+    source: "family_activation",
+    readiness_category: "ready",
+    verified_invite_count: 3,
+    accepted_count: 2,
+    non_host_participation_count: 1,
+    elapsed_day_bucket: "2_7",
+  });
+});
+
+test("sensitive reunion and activation pages drop autocapture and replay snapshots", () => {
+  window.history.replaceState({}, "", "/family/activate");
+  expect(isSensitiveContentRoute()).toBe(true);
+  expect(sanitizeAnalyticsEvent({ event: "$autocapture", properties: {} })).toBeNull();
+  expect(sanitizeAnalyticsEvent({ event: "$snapshot", properties: {} })).toBeNull();
+  expect(sanitizeAnalyticsEvent({ event: "family_space_activated", properties: {} })).not.toBeNull();
+  window.history.replaceState({}, "", "/reunion/memories/synthetic-event");
+  expect(isSensitiveContentRoute()).toBe(true);
+  window.history.replaceState({}, "", "/pricing");
+  expect(isSensitiveContentRoute()).toBe(false);
 });
 
 test("drops sensitive and unapproved analytics properties", () => {
