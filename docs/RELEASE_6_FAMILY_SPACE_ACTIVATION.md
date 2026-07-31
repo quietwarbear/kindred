@@ -239,6 +239,11 @@ synthetic readiness data with all external requests blocked.
 - Production transaction/topology behavior and provider settings were not
   verified. The race and preservation campaign used a disposable local MongoDB
   replica set with atomic compare-and-swap.
+- Older environment-coupled API test modules that require a separately seeded
+  `REACT_APP_BACKEND_URL` were not executed against staging or production.
+  Release-specific registration/social-login, reunion, RSVP, redelivery,
+  itinerary, subscription-kill-switch, browser, database, and native
+  regressions were exercised through the local synthetic campaigns above.
 - Physical Android/iOS devices, screen readers, production email/push,
   production analytics consoles, and app-store review were not exercised.
   Responsive browser semantics, keyboard controls, offline behavior, Android
