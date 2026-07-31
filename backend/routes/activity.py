@@ -47,6 +47,7 @@ async def get_activity_feed(
     for item in items:
         item["is_read"] = current_user["id"] in item.get("read_by_user_ids", [])
         item.pop("read_by_user_ids", None)
+        item.pop("recipient_user_ids", None)
 
     # Get distinct event types for filter options
     event_types = await notification_events_collection.distinct("event_type", query)

@@ -23,6 +23,7 @@ export const isSensitiveContentRoute = () => (
   && (
     /^\/family\/activate\/?$/i.test(window.location.pathname)
     || /^\/family\/join\/?$/i.test(window.location.pathname)
+    || /^\/proposals(?:\/|$)/i.test(window.location.pathname)
     || /^\/reunion\/(?:activate|command|hub|memories|recap)\//i.test(window.location.pathname)
   )
 );
@@ -153,7 +154,31 @@ export const REUNION_EVENTS = Object.freeze([
   "reunion_recap_published",
   "reunion_memory_continued",
   "next_gathering_started",
+  "gathering_proposal_submitted",
+  "gathering_pulse_viewed",
+  "gathering_interest_recorded",
+  "gathering_proposal_converted",
 ]);
+
+const GATHERING_PROPOSAL_EVENTS = new Set([
+  "gathering_proposal_submitted",
+  "gathering_pulse_viewed",
+  "gathering_interest_recorded",
+  "gathering_proposal_converted",
+]);
+
+const GATHERING_PROPOSAL_CATEGORIES = Object.freeze({
+  viewer_role: new Set(["member", "organizer"]),
+  proposal_state: new Set(["submitted", "published", "declined", "withdrawn", "converted", "expired", "conflict"]),
+  response_category: new Set(["interested", "maybe", "not_available"]),
+  next_action_category: new Set(["review_proposal", "respond_to_pulse", "continue_planning", "family_home"]),
+});
+
+const safeGatheringProposalProperties = (properties) => Object.fromEntries(
+  Object.entries(properties).filter(
+    ([key, value]) => typeof value === "string" && GATHERING_PROPOSAL_CATEGORIES[key]?.has(value)
+  )
+);
 
 const REUNION_RECAP_EVENTS = new Set([
   "reunion_recap_viewed",
@@ -262,6 +287,10 @@ export function trackReunionEvent(name, properties = {}) {
   }
   if (REUNION_RECAP_EVENTS.has(name)) {
     posthog.capture(name, safeReunionRecapProperties(properties));
+    return;
+  }
+  if (GATHERING_PROPOSAL_EVENTS.has(name)) {
+    posthog.capture(name, safeGatheringProposalProperties(properties));
     return;
   }
   const safeProperties = Object.fromEntries(

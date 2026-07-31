@@ -28,6 +28,7 @@ import { ThreadsPage } from "@/components/ThreadsPage";
 import { TimelinePage } from "@/components/TimelinePage";
 import { EventsPage } from "@/components/EventsPage";
 import { GatheringDetailPage } from "@/components/GatheringDetailPage";
+import { GatheringProposalsPage } from "@/components/GatheringProposalsPage";
 import { CourtyardDetailPage } from "@/components/CourtyardDetailPage";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
@@ -42,6 +43,7 @@ const navItems = [
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline", module: "memory" },
   { label: "Gatherings", path: "/gatherings", module: "gatherings" },
+  { label: "Gathering Proposals", path: "/proposals" },
   { label: "Circle of Care", path: "/care", module: "care" },
   { label: "Legacy Threads", path: "/legacy-threads", module: "legacy_threads" },
   { label: "Kinship Map", path: "/kinship-map", module: "kinship" },
@@ -319,6 +321,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<TimelinePage token={token} />} path="timeline" />
               <Route element={<GatheringsPage token={token} user={user} />} path="gatherings" />
               <Route element={<GatheringDetailPage token={token} user={user} />} path="gatherings/:id" />
+              <Route element={<GatheringProposalsPage token={token} user={user} />} path="proposals" />
               <Route element={<PollsPage token={token} user={user} />} path="polls" />
               <Route element={<FundsTravelPage token={token} user={user} />} path="funds-travel" />
               <Route element={<SettingsPage onSessionRefresh={onSessionRefresh} token={token} user={user} />} path="settings" />
