@@ -3,7 +3,7 @@ import axios from "axios";
 export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app";
 export const API_URL = `${BACKEND_URL}/api`;
 
-export const apiRequest = async (path, { method = "GET", data, token, params, timeout = 15000 } = {}) => {
+export const apiRequest = async (path, { method = "GET", data, token, params, headers = {}, timeout = 15000 } = {}) => {
   const response = await axios({
     method,
     url: `${API_URL}${path}`,
@@ -11,11 +11,10 @@ export const apiRequest = async (path, { method = "GET", data, token, params, ti
     params,
     timeout,
     withCredentials: true,
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`,
-        }
-      : undefined,
+    headers: {
+      ...headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
 
   return response.data;

@@ -12,6 +12,8 @@ from db import (
     client,
     communities_collection,
     events_collection,
+    family_access_requests_collection,
+    guest_family_claims_collection,
     invitation_redelivery_operations_collection,
     invites_collection,
     sso_codes_collection,
@@ -28,6 +30,7 @@ from routes.events import router as events_router
 from routes.federation import router as federation_router
 from routes.finance import router as finance_router
 from routes.family_space import router as family_space_router
+from routes.guest_family_access import router as guest_family_access_router
 from routes.health import router as health_router
 from routes.legacy import router as legacy_router
 from routes.organizer import router as organizer_router
@@ -66,6 +69,7 @@ app.include_router(events_router)
 app.include_router(federation_router)
 app.include_router(finance_router)
 app.include_router(family_space_router)
+app.include_router(guest_family_access_router)
 app.include_router(health_router)
 app.include_router(legacy_router)
 app.include_router(organizer_router)
@@ -305,6 +309,21 @@ async def ensure_indexes():
         name="active_planning_team_invite_once",
         unique=True,
         sparse=True,
+    )
+    await guest_family_claims_collection.create_index(
+        [("secret_digest", ASCENDING)],
+        name="guest_family_claim_secret_once",
+        unique=True,
+    )
+    await family_access_requests_collection.create_index(
+        [("community_id", ASCENDING), ("applicant_user_id", ASCENDING)],
+        name="family_access_one_request_per_member",
+        unique=True,
+    )
+    await family_access_requests_collection.create_index(
+        [("public_reference", ASCENDING)],
+        name="family_access_public_reference_once",
+        unique=True,
     )
     await invites_collection.create_index(
         [("planning_team_idempotency_key", ASCENDING)],

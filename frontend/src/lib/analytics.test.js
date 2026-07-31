@@ -71,7 +71,29 @@ test("declares every deliberate reunion funnel event", () => {
     "family_space_activation_deferred",
     "family_space_activated",
     "family_space_activation_conflict",
+    "guest_family_access_started",
+    "guest_family_access_submitted",
+    "guest_family_access_status_viewed",
+    "guest_family_access_cancelled",
+    "guest_family_access_decided",
   ]);
+});
+
+test("guest family access analytics keep only bounded categories", () => {
+  trackReunionEvent("guest_family_access_decided", {
+    source: "organizer_command_center",
+    request_state: "approved",
+    decision: "approved",
+    request_reference: "private-request",
+    applicant_name: "Private Person",
+    community_id: "private-community",
+    email: "private@example.invalid",
+  });
+  expect(posthog.capture).toHaveBeenCalledWith("guest_family_access_decided", {
+    source: "organizer_command_center",
+    request_state: "approved",
+    decision: "approved",
+  });
 });
 
 test("family activation analytics accept only bounded categories and counts", () => {
@@ -107,6 +129,8 @@ test("sensitive reunion and activation pages drop autocapture and replay snapsho
   expect(sanitizeAnalyticsEvent({ event: "$snapshot", properties: {} })).toBeNull();
   expect(sanitizeAnalyticsEvent({ event: "family_space_activated", properties: {} })).not.toBeNull();
   window.history.replaceState({}, "", "/reunion/memories/synthetic-event");
+  expect(isSensitiveContentRoute()).toBe(true);
+  window.history.replaceState({}, "", "/family/join");
   expect(isSensitiveContentRoute()).toBe(true);
   window.history.replaceState({}, "", "/pricing");
   expect(isSensitiveContentRoute()).toBe(false);

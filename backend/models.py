@@ -72,12 +72,14 @@ class ModulesUpdateRequest(BaseModel):
 
 class GoogleSessionRequest(BaseModel):
     credential: str
+    family_access_intent: bool = False
 
 
 class AppleSessionRequest(BaseModel):
     id_token: str
     full_name: str = ""
     email: str = ""
+    family_access_intent: bool = False
 
 
 class PasswordRecoveryRequest(BaseModel):
@@ -600,3 +602,9 @@ class SubscriptionCheckoutRequest(BaseModel):
     plan_id: str
     billing_cycle: Literal["monthly", "annual"]
     origin_url: str
+
+
+class GuestAccountRegistrationRequest(BaseModel):
+    full_name: str = Field(min_length=1, max_length=80)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=200)

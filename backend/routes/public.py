@@ -20,17 +20,27 @@ SECURITY (do not relax without review):
   accepts invitation credentials in a path or query string.
 """
 
-from datetime import datetime, timezone
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from db import communities_collection, events_collection, users_collection
+from db import (
+    communities_collection,
+    events_collection,
+    guest_family_claims_collection,
+    users_collection,
+)
 from dependencies import now_iso
 from event_privacy import serialize_event_for_guest
-from family_space_activation import public_community_display_name
+from family_space_activation import ACTIVE, community_lifecycle_state, public_community_display_name
+from guest_family_access import invitation_relationship_fingerprint
+from organizer_command_center import invitation_is_active
 from itinerary import (
     ACTIVITY_RESPONSES,
     activity_summaries,
@@ -105,6 +115,13 @@ async def _public_rsvp_view(token: str):
     )
     view = _public_view(event, invite)
     view["community_name"] = public_community_display_name(community)
+    view["family_access_available"] = bool(
+        event.get("event_template") == "reunion"
+        and invite.get("invite_source") == "guest"
+        and invite.get("rsvp_status") != "pending"
+        and community_lifecycle_state(community or {}) == ACTIVE
+        and invitation_is_active(invite)
+    )
     organizer = await users_collection.find_one(
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},
@@ -275,6 +292,12 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     )
     view = _public_view(event, {**invite, "rsvp_status": payload.status})
     view["community_name"] = public_community_display_name(community)
+    view["family_access_available"] = bool(
+        event.get("event_template") == "reunion"
+        and invite.get("invite_source") == "guest"
+        and community_lifecycle_state(community or {}) == ACTIVE
+        and invitation_is_active(invite)
+    )
     organizer = await users_collection.find_one(
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},
@@ -299,6 +322,57 @@ async def secure_public_rsvp_submit(
 ):
     """Update an invitation using an Authorization header, never a request URL."""
     return await _public_rsvp_submit(_invitation_token(authorization), payload)
+
+
+@router.post("/family-access-claim")
+async def create_family_access_claim(
+    authorization: str | None = Header(default=None),
+):
+    """Issue a short-lived continuity claim after a completed guest RSVP.
+
+    The invitation remains header-only. The claim is a separate credential and
+    is never derived from an email address or accepted in a URL.
+    """
+    token = _invitation_token(authorization)
+    event, invite = await _find_event_and_invite(token)
+    unavailable = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Family access is not available from this invitation.",
+    )
+    if (
+        not event
+        or not invite
+        or event.get("event_template") != "reunion"
+        or invite.get("invite_source") != "guest"
+        or invite.get("rsvp_status") == "pending"
+        or not invitation_is_active(invite)
+    ):
+        raise unavailable
+    community = await communities_collection.find_one(
+        {"id": event.get("community_id")},
+        {"_id": 0, "lifecycle_state": 1},
+    )
+    if community_lifecycle_state(community or {}) != ACTIVE:
+        raise unavailable
+
+    secret = secrets.token_urlsafe(32)
+    created_at = datetime.now(timezone.utc)
+    expires_at = created_at + timedelta(hours=24)
+    await guest_family_claims_collection.insert_one(
+        {
+            "id": str(uuid.uuid4()),
+            "secret_digest": hashlib.sha256(secret.encode("utf-8")).hexdigest(),
+            "community_id": event.get("community_id"),
+            "event_id": event.get("id"),
+            "relationship_fingerprint": invitation_relationship_fingerprint(
+                str(event.get("id") or ""), invite
+            ),
+            "status": "unclaimed",
+            "created_at": created_at.isoformat(),
+            "expires_at": expires_at.isoformat(),
+        }
+    )
+    return {"claim": secret, "expires_in_seconds": 86400}
 
 
 async def public_rsvp_view(token: str):

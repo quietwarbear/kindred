@@ -294,7 +294,11 @@ async def log_notification_event(
     await notification_events_collection.insert_one(event_doc.copy())
 
 
-SENSITIVE_NAMED_RSVP_EVENT_TYPES = {"event-rsvp", "rsvp-update"}
+SENSITIVE_NAMED_RSVP_EVENT_TYPES = {
+    "event-rsvp",
+    "rsvp-update",
+    "family-access-request",
+}
 
 
 def visible_event_query_for_user(
@@ -353,6 +357,14 @@ async def notification_query_for_user(
         **extra_filters,
     }
     conditions: list[dict[str, Any]] = [base_query]
+    conditions.append(
+        {
+            "$or": [
+                {"audience_scope": {"$ne": "user"}},
+                {"recipient_user_ids": user["id"]},
+            ]
+        }
+    )
     if user.get("role") not in {"host", "organizer"}:
         # Historical named RSVP rows used rsvp-update + audience_scope=event.
         # Newer rows use an organizer audience and may use event-rsvp. Enforce

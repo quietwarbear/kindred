@@ -50,9 +50,11 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   const intent = new URLSearchParams(location.search).get("intent") || "";
   const [reunionDraft] = useState(() => loadReunionDraft());
   const hasReunionIntent = intent === "reunion" && reunionDraftIsComplete(reunionDraft);
+  const hasFamilyAccessIntent = intent === "family-access";
+  const hasLightweightIntent = hasReunionIntent || hasFamilyAccessIntent;
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
-  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : intent === "guest" ? "login" : "launch");
+  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : intent === "guest" ? "login" : hasFamilyAccessIntent ? "login" : "launch");
 
   // Pre-fill invite code from deep link
   useEffect(() => {
@@ -111,15 +113,19 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       }
       return;
     }
+    if (hasFamilyAccessIntent) {
+      navigate("/family/join");
+      return;
+    }
     navigate(payload.user?.community_id ? "/home" : "/reunion/start");
-  }, [hasReunionIntent, navigate, onAuthSuccess, reunionDraft]);
+  }, [hasFamilyAccessIntent, hasReunionIntent, navigate, onAuthSuccess, reunionDraft]);
 
   const handleGoogleCredential = useCallback(async (response) => {
     setIsSubmitting(true);
     try {
       const payload = await apiRequest("/auth/google/session", {
         method: "POST",
-        data: { credential: response.credential },
+        data: { credential: response.credential, family_access_intent: hasFamilyAccessIntent },
       });
       await completeAuthentication(payload, "Signed in with Google.");
     } catch (error) {
@@ -129,7 +135,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     } finally {
       setIsSubmitting(false);
     }
-  }, [completeAuthentication]);
+  }, [completeAuthentication, hasFamilyAccessIntent]);
 
   const handleAppleSignIn = useCallback(async () => {
     setIsSubmitting(true);
@@ -140,7 +146,8 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       // which redirects to our deep link with the token.
       if (isNative()) {
         const backendUrl = process.env.REACT_APP_BACKEND_URL || "https://kindred-production-badd.up.railway.app";
-        const authUrl = `${backendUrl}/api/auth/apple/start?redirect_uri=${encodeURIComponent("kindred://auth/apple/callback")}`;
+        const callbackUrl = hasFamilyAccessIntent ? "kindred://auth/apple/callback?intent=family-access" : "kindred://auth/apple/callback";
+        const authUrl = `${backendUrl}/api/auth/apple/start?redirect_uri=${encodeURIComponent(callbackUrl)}`;
         try {
           const { Browser } = await import("@capacitor/browser");
           await Browser.open({ url: authUrl, presentationStyle: "popover" });
@@ -170,7 +177,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
 
       const payload = await apiRequest("/auth/apple/session", {
         method: "POST",
-        data: { id_token: idToken, full_name: fullName, email },
+        data: { id_token: idToken, full_name: fullName, email, family_access_intent: hasFamilyAccessIntent },
       });
       await completeAuthentication(payload, "Signed in with Apple.");
     } catch (error) {
@@ -185,7 +192,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     } finally {
       setIsSubmitting(false);
     }
-  }, [completeAuthentication]);
+  }, [completeAuthentication, hasFamilyAccessIntent]);
 
   // Initialize Apple JS SDK
   useEffect(() => {
@@ -238,7 +245,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
 
   const triggerGoogleSignIn = () => {
     if (isNative()) {
-      onGoogleNativeSignIn?.();
+      onGoogleNativeSignIn?.(hasFamilyAccessIntent ? "family-access" : "");
       return;
     }
     if (window.google?.accounts?.id) {
@@ -252,8 +259,10 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = await apiRequest("/auth/bootstrap", {
-        data: hasReunionIntent
+      const payload = await apiRequest(hasFamilyAccessIntent ? "/auth/guest-account" : "/auth/bootstrap", {
+        data: hasFamilyAccessIntent
+          ? { full_name: launchForm.full_name, email: launchForm.email, password: launchForm.password }
+          : hasReunionIntent
           ? {
               ...launchForm,
               community_name: provisionalCommunityName(reunionDraft),
@@ -266,7 +275,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           : launchForm,
         method: "POST",
       });
-      await completeAuthentication(payload, hasReunionIntent ? "Your reunion planning account is ready." : "Your private community has been opened.");
+      await completeAuthentication(payload, hasFamilyAccessIntent ? "Your account is ready. No family access has been granted yet." : hasReunionIntent ? "Your reunion planning account is ready." : "Your private community has been opened.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to launch your community.");
     } finally {
@@ -345,10 +354,12 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div>
             <p className="eyebrow-text text-orange-200">Invitation-only access</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              {hasReunionIntent ? "Save the reunion. Keep setup light." : "Plan the reunion. Bring everyone in. Keep the stories."}
+              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? "Save the reunion. Keep setup light." : "Plan the reunion. Bring everyone in. Keep the stories."}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
-              {hasReunionIntent
+              {hasFamilyAccessIntent
+                ? "Sign in or create an account, then send the private request already connected to your RSVP. An organizer must approve before family access begins."
+                : hasReunionIntent
                 ? "Your draft stays private until you create this account. We’ll save the gathering first; permanent family-space details can wait."
                 : "Start with a private reunion plan, join your family with an invite code, or sign back in. Existing family chats can continue while Kindred keeps the plan together."}
             </p>
@@ -371,7 +382,9 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div className="mb-6">
             <p className="eyebrow-text text-orange-700 dark:text-orange-200">Social sign in / sign up</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              {hasReunionIntent
+              {hasFamilyAccessIntent
+                ? "Use an account you control. Your email address is not used as proof that you belong to this family."
+                : hasReunionIntent
                 ? "Use Apple or Google to save the reunion with the organizer identity you already chose."
                 : "Use Apple or Google to sign in after starting a reunion plan, or to return to a family space you already joined."}
             </p>
@@ -405,11 +418,11 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           </div>
           <div className="border-t border-border/50 pt-6" />
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={`grid h-auto w-full ${hasReunionIntent ? "grid-cols-2" : "grid-cols-3"} rounded-full bg-muted/70 p-1`}>
+          <TabsList className={`grid h-auto w-full ${hasLightweightIntent ? "grid-cols-2" : "grid-cols-3"} rounded-full bg-muted/70 p-1`}>
             <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-launch" value="launch">
-              {hasReunionIntent ? "Create account" : "Launch"}
+              {hasLightweightIntent ? "Create account" : "Launch"}
             </TabsTrigger>
-            {!hasReunionIntent ? (
+            {!hasLightweightIntent ? (
               <TabsTrigger className="rounded-full py-2" data-testid="auth-tab-join" value="join">
                 Join
               </TabsTrigger>
@@ -431,19 +444,19 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                   <Input className="field-input" data-testid="launch-email-input" onChange={(e) => setLaunchForm((current) => ({ ...current, email: e.target.value }))} required type="email" value={launchForm.email} />
                 </label>
               </div>
-              <div className={hasReunionIntent ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
+              <div className={hasLightweightIntent ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}>
                 <label>
                   <span className="field-label">Password</span>
                   <Input className="field-input" data-testid="launch-password-input" minLength={8} onChange={(e) => setLaunchForm((current) => ({ ...current, password: e.target.value }))} required type="password" value={launchForm.password} />
                 </label>
-                {!hasReunionIntent ? (
+                {!hasLightweightIntent ? (
                   <label>
                     <span className="field-label">Community type</span>
                     <Input className="field-input" data-testid="launch-community-type-input" onChange={(e) => setLaunchForm((current) => ({ ...current, community_type: e.target.value }))} required value={launchForm.community_type} />
                   </label>
                 ) : null}
               </div>
-              {!hasReunionIntent ? (
+              {!hasLightweightIntent ? (
                 <>
                   <label>
                     <span className="field-label">Community name</span>
@@ -464,7 +477,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                     <Textarea className="field-textarea" data-testid="launch-description-input" onChange={(e) => setLaunchForm((current) => ({ ...current, description: e.target.value }))} required value={launchForm.description} />
                   </label>
                 </>
-              ) : (
+              ) : hasReunionIntent ? (
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-testid="reunion-account-summary">
                   <p className="text-sm font-semibold text-foreground">{reunionDraft.gathering_name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
@@ -479,9 +492,14 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                     A provisional planning space will be created behind the scenes. You can name the permanent family space after the first shared action.
                   </p>
                 </div>
+              ) : (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-testid="family-access-account-summary">
+                  <p className="text-sm font-semibold text-foreground">Account first, approval second</p>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">Creating this account does not join a family space. Kindred will submit the private guest claim only after authentication.</p>
+                </div>
               )}
               <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                {isSubmitting ? "Opening…" : hasReunionIntent ? "Save reunion draft" : "Launch Kindred"}
+                {isSubmitting ? "Opening…" : hasFamilyAccessIntent ? "Create account and continue" : hasReunionIntent ? "Save reunion draft" : "Launch Kindred"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>

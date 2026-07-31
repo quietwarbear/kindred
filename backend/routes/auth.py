@@ -1,5 +1,6 @@
 """Authentication routes."""
 
+import hashlib
 import logging
 import os
 import secrets
@@ -99,6 +100,7 @@ from models import (
     CommunityBootstrapRequest,
     GoogleOnboardingRequest,
     GoogleSessionRequest,
+    GuestAccountRegistrationRequest,
     InviteRegistrationRequest,
     LoginRequest,
     OwnershipTransferRequest,
@@ -160,7 +162,8 @@ def _external_base_url(request: Request) -> str:
 
 
 async def _build_google_auth_response(
-    google_user: dict[str, str], response: Response, *, provider: str = "google"
+    google_user: dict[str, str], response: Response, *, provider: str = "google",
+    allow_email_invite: bool = True,
 ):
     email = normalize_email(google_user.get("email", ""))
     if not email:
@@ -184,8 +187,12 @@ async def _build_google_auth_response(
         )
         user_doc = await users_collection.find_one({"id": user_doc["id"]}, {"_id": 0})
     else:
-        invite_doc = await invites_collection.find_one(
-            {"email": email, "status": "pending"}, {"_id": 0}
+        invite_doc = (
+            await invites_collection.find_one(
+                {"email": email, "status": "pending"}, {"_id": 0}
+            )
+            if allow_email_invite
+            else None
         )
         created_at = now_iso()
         user_id = str(uuid.uuid4())
@@ -355,7 +362,10 @@ async def apple_session_login(payload: AppleSessionRequest, response: Response):
     }
 
     # Reuse the same social auth flow as Google
-    return await _build_google_auth_response(apple_user, response, provider="apple")
+    return await _build_google_auth_response(
+        apple_user, response, provider="apple",
+        allow_email_invite=not payload.family_access_intent,
+    )
 
 
 DEFAULT_MOBILE_APPLE_REDIRECT = os.environ.get(
@@ -428,7 +438,13 @@ async def apple_login_callback(request: Request):
             "name": apple_name or email.split("@")[0],
             "picture": "",
         }
-        auth_payload = await _build_google_auth_response(apple_user, response, provider="apple")
+        family_access_intent = urllib.parse.parse_qs(
+            urllib.parse.urlsplit(str(state)).query
+        ).get("intent") == ["family-access"]
+        auth_payload = await _build_google_auth_response(
+            apple_user, response, provider="apple",
+            allow_email_invite=not family_access_intent,
+        )
     except Exception as exc:
         logger.error("Apple OAuth validation failed: %s", exc, exc_info=True)
         return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "validation_failed"))
@@ -561,6 +577,40 @@ async def login(payload: LoginRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
     community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
     return build_auth_response(user_doc, community_doc)
+
+
+@router.post("/auth/guest-account", response_model=AuthResponse)
+async def register_guest_account(payload: GuestAccountRegistrationRequest):
+    """Create an authenticated identity without granting community membership."""
+    email = normalize_email(payload.email)
+    if "@" not in email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid email is required.")
+    if await users_collection.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+    identity_digest = hashlib.sha256(email.encode("utf-8")).hexdigest()
+    user_doc = {
+        "_id": f"guest-account:{identity_digest}",
+        "id": str(uuid.uuid4()),
+        "full_name": payload.full_name.strip(),
+        "nickname": "",
+        "email": email,
+        "email_normalized": email,
+        "phone_number": "",
+        "profile_image_url": "",
+        "google_picture": "",
+        "password_hash": hash_password(payload.password),
+        "role": "member",
+        "community_id": "",
+        "community_ids": [],
+        "auth_provider": "password",
+        "onboarding_completed": False,
+        "created_at": now_iso(),
+    }
+    try:
+        await users_collection.insert_one(user_doc.copy())
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.") from exc
+    return build_auth_response(user_doc, None)
 
 
 @router.post("/auth/exchange", response_model=AuthResponse)
@@ -711,7 +761,10 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google session validation failed.") from exc
 
-    return await _build_google_auth_response(google_user, response)
+    return await _build_google_auth_response(
+        google_user, response,
+        allow_email_invite=not payload.family_access_intent,
+    )
 
 
 @router.get("/auth/google/start")
@@ -783,6 +836,9 @@ async def google_login_callback(request: Request, code: str | None = None, state
             GoogleRequest(),
             google_client_id,
         )
+        family_access_intent = urllib.parse.parse_qs(
+            urllib.parse.urlsplit(app_redirect_uri).query
+        ).get("intent") == ["family-access"]
         auth_payload = await _build_google_auth_response(
             {
                 "email": idinfo.get("email", ""),
@@ -790,6 +846,7 @@ async def google_login_callback(request: Request, code: str | None = None, state
                 "picture": idinfo.get("picture", ""),
             },
             response,
+            allow_email_invite=not family_access_intent,
         )
     except Exception as exc:
         logger.error("Google OAuth validation failed: %s", exc, exc_info=True)
