@@ -80,7 +80,30 @@ test("declares every deliberate reunion funnel event", () => {
     "reunion_recap_published",
     "reunion_memory_continued",
     "next_gathering_started",
+    "gathering_proposal_submitted",
+    "gathering_pulse_viewed",
+    "gathering_interest_recorded",
+    "gathering_proposal_converted",
   ]);
+});
+
+test("gathering proposal analytics keep only bounded categories", () => {
+  trackReunionEvent("gathering_interest_recorded", {
+    viewer_role: "member",
+    proposal_state: "published",
+    response_category: "interested",
+    next_action_category: "respond_to_pulse",
+    title: "Private title",
+    note: "Private note",
+    location: "Private place",
+    proposal_reference: "private-reference",
+  });
+  expect(posthog.capture).toHaveBeenCalledWith("gathering_interest_recorded", {
+    viewer_role: "member",
+    proposal_state: "published",
+    response_category: "interested",
+    next_action_category: "respond_to_pulse",
+  });
 });
 
 test("reunion recap analytics keep only bounded categories", () => {
@@ -153,6 +176,8 @@ test("sensitive reunion and activation pages drop autocapture and replay snapsho
   window.history.replaceState({}, "", "/reunion/memories/synthetic-event");
   expect(isSensitiveContentRoute()).toBe(true);
   window.history.replaceState({}, "", "/reunion/recap/synthetic-event");
+  expect(isSensitiveContentRoute()).toBe(true);
+  window.history.replaceState({}, "", "/proposals/review");
   expect(isSensitiveContentRoute()).toBe(true);
   window.history.replaceState({}, "", "/family/join");
   expect(isSensitiveContentRoute()).toBe(true);

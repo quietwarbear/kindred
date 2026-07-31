@@ -279,6 +279,7 @@ async def notification_history(current_user: dict[str, Any] = Depends(get_curren
     for item in items:
         item["is_read"] = current_user["id"] in item.get("read_by_user_ids", [])
         item.pop("read_by_user_ids", None)
+        item.pop("recipient_user_ids", None)
     return {"items": items}
 
 

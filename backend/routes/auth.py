@@ -65,6 +65,9 @@ from db import (
     communities_collection,
     events_collection,
     family_access_requests_collection,
+    gathering_proposal_conversions_collection,
+    gathering_proposal_responses_collection,
+    gathering_proposals_collection,
     guest_family_claims_collection,
     invites_collection,
     notification_events_collection,
@@ -997,6 +1000,39 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
             "$unset": {"created_by_user_id": ""},
         },
     )
+    # Proposal text and interest are member-owned. Remove response identity and
+    # leave only a categorical proposal tombstone needed for organizer audit.
+    await gathering_proposal_responses_collection.delete_many({"user_id": user_id})
+    await gathering_proposals_collection.update_many(
+        {"proposer_user_id": user_id, "state": {"$in": ["submitted", "published"]}},
+        {"$set": {"state": "withdrawn", "updated_at": now_iso()}, "$inc": {"revision": 1}},
+    )
+    await gathering_proposals_collection.update_many(
+        {"proposer_user_id": user_id},
+        {
+            "$set": {
+                "working_title": "", "broad_date_window": "", "location_suggestion": "",
+                "organizer_note": "", "proposer_tombstone": True, "updated_at": now_iso(),
+            },
+            "$unset": {"proposer_user_id": "", "proposer_display_name": ""},
+        },
+    )
+    await gathering_proposal_conversions_collection.update_many(
+        {"proposer_user_id": user_id},
+        {"$set": {"proposer_tombstone": True}, "$unset": {"proposer_user_id": ""}},
+    )
+    await gathering_proposal_conversions_collection.update_many(
+        {"converted_by_user_id": user_id},
+        {"$set": {"converter_tombstone": True}, "$unset": {"converted_by_user_id": ""}},
+    )
+    await gathering_proposal_conversions_collection.update_many(
+        {"selected_organizer_user_id": user_id},
+        {"$set": {"selected_organizer_tombstone": True}, "$unset": {"selected_organizer_user_id": ""}},
+    )
+    await notification_events_collection.update_many(
+        {"community_id": community_id},
+        {"$pull": {"recipient_user_ids": user_id, "read_by_user_ids": user_id}},
+    )
 
     if is_owner and member_count <= 1:
         await events_collection.delete_many({"community_id": community_id})
@@ -1007,6 +1043,9 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         await memories_collection.delete_many({"community_id": community_id})
         await reunion_recaps_collection.delete_many({"community_id": community_id})
         await next_gathering_operations_collection.delete_many({"community_id": community_id})
+        await gathering_proposals_collection.delete_many({"community_id": community_id})
+        await gathering_proposal_responses_collection.delete_many({"community_id": community_id})
+        await gathering_proposal_conversions_collection.delete_many({"community_id": community_id})
         await family_access_requests_collection.delete_many({"community_id": community_id})
         await guest_family_claims_collection.delete_many({"community_id": community_id})
         await threads_collection.delete_many({"community_id": community_id})

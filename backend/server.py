@@ -13,6 +13,9 @@ from db import (
     communities_collection,
     events_collection,
     family_access_requests_collection,
+    gathering_proposal_conversions_collection,
+    gathering_proposal_responses_collection,
+    gathering_proposals_collection,
     guest_family_claims_collection,
     invitation_redelivery_operations_collection,
     invites_collection,
@@ -33,6 +36,7 @@ from routes.federation import router as federation_router
 from routes.finance import router as finance_router
 from routes.family_space import router as family_space_router
 from routes.guest_family_access import router as guest_family_access_router
+from routes.gathering_proposals import router as gathering_proposals_router
 from routes.health import router as health_router
 from routes.legacy import router as legacy_router
 from routes.organizer import router as organizer_router
@@ -73,6 +77,7 @@ app.include_router(federation_router)
 app.include_router(finance_router)
 app.include_router(family_space_router)
 app.include_router(guest_family_access_router)
+app.include_router(gathering_proposals_router)
 app.include_router(health_router)
 app.include_router(legacy_router)
 app.include_router(organizer_router)
@@ -337,6 +342,31 @@ async def ensure_indexes():
     await next_gathering_operations_collection.create_index(
         [("created_event_id", ASCENDING)],
         name="next_gathering_created_event_once",
+        unique=True,
+    )
+    await gathering_proposals_collection.create_index(
+        [("public_reference", ASCENDING)],
+        name="gathering_proposal_public_reference_once",
+        unique=True,
+    )
+    await gathering_proposals_collection.create_index(
+        [("submission_operation_hash", ASCENDING)],
+        name="gathering_proposal_submission_once",
+        unique=True,
+    )
+    await gathering_proposal_responses_collection.create_index(
+        [("proposal_id", ASCENDING), ("user_id", ASCENDING)],
+        name="gathering_proposal_one_response_per_member",
+        unique=True,
+    )
+    await gathering_proposal_conversions_collection.create_index(
+        [("proposal_id", ASCENDING)],
+        name="gathering_proposal_one_conversion",
+        unique=True,
+    )
+    await gathering_proposal_conversions_collection.create_index(
+        [("created_event_id", ASCENDING)],
+        name="gathering_proposal_created_event_once",
         unique=True,
     )
     await family_access_requests_collection.create_index(

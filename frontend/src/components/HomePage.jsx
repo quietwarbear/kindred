@@ -73,6 +73,15 @@ export const HomePage = ({ token }) => {
         </div>
       </section>
 
+      <section className="archival-card flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" data-testid="home-gathering-proposals-card">
+        <div>
+          <p className="eyebrow-text">What should we gather for next?</p>
+          <h3 className="mt-2 font-display text-3xl text-foreground">Start with a private family suggestion</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">Suggest the next gathering, respond to an organizer-approved interest pulse, and keep every individual response private.</p>
+        </div>
+        <Link className="inline-flex items-center text-sm font-semibold text-primary" to="/proposals">Open gathering proposals <ArrowRight className="ml-2 h-4 w-4" /></Link>
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <article className="archival-card" data-testid="home-upcoming-gatherings-card">
           <div className="flex items-center justify-between gap-4">
