@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from db import communities_collection, events_collection, users_collection
 from dependencies import now_iso
 from event_privacy import serialize_event_for_guest
+from family_space_activation import public_community_display_name
 from itinerary import (
     ACTIVITY_RESPONSES,
     activity_summaries,
@@ -99,10 +100,11 @@ async def _public_rsvp_view(token: str):
             detail="This invitation link is not valid.",
         )
     community = await communities_collection.find_one(
-        {"id": event.get("community_id")}, {"_id": 0, "name": 1}
+        {"id": event.get("community_id")},
+        {"_id": 0, "name": 1, "lifecycle_state": 1},
     )
     view = _public_view(event, invite)
-    view["community_name"] = community.get("name", "") if community else ""
+    view["community_name"] = public_community_display_name(community)
     organizer = await users_collection.find_one(
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},
@@ -268,10 +270,11 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     )
 
     community = await communities_collection.find_one(
-        {"id": event.get("community_id")}, {"_id": 0, "name": 1}
+        {"id": event.get("community_id")},
+        {"_id": 0, "name": 1, "lifecycle_state": 1},
     )
     view = _public_view(event, {**invite, "rsvp_status": payload.status})
-    view["community_name"] = community.get("name", "") if community else ""
+    view["community_name"] = public_community_display_name(community)
     organizer = await users_collection.find_one(
         {"id": event.get("created_by"), "community_id": event.get("community_id")},
         {"_id": 0, "full_name": 1},

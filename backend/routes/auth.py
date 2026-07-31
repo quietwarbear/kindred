@@ -463,6 +463,10 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         "description": payload.description.strip(),
         "motto": (payload.motto or "").strip(),
         "owner_user_id": user_id,
+        "lifecycle_state": (
+            "provisional" if payload.creation_mode == "reunion_first" else "active"
+        ),
+        "lifecycle_revision": 0,
         "created_at": created_at,
     }
     user_doc = {
@@ -986,6 +990,10 @@ async def _ensure_confirmed_organizer_community(
             "description": "A private planning space created for a family reunion.",
             "motto": (payload.motto or "").strip(),
             "owner_user_id": current_user["id"],
+            "lifecycle_state": (
+                "provisional" if payload.creation_mode == "reunion_first" else "active"
+            ),
+            "lifecycle_revision": 0,
             "created_at": created_at,
         }
         try:
@@ -1079,6 +1087,8 @@ async def complete_onboarding(
             "location": (payload.location or community_doc.get("location", "")).strip(),
             "motto": (payload.motto or community_doc.get("motto", "")).strip(),
         }
+        if community_doc.get("lifecycle_state") == "provisional":
+            community_updates.pop("name", None)
         await communities_collection.update_one(
             {"id": community_doc["id"]}, {"$set": community_updates}
         )

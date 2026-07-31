@@ -176,7 +176,16 @@ def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any])
         user_safe["id"],
         {"community_id": user_safe["community_id"], "role": user_safe["role"]},
     )
-    return {"token": token, "user": user_safe, "community": sanitize_doc(community_doc)}
+    community_safe = sanitize_doc(community_doc)
+    if community_safe:
+        lifecycle = community_safe.get("lifecycle_state")
+        community_safe["lifecycle_state"] = (
+            lifecycle if lifecycle in {"provisional", "active"} else "legacy_unchanged"
+        )
+        community_safe["lifecycle_revision"] = max(
+            0, int(community_safe.get("lifecycle_revision", 0) or 0)
+        )
+    return {"token": token, "user": user_safe, "community": community_safe}
 
 
 def apply_session_cookie(response, session_token: str):

@@ -80,6 +80,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
   const [members, setMembers] = useState([]);
   const [planningTeam, setPlanningTeam] = useState({ assigned: [], pending_invitations: [] });
   const [preview, setPreview] = useState(null);
+  const [familyReadiness, setFamilyReadiness] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -94,16 +95,18 @@ export const OrganizerCommandCenterPage = ({ session }) => {
     if (!session?.token || !eventId) return;
     setLoadError("");
     try {
-      const [commandPayload, eventPayload, membersPayload, planningTeamPayload] = await Promise.all([
+      const [commandPayload, eventPayload, membersPayload, planningTeamPayload, familyPayload] = await Promise.all([
         apiRequest(`/events/${eventId}/command-center`, { token: session.token }),
         apiRequest(`/events/${eventId}`, { token: session.token }),
         apiRequest("/community/members", { token: session.token }),
         apiRequest(`/events/${eventId}/planning-team`, { token: session.token }),
+        apiRequest("/family-space/activation", { token: session.token }),
       ]);
       setCommand(commandPayload);
       setEvent(eventPayload);
       setMembers(membersPayload.members || []);
       setPlanningTeam(planningTeamPayload);
+      setFamilyReadiness(familyPayload);
     } catch (error) {
       setLoadError(
         error.response?.status === 403
@@ -361,6 +364,23 @@ export const OrganizerCommandCenterPage = ({ session }) => {
             <Eye className="mr-2 h-4 w-4" /> {showPreview ? "Hide guest preview" : "Preview guest experience"}
           </Button>
         </header>
+
+        {familyReadiness?.lifecycle_state === "provisional" ? (
+          <section className="archival-card flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" data-testid="command-center-family-activation-card">
+            <div>
+              <p className="eyebrow-text">After the reunion</p>
+              <h2 className="mt-2 font-display text-3xl">{familyReadiness.ready ? "Your family space is ready to keep." : "Your family space is taking shape."}</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
+                {familyReadiness.ready
+                  ? "Choose its enduring name without changing invitations, members, memories, or reunion history."
+                  : "Keep coordinating the reunion. You can activate later without losing access to this command center."}
+              </p>
+            </div>
+            <Button asChild variant={familyReadiness.ready ? "default" : "outline"}>
+              <Link to="/family/activate">Review family-space readiness <ArrowRight className="ml-2 h-4 w-4" /></Link>
+            </Button>
+          </section>
+        ) : null}
 
         <section className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.2fr_0.8fr]">

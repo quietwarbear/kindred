@@ -90,6 +90,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
               full_name: reunionDraft.organizer_name,
               community_name: provisionalCommunityName(reunionDraft),
               community_type: "family reunion",
+              creation_mode: "reunion_first",
               location: reunionDraft.location,
             },
           });
@@ -259,6 +260,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
               community_type: "family reunion",
               location: reunionDraft.location,
               description: "A provisional private planning space created for a family reunion.",
+              creation_mode: "reunion_first",
               motto: "",
             }
           : launchForm,

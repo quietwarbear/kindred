@@ -18,6 +18,14 @@ export const isSensitiveInvitationRoute = () => (
   )
 );
 
+export const isSensitiveContentRoute = () => (
+  typeof window !== "undefined"
+  && (
+    /^\/family\/activate\/?$/i.test(window.location.pathname)
+    || /^\/reunion\/(?:activate|command|hub|memories)\//i.test(window.location.pathname)
+  )
+);
+
 const analyticsSuppressed = () => (
   process.env.REACT_APP_DISABLE_ANALYTICS === "true"
   || (
@@ -49,6 +57,10 @@ export const redactInvitationPaths = (value) => {
 };
 
 export const sanitizeAnalyticsEvent = (event) => {
+  if (
+    isSensitiveContentRoute()
+    && ["$autocapture", "$snapshot"].includes(event?.event)
+  ) return null;
   if (!event?.properties) return event;
   return {
     ...event,
@@ -127,7 +139,44 @@ export const REUNION_EVENTS = Object.freeze([
   "memory_contribution_saved",
   "memory_contribution_withdrawn",
   "reunion_capsule_next_action_viewed",
+  "family_space_activation_viewed",
+  "family_space_activation_deferred",
+  "family_space_activated",
+  "family_space_activation_conflict",
 ]);
+
+const FAMILY_ACTIVATION_EVENTS = new Set([
+  "family_space_activation_viewed",
+  "family_space_activation_deferred",
+  "family_space_activated",
+  "family_space_activation_conflict",
+]);
+
+const FAMILY_ACTIVATION_CATEGORIES = Object.freeze({
+  source: new Set(["family_activation", "organizer_command_center"]),
+  readiness_category: new Set(["ready", "not_ready", "active", "legacy_unchanged", "unknown"]),
+  result: new Set(["success", "conflict", "deferred", "failure"]),
+  elapsed_day_bucket: new Set(["0_1", "2_7", "8_30", "31_plus", "unknown"]),
+});
+
+const FAMILY_ACTIVATION_COUNT_KEYS = new Set([
+  "verified_invite_count",
+  "accepted_count",
+  "non_host_participation_count",
+  "reunion_count",
+]);
+
+const safeFamilyActivationProperties = (properties) => Object.fromEntries(
+  Object.entries(properties).filter(([key, value]) => {
+    if (FAMILY_ACTIVATION_CATEGORIES[key]) {
+      return typeof value === "string" && FAMILY_ACTIVATION_CATEGORIES[key].has(value);
+    }
+    return FAMILY_ACTIVATION_COUNT_KEYS.has(key)
+      && Number.isInteger(value)
+      && value >= 0
+      && value <= 1000;
+  })
+);
 
 const SAFE_REUNION_PROPERTY_KEYS = new Set([
   "source",
@@ -154,6 +203,10 @@ const SAFE_REUNION_PROPERTY_KEYS = new Set([
 // invitation tokens, provider identifiers, or community identifiers.
 export function trackReunionEvent(name, properties = {}) {
   if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
+  if (FAMILY_ACTIVATION_EVENTS.has(name)) {
+    posthog.capture(name, safeFamilyActivationProperties(properties));
+    return;
+  }
   const safeProperties = Object.fromEntries(
     Object.entries(properties).filter(
       ([key, value]) =>
