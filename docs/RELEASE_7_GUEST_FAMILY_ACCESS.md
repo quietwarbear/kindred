@@ -8,7 +8,7 @@ Release 7 adds an optional, organizer-approved bridge from a completed no-accoun
 
 The implementation started from the exact Release 6 merge commit `1ab74c26e025c3e3e8a9fd1638c90f5c639f34af` on `origin/main`. The code implementation commit is `b093f50633e9e336e4e792273c5708aeebbe0d76`; this report is part of the separate documentation closeout commit.
 
-No production data, provider console, invitation-redelivery operation, deployed configuration, payment state, store listing, message delivery, deployment, or merge was touched.
+No production data, provider console, invitation-redelivery operation, deployed configuration, payment state, store listing, message delivery, production deployment, promotion, or merge was touched. After the draft PR branch was pushed, the repository's existing GitHub integration automatically produced an unpromoted Vercel preview; it was not opened or validated as part of this release.
 
 ## User journey
 
@@ -75,4 +75,4 @@ All database and browser evidence used synthetic local records. Production was n
 - A family space must already be explicitly `active`; provisional and ambiguous legacy communities do not offer this bridge.
 - Cross-community accounts deliberately fail closed even though other Kindred surfaces support community switching.
 - Account-deletion cascade coverage for the two new collections is documented but not added in this release.
-- Production deployment, provider configuration, live customer data, and live native OAuth callbacks were intentionally not exercised.
+- Production deployment/promotion, provider configuration, live customer data, and live native OAuth callbacks were intentionally not exercised. The automatically generated draft-PR preview was not treated as production evidence.
