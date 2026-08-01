@@ -22,9 +22,11 @@ from event_privacy import serialize_event_for_user
 from invitation_delivery import (
     build_invitation_delivery_provider,
     first_send_enabled,
+    reminders_enabled,
     send_first_invitations,
+    send_reminders,
 )
-from push_sender import maybe_notify
+from push_sender import maybe_notify, notify_community
 from holiday_pilot import (
     HOLIDAY_PILOT_CONFIRMATION_CODES,
     build_holiday_pilot_readiness,
@@ -191,9 +193,51 @@ async def send_gathering_reminders(
             "organizer" if event_doc.get("hidden_from_user_ids") else "event"
         ),
     )
+
+    # Gated actual delivery: only when reminders are enabled AND configured.
+    # Fails closed to a categorical status; performs no send otherwise. Returns
+    # content-free counts only.
+    delivery = {
+        "status": "unavailable",
+        "error_code": "delivery_disabled",
+        "counts": {
+            "submitted": 0,
+            "rejected": 0,
+            "ambiguous": 0,
+            "failed": 0,
+            "skipped": 0,
+        },
+    }
+    if reminders_enabled():
+        provider = build_invitation_delivery_provider()
+        if provider is None:
+            delivery["error_code"] = "provider_unconfigured"
+        else:
+            app_url = os.environ.get("APP_URL", "https://www.heykindred.org").rstrip(
+                "/"
+            )
+            report = await send_reminders(
+                event=event_doc,
+                invite_ids=None,
+                provider=provider,
+                events_collection=events_collection,
+                outbox_collection=invitation_delivery_outbox_collection,
+                app_url=app_url,
+            )
+            delivery = report.safe_document()
+            # Content-free push to reminded members' own devices (best-effort).
+            for invite in pending_invites:
+                member_id = invite.get("member_id", "")
+                if member_id:
+                    await maybe_notify(
+                        users_collection=users_collection,
+                        user_id=member_id,
+                        template_code="gathering_reminder",
+                    )
     return {
         "sent_count": len(pending_invites),
         "delivery_status": delivery_status,
+        "delivery": delivery,
         "event": event_doc,
     }
 
@@ -753,6 +797,13 @@ async def create_event(
             related_id=event_doc["id"],
             audience_scope="community",
         )
+        # Content-free push to the community's members (best-effort, gated).
+        await notify_community(
+            users_collection=users_collection,
+            community_id=current_user["community_id"],
+            template_code="new_gathering",
+            exclude_user_ids=(current_user["id"],),
+        )
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
     )
@@ -861,6 +912,13 @@ async def reveal_event(
             description=f"{current_user['full_name']} revealed a gathering at {event_doc.get('location', '')}.",
             related_id=event_id,
             audience_scope="community",
+        )
+        # Content-free push to the community now that the surprise is lifted.
+        await notify_community(
+            users_collection=users_collection,
+            community_id=current_user["community_id"],
+            template_code="gathering_revealed",
+            exclude_user_ids=(current_user["id"],),
         )
     event_doc["hidden_from_user_ids"] = []
     return serialize_event_for_user(

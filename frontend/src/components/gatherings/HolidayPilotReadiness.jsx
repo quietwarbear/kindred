@@ -127,6 +127,14 @@ export const HolidayPilotReadiness = ({ event, onFinishSetup, onUpdate, token })
         <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground" data-testid="holiday-pilot-activation-opened">{activation.opened}</strong>opened</div>
         <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground" data-testid="holiday-pilot-activation-delivered">{activation.delivered}</strong>delivered</div>
       </div>
+      {activation.awaiting > 0 ? (
+        <p
+          className="mt-3 rounded-xl border border-amber-300 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/20 dark:text-amber-200"
+          data-testid="holiday-pilot-followup-nudge"
+        >
+          {activation.awaiting} {activation.awaiting === 1 ? "person was" : "people were"} reached but {activation.awaiting === 1 ? "hasn't" : "haven't"} answered yet — a gentle reminder may help.
+        </p>
+      ) : null}
       <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
         Activation is measured privately from bounded counts only — never names, contacts, or links.
       </p>

@@ -297,3 +297,46 @@ async def maybe_notify(
     except Exception:
         # Push is a side channel; a failure here must never affect the request.
         return
+
+
+async def notify_community(
+    *,
+    users_collection,
+    community_id: str,
+    template_code: str,
+    exclude_user_ids: tuple[str, ...] = (),
+    client_factory: Callable[[], PushClient | None] = build_push_client,
+    recipient_cap: int = 500,
+) -> None:
+    """Best-effort content-free push to a community's members with a device.
+
+    Fully gated (push disabled → no-op), bounded (``recipient_cap``), and wrapped
+    so it can never raise into the caller. Only members who registered a device
+    token are contacted; the excluded ids (e.g. the actor) are skipped.
+    """
+    if not push_enabled() or not community_id:
+        return
+    try:
+        client = client_factory()
+        if client is None:
+            return
+        exclude = set(exclude_user_ids or ())
+        recipients = await users_collection.find(
+            {
+                "community_id": community_id,
+                "push_tokens": {"$exists": True, "$ne": []},
+            },
+            {"_id": 0, "id": 1},
+        ).to_list(recipient_cap)
+        for user in recipients:
+            user_id = user.get("id")
+            if not user_id or user_id in exclude:
+                continue
+            await send_push_to_user(
+                users_collection=users_collection,
+                user_id=user_id,
+                template_code=template_code,
+                client=client,
+            )
+    except Exception:
+        return

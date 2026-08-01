@@ -45,6 +45,7 @@ from family_space_activation import (
 )
 from guest_family_access import invitation_relationship_fingerprint
 from organizer_command_center import invitation_is_active
+from push_sender import maybe_notify
 from itinerary import (
     ACTIVITY_RESPONSES,
     activity_summaries,
@@ -345,6 +346,13 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
     )
     view["invited_by_name"] = event.get("created_by_name") or (organizer or {}).get(
         "full_name", ""
+    )
+    # Content-free, fully gated push to the organizer's own devices that a
+    # response came in. No-op unless push is enabled; never affects this reply.
+    await maybe_notify(
+        users_collection=users_collection,
+        user_id=event.get("created_by", ""),
+        template_code="rsvp_received",
     )
     view["saved"] = True
     return view

@@ -63,6 +63,16 @@ def _was_delivered(invite: dict[str, Any]) -> bool:
     return bool(invite.get("delivered_at") or invite.get("delivery_verified_at"))
 
 
+def _was_reached(invite: dict[str, Any]) -> bool:
+    """The invitation demonstrably left the app (shared, opened, or delivered)."""
+    return _was_shared(invite) or _was_opened(invite) or _was_delivered(invite)
+
+
+def _is_awaiting_response(invite: dict[str, Any]) -> bool:
+    """Reached the person, but no answer yet — the follow-up signal."""
+    return _was_reached(invite) and invite.get("rsvp_status", "pending") == "pending"
+
+
 def _stage(
     event: dict[str, Any],
     confirmations: set[str],
@@ -126,6 +136,9 @@ def build_holiday_pilot_readiness(
         for invite in active_invites
         if invite.get("rsvp_status", "pending") != "pending"
     ]
+    awaiting_response = [
+        invite for invite in active_invites if _is_awaiting_response(invite)
+    ]
     volunteer_need = sum(
         max(0, int(slot.get("needed_count", 0) or 0))
         for slot in event.get("volunteer_slots", [])
@@ -178,6 +191,8 @@ def build_holiday_pilot_readiness(
         next_action = "prepare_invitations"
     elif not checks["invitations_shared"]:
         next_action = "share_invitations"
+    elif awaiting_response:
+        next_action = "send_reminders"
     elif len(responses) < len(active_invites):
         next_action = "review_response_gaps"
     elif stage in {"completed", "archived"}:
@@ -204,6 +219,7 @@ def build_holiday_pilot_readiness(
                 sum(1 for invite in active_invites if _was_delivered(invite)), 10_000
             ),
             "responses_received": min(len(responses), 10_000),
+            "invitations_awaiting_response": min(len(awaiting_response), 10_000),
             "potluck_items": min(len(event.get("potluck_items", [])), 10_000),
             "volunteer_positions": min(volunteer_need, 10_000),
         },

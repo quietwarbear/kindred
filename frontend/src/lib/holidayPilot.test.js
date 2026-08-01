@@ -33,19 +33,43 @@ describe("Thanksgiving pilot organizer helpers", () => {
         invitations_delivered: 1,
         responses_received: 1,
       })
-    ).toEqual({ prepared: 5, shared: 3, opened: 2, delivered: 1, responses: 1 });
+    ).toEqual({
+      prepared: 5,
+      shared: 3,
+      opened: 2,
+      delivered: 1,
+      responses: 1,
+      awaiting: 0,
+    });
+  });
+
+  test("surfaces the awaiting-response follow-up count", () => {
+    expect(
+      invitationActivationSummary({
+        active_invitations: 4,
+        invitations_awaiting_response: 2,
+      }).awaiting
+    ).toBe(2);
   });
 
   test("coerces missing, negative, or fractional counts to zero-safe integers", () => {
     expect(
       invitationActivationSummary({ invitations_shared: -4, invitations_opened: 2.9 })
-    ).toEqual({ prepared: 0, shared: 0, opened: 2, delivered: 0, responses: 0 });
+    ).toEqual({
+      prepared: 0,
+      shared: 0,
+      opened: 2,
+      delivered: 0,
+      responses: 0,
+      awaiting: 0,
+    });
     expect(invitationActivationSummary(undefined)).toEqual({
       prepared: 0,
       shared: 0,
       opened: 0,
       delivered: 0,
       responses: 0,
+      awaiting: 0,
     });
   });
 });
