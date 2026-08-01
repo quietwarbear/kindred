@@ -35,6 +35,7 @@ payments_collection = db.payment_transactions
 travel_plans_collection = db.travel_plans
 budget_plans_collection = db.budget_plans
 legacy_table_collection = db.legacy_table_configs
+legacy_table_transfer_operations_collection = db.legacy_table_transfer_operations
 announcements_collection = db.announcements
 chat_rooms_collection = db.chat_rooms
 notification_events_collection = db.notification_events

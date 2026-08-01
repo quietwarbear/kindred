@@ -536,6 +536,36 @@ class LegacyTableRecipePreviewRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=100)
 
 
+class LegacyTableTransferStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: str = Field(min_length=1, max_length=100)
+    consent_confirmed: Literal[True]
+
+
+class LegacyTableTransferAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(
+        min_length=16, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    )
+    source_revision_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    status: Literal[
+        "accepted", "already_accepted", "deleted", "conflict", "unavailable"
+    ]
+    receipt_reference: str | None = Field(
+        default=None,
+        min_length=16,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$",
+    )
+    error_code: str | None = Field(
+        default=None,
+        max_length=80,
+        pattern=r"^[a-z][a-z0-9_]+$",
+    )
+
+
 class FileAttachmentPayload(BaseModel):
     file_data: str = ""
     file_name: str = ""

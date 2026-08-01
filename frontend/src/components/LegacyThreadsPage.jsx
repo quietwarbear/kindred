@@ -126,6 +126,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
   const [recipePreview, setRecipePreview] = useState(null);
   const [previewingId, setPreviewingId] = useState(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
 
   const loadLt = useCallback(async () => {
     try {
@@ -157,6 +158,24 @@ export const LegacyThreadsPage = ({ token, user }) => {
       toast.error(error.response?.data?.detail || "This recipe cannot be previewed for transfer.");
     } finally {
       setPreviewingId(null);
+    }
+  };
+
+  const startRecipeTransfer = async () => {
+    if (!recipePreview?.threadId || !consentAccepted || lt.transfer_status !== "ready") return;
+    setTransferBusy(true);
+    try {
+      const result = await apiRequest("/legacy-table/transfers/start", {
+        method: "POST",
+        token,
+        data: { thread_id: recipePreview.threadId, consent_confirmed: true },
+      });
+      const resumableStates = new Set(["grant_ready", "payload_retrieved", "destination_pending", "destination_accepted"]);
+      if (!result?.url || !resumableStates.has(result.status)) throw new Error("transfer_unavailable");
+      window.location.assign(result.url);
+    } catch {
+      toast.error("The private transfer could not start. Your Kindred recipe is unchanged.");
+      setTransferBusy(false);
     }
   };
 
@@ -222,7 +241,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
                 </span>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Legacy Table is optional. Preview is read-only, and delivery stays unavailable until the destination can safely reconcile retries.
+                Legacy Table is optional. Recipe delivery requires your explicit approval and an authenticated Legacy Table account.
               </p>
             </div>
           </div>
@@ -381,8 +400,18 @@ export const LegacyThreadsPage = ({ token, user }) => {
                     <input checked={consentAccepted} data-testid={`legacy-consent-${thread.id}`} onChange={(event) => setConsentAccepted(event.target.checked)} type="checkbox" />
                     I understand exactly what would leave Kindred.
                   </label>
-                  <p className="mt-3 text-xs font-semibold text-amber-700" data-testid={`legacy-transfer-blocked-${thread.id}`}>Live transfer is unavailable until Legacy Table supports safe idempotency and acceptance reconciliation. Your Kindred recipe is unchanged.</p>
-                  <Button className="mt-3 rounded-full" disabled size="sm">Transfer unavailable</Button>
+                  {lt.transfer_status !== "ready" && (
+                    <p className="mt-3 text-xs font-semibold text-amber-700" data-testid={`legacy-transfer-blocked-${thread.id}`}>Private transfer is not configured. Your Kindred recipe is unchanged.</p>
+                  )}
+                  <Button
+                    className="mt-3 rounded-full"
+                    data-testid={`legacy-transfer-confirm-${thread.id}`}
+                    disabled={!consentAccepted || lt.transfer_status !== "ready" || transferBusy}
+                    onClick={startRecipeTransfer}
+                    size="sm"
+                  >
+                    {transferBusy ? "Opening Legacy Table…" : "Continue to Legacy Table"}
+                  </Button>
                   <Button className="ml-2 mt-3 rounded-full" onClick={() => { setRecipePreview(null); setConsentAccepted(false); }} size="sm" variant="outline">Close</Button>
                 </div>
               )}

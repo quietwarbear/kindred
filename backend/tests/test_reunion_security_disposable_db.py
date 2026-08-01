@@ -971,14 +971,14 @@ async def _run_campaign():
         "POST",
         "/api/legacy-table/sync-preview",
     )
-    assert legacy_member.status_code == 403
+    assert legacy_member.status_code == 410
     legacy_host = await _request_as(
         HOST,
         "POST",
         "/api/legacy-table/sync-preview",
     )
-    assert legacy_host.status_code == 200
-    assert legacy_host.json()["preview_counts"]["events"] == 2
+    assert legacy_host.status_code == 410
+    assert legacy_host.json()["detail"]["code"] == "bulk_export_retired"
 
     race_event = {
         **sensitive_event,
