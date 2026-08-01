@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, formatDateTime, shortCurrency } from "@/lib/api";
+import { toDateTimeLocalValue } from "@/lib/holidayPilot";
 import { toast } from "@/components/ui/sonner";
 
 import { GatheringAgenda } from "@/components/gatherings/GatheringAgenda";
 import { GatheringChecklist } from "@/components/gatherings/GatheringChecklist";
 import { GatheringInvites } from "@/components/gatherings/GatheringInvites";
+import { HolidayPilotReadiness } from "@/components/gatherings/HolidayPilotReadiness";
 import { GatheringPotluck } from "@/components/gatherings/GatheringPotluck";
 import { GatheringRoles } from "@/components/gatherings/GatheringRoles";
 import { GatheringRsvp } from "@/components/gatherings/GatheringRsvp";
@@ -22,6 +24,7 @@ const initialEventForm = {
   description: "",
   start_at: "",
   end_at: "",
+  rsvp_deadline: "",
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   location: "",
   map_url: "",
@@ -174,10 +177,14 @@ export const GatheringsPage = ({ token, user }) => {
 
   const startEditEvent = () => {
     if (!activeEvent) return;
+    const eventTimezone = activeEvent.timezone || "UTC";
     setEditingEvent({
       title: activeEvent.title,
       description: activeEvent.description || "",
-      start_at: activeEvent.start_at ? new Date(activeEvent.start_at).toISOString().slice(0, 16) : "",
+      start_at: toDateTimeLocalValue(activeEvent.start_at, eventTimezone),
+      end_at: toDateTimeLocalValue(activeEvent.end_at, eventTimezone),
+      rsvp_deadline: toDateTimeLocalValue(activeEvent.rsvp_deadline, eventTimezone),
+      timezone: eventTimezone,
       location: activeEvent.location || "",
       gathering_format: activeEvent.gathering_format || "in-person",
       max_attendees: activeEvent.max_attendees || 50,
@@ -192,7 +199,6 @@ export const GatheringsPage = ({ token, user }) => {
         token,
         data: {
           ...editingEvent,
-          start_at: editingEvent.start_at ? new Date(editingEvent.start_at).toISOString() : "",
           max_attendees: Number(editingEvent.max_attendees) || null,
         },
       });
@@ -399,6 +405,12 @@ export const GatheringsPage = ({ token, user }) => {
               <span className="field-label">End date + time</span>
               <Input className="field-input" data-testid="gatherings-end-input" onChange={(e) => setEventForm((c) => ({ ...c, end_at: e.target.value }))} type="datetime-local" value={eventForm.end_at} />
             </label>
+            {eventForm.event_template === "holiday_meal" && (
+              <label>
+                <span className="field-label">RSVP deadline</span>
+                <Input className="field-input" data-testid="gatherings-rsvp-deadline-input" onChange={(e) => setEventForm((c) => ({ ...c, rsvp_deadline: e.target.value }))} required type="datetime-local" value={eventForm.rsvp_deadline} />
+              </label>
+            )}
             <label>
               <span className="field-label">Timezone</span>
               <Input className="field-input" data-testid="gatherings-timezone-input" onChange={(e) => setEventForm((c) => ({ ...c, timezone: e.target.value }))} required value={eventForm.timezone} />
@@ -603,6 +615,20 @@ export const GatheringsPage = ({ token, user }) => {
                         <span className="text-xs font-semibold text-muted-foreground">Location</span>
                         <Input className="field-input mt-1" data-testid="event-edit-location" onChange={(e) => setEditingEvent((c) => ({ ...c, location: e.target.value }))} value={editingEvent.location} />
                       </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">End date & time</span>
+                        <Input className="field-input mt-1" data-testid="event-edit-end" onChange={(e) => setEditingEvent((c) => ({ ...c, end_at: e.target.value }))} type="datetime-local" value={editingEvent.end_at} />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-muted-foreground">Timezone</span>
+                        <Input className="field-input mt-1" data-testid="event-edit-timezone" onChange={(e) => setEditingEvent((c) => ({ ...c, timezone: e.target.value }))} value={editingEvent.timezone} />
+                      </label>
+                      {activeEvent.event_template === "holiday_meal" ? (
+                        <label className="block">
+                          <span className="text-xs font-semibold text-muted-foreground">RSVP deadline</span>
+                          <Input className="field-input mt-1" data-testid="event-edit-rsvp-deadline" onChange={(e) => setEditingEvent((c) => ({ ...c, rsvp_deadline: e.target.value }))} type="datetime-local" value={editingEvent.rsvp_deadline} />
+                        </label>
+                      ) : null}
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block">
@@ -628,13 +654,14 @@ export const GatheringsPage = ({ token, user }) => {
                     <h3 className="mt-2 font-display text-3xl text-foreground" data-testid="gatherings-active-title">{activeEvent.title}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(activeEvent.start_at)} · {activeEvent.location}</p>
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">{activeEvent.description}</p>
-                    {activeEvent.event_template === "holiday_meal" && activeEvent.publication_state === "organizer_draft" && (
-                      <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-4" data-testid="holiday-draft-controls">
-                        <p className="text-sm font-semibold text-foreground">Private organizer draft</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Review the schedule, dishes, supplies, and volunteer needs. Finishing setup makes it visible to signed-in family but still sends nothing.</p>
-                        <Button className="mt-3 rounded-full" data-testid="holiday-draft-publish" onClick={publishHolidayDraft} size="sm">Finish setup</Button>
-                      </div>
-                    )}
+                    {activeEvent.event_template === "holiday_meal" ? (
+                      <HolidayPilotReadiness
+                        event={activeEvent}
+                        onFinishSetup={publishHolidayDraft}
+                        onUpdate={mergeEvent}
+                        token={token}
+                      />
+                    ) : null}
                     {activeEvent.hidden_from_user_ids?.length > 0 && (
                       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 dark:bg-amber-900/20" data-testid="gatherings-surprise-banner">
                         <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">

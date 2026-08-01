@@ -38,7 +38,11 @@ from db import (
 )
 from dependencies import now_iso
 from event_privacy import serialize_event_for_guest
-from family_space_activation import ACTIVE, community_lifecycle_state, public_community_display_name
+from family_space_activation import (
+    ACTIVE,
+    community_lifecycle_state,
+    public_community_display_name,
+)
 from guest_family_access import invitation_relationship_fingerprint
 from organizer_command_center import invitation_is_active
 from itinerary import (
@@ -68,7 +72,7 @@ class PublicRSVPRequest(BaseModel):
 
 async def _find_event_and_invite(token: str):
     event = await events_collection.find_one({"event_invites.id": token}, {"_id": 0})
-    if not event:
+    if not event or event.get("publication_state") == "organizer_draft":
         return None, None
     invite = next(
         (i for i in event.get("event_invites", []) if i.get("id") == token), None

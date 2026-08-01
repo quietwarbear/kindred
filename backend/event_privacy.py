@@ -29,6 +29,9 @@ SENSITIVE_EVENT_FIELDS = {
     "event_role_assignments",
     "hidden_from_member_ids",
     "hidden_from_user_ids",
+    "holiday_pilot_confirmations",
+    "holiday_pilot_readiness",
+    "holiday_setup_revision",
     "memory_capsule_reviewed_by",
     "memory_capsule_withdrawal_hashes",
     "planning_checklist",
@@ -76,6 +79,8 @@ def serialize_event_for_user(
     view = deepcopy(event)
     view["rsvp_summary"] = rsvp_summary(event)
     if user.get("role") in ORGANIZER_ROLES:
+        view.pop("holiday_pilot_confirmations", None)
+        view.pop("holiday_setup_revision", None)
         return view
 
     user_id = user.get("id", "")

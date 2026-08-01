@@ -272,6 +272,7 @@ class EventCreateRequest(BaseModel):
     description: str = ""
     start_at: str = Field(min_length=1)
     end_at: str = ""
+    rsvp_deadline: str = ""
     timezone: str = "UTC"
     location: str = ""
     event_template: str = "custom"
@@ -341,6 +342,7 @@ class EventPublic(BaseModel):
     description: str = ""
     start_at: str
     end_at: str = ""
+    rsvp_deadline: str = ""
     timezone: str = "UTC"
     location: str = ""
     event_template: str = "custom"
@@ -383,6 +385,7 @@ class EventPublic(BaseModel):
     suggested_contribution: float = 0.0
     created_at: str = ""
     publication_state: str = "published"
+    holiday_pilot_readiness: dict[str, Any] = Field(default_factory=dict)
 
 
 class MemoryCreateRequest(BaseModel):
@@ -622,6 +625,7 @@ class EventUpdateRequest(BaseModel):
     description: str = ""
     start_at: str = ""
     end_at: str = ""
+    rsvp_deadline: str = ""
     timezone: str = ""
     location: str = ""
     gathering_format: str = ""
@@ -629,6 +633,17 @@ class EventUpdateRequest(BaseModel):
     zoom_link: str = ""
     special_focus: str = ""
     map_url: str = ""
+
+
+class HolidayPilotChecklistRequest(BaseModel):
+    code: Literal[
+        "guest_plan_reviewed",
+        "invitations_shared",
+        "organizer_previewed",
+        "privacy_reviewed",
+        "reminder_plan_reviewed",
+    ]
+    checked: bool
 
 
 class MemoryUpdateRequest(BaseModel):
