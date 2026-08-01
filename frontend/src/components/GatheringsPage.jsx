@@ -343,7 +343,7 @@ export const GatheringsPage = ({ token, user }) => {
           </div>
 
           <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid="gatherings-ai-plan">
-            <p className="eyebrow-text">✨ Plan with the Ubuntu Steward</p>
+            <p className="eyebrow-text">✨ Plan with the Ubuntu Guide</p>
             <p className="mt-1 text-sm text-muted-foreground">Describe it in a sentence — the steward drafts the whole gathering (agenda, volunteers, potluck), and it all saves when you create.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <Input className="field-input flex-1" data-testid="gatherings-ai-prompt" onChange={(e) => setAiPrompt(e.target.value)} placeholder="e.g. Our August family reunion in Oakland, about 40 people" value={aiPrompt} />
