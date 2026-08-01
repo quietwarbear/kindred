@@ -14,7 +14,6 @@ from legacy_table_transfer import (
     TransferFailure,
     acknowledge_transfer,
     activate_grant,
-    ensure_transfer_indexes,
     operation_for_grant,
     prepare_operation,
     retrieve_payload,
@@ -23,6 +22,7 @@ from legacy_table_transfer import (
     safe_projection,
     transfer_configuration,
     validate_owned_recipe,
+    verify_transfer_indexes,
 )
 from models import (
     LegacyTableRecipePreviewRequest,
@@ -113,9 +113,9 @@ async def start_legacy_table_transfer(
     try:
         require_transfer_configuration()
         validate_owned_recipe(thread, current_user)
-        await ensure_transfer_indexes(db)
-        operation = await prepare_operation(db, client, thread, current_user)
+        await verify_transfer_indexes(db)
         code, web_origin = await mint_sso_code("legacy_table", current_user)
+        operation = await prepare_operation(db, client, thread, current_user)
         credential, operation = await activate_grant(db, operation)
     except TransferFailure as exc:
         return _safe_failure(exc)

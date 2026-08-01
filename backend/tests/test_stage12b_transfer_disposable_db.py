@@ -16,6 +16,7 @@ from legacy_table_transfer import (
     prepare_operation,
     retrieve_payload,
     revoke_grant,
+    verify_transfer_indexes,
 )
 
 DISPOSABLE_URL = os.environ.get("KINDRED_DISPOSABLE_MONGO_URL")
@@ -48,6 +49,7 @@ async def test_concurrent_operation_grant_payload_acknowledgement_and_replay_gua
     await database.drop_collection("legacy_table_transfer_operations")
     await database.drop_collection("threads")
     await ensure_transfer_indexes(database)
+    await verify_transfer_indexes(database)
     thread = {
         "id": "synthetic-stage12b-thread",
         "community_id": "synthetic-stage12b-community",

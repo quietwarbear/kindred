@@ -87,7 +87,8 @@ Hidden, deleted, withdrawn, non-recipe, missing, changed-revision, wrong-origin,
 
 | Failure | Safe behavior |
 | --- | --- |
-| configuration, URL, key, index, or transaction preflight | no operation, grant, provider call, or recipe mutation |
+| configuration, URL, key, or index preflight | no operation, grant, provider call, or recipe mutation |
+| destination SSO provider preflight | no operation, source link, grant, or recipe mutation; any unreturned one-time SSO code simply expires |
 | crash after operation creation | original operation recovered by keyed author/source binding |
 | concurrent start | one operation and one CAS grant winner; losing navigation fails closed |
 | browser crash after grant | new grant reuses the original operation ID |

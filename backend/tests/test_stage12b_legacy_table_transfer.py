@@ -1,12 +1,14 @@
 """Synthetic Stage 12B grant, authorization, and privacy regressions."""
 
 import os
+import json
 from pathlib import Path
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
 os.environ.setdefault("DB_NAME", "kindred_stage12b_unit")
 
 import pytest
+from fastapi import HTTPException
 
 from legacy_table_transfer import (
     TRANSFER_CONSENT_VERSION,
@@ -17,6 +19,7 @@ from legacy_table_transfer import (
     validate_owned_recipe,
 )
 from models import LegacyTableTransferAcknowledgement, LegacyTableTransferStartRequest
+from routes import legacy as legacy_routes
 
 BASE_THREAD = {
     "id": "synthetic-recipe-thread",
@@ -131,3 +134,44 @@ def test_routes_keep_grants_out_of_paths_queries_and_logging():
     assert "logger." not in transfer_source
     assert '"grant_digest"' in transfer_source
     assert '"credential":' not in transfer_source
+
+
+@pytest.mark.asyncio
+async def test_provider_and_index_preflight_precede_every_operation_mutation(
+    monkeypatch,
+):
+    calls = []
+
+    async def owned_thread(*_args):
+        return BASE_THREAD
+
+    async def indexes(*_args):
+        calls.append("indexes")
+
+    async def unavailable_provider(*_args):
+        calls.append("provider")
+        raise HTTPException(status_code=502, detail="synthetic unavailable")
+
+    async def forbidden_mutation(*_args):
+        raise AssertionError("operation mutation ran before provider preflight")
+
+    monkeypatch.setattr(legacy_routes, "get_thread_for_user", owned_thread)
+    monkeypatch.setattr(legacy_routes, "require_transfer_configuration", lambda: {})
+    monkeypatch.setattr(legacy_routes, "validate_owned_recipe", lambda *_args: None)
+    monkeypatch.setattr(legacy_routes, "verify_transfer_indexes", indexes)
+    monkeypatch.setattr(legacy_routes, "mint_sso_code", unavailable_provider)
+    monkeypatch.setattr(legacy_routes, "prepare_operation", forbidden_mutation)
+
+    response = await legacy_routes.start_legacy_table_transfer(
+        LegacyTableTransferStartRequest(
+            thread_id=BASE_THREAD["id"], consent_confirmed=True
+        ),
+        current_user=AUTHOR,
+    )
+
+    assert response.status_code == 502
+    assert json.loads(response.body) == {
+        "status": "unavailable",
+        "error_code": "destination_sso_unavailable",
+    }
+    assert calls == ["indexes", "provider"]

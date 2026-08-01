@@ -155,6 +155,43 @@ async def ensure_transfer_indexes(database) -> None:
     )
 
 
+async def verify_transfer_indexes(database) -> None:
+    """Fail closed unless separately provisioned production indexes are exact."""
+    expected = {
+        "legacy_table_transfer_operation_unique": {
+            "key": [("operation_id", 1)],
+            "unique": True,
+        },
+        "legacy_table_transfer_source_unique": {
+            "key": [("author_binding", 1), ("source_subject_binding", 1)],
+            "unique": True,
+        },
+        "legacy_table_transfer_grant_unique": {
+            "key": [("grant_digest", 1)],
+            "unique": True,
+            "sparse": True,
+        },
+        "legacy_table_transfer_operation_retention": {
+            "key": [("expires_at", 1)],
+            "expireAfterSeconds": 0,
+        },
+    }
+    try:
+        actual = {
+            item["name"]: item
+            async for item in database.legacy_table_transfer_operations.list_indexes()
+        }
+    except (OperationFailure, PyMongoError) as exc:
+        raise TransferFailure("transfer_index_unavailable", 503) from exc
+    for name, required in expected.items():
+        item = actual.get(name, {})
+        if list(item.get("key", {}).items()) != required["key"]:
+            raise TransferFailure("transfer_index_unavailable", 503)
+        for option, value in required.items():
+            if option != "key" and item.get(option) != value:
+                raise TransferFailure("transfer_index_unavailable", 503)
+
+
 def validate_owned_recipe(thread: dict[str, Any], user: dict[str, Any]) -> None:
     if (
         thread.get("category") != "recipe-tradition"
