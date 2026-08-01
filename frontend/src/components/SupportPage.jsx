@@ -26,12 +26,13 @@ export const SupportPage = () => (
 
         <div className="rounded-[24px] border border-border/60 bg-background/80 p-6" data-testid="support-feedback-card">
           <MessageCircle className="h-6 w-6 text-primary" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">Feedback &amp; Ideas</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">Closed-beta feedback</h2>
           <p className="mt-2 text-sm leading-7 text-muted-foreground">
-            Kindred is shaped by the communities that use it. Share ideas for new features or improvements.
+            Email a rating from 1–5 and one category: setup, invitations, responses, contributions, recipes, recap, accessibility, or other. A short comment is optional.
           </p>
-          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href={`mailto:${PUBLIC_IDENTITY.supportEmail}`}>
-            {PUBLIC_IDENTITY.supportEmail}
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">Privacy: do not include names, email addresses, invitations, event details, addresses, recipes, or other family information. This opens your email app; Kindred does not collect or analyze the comment.</p>
+          <a className="mt-4 inline-block text-sm font-semibold text-primary hover:underline" data-testid="support-feedback-link" href={`mailto:${PUBLIC_IDENTITY.supportEmail}?subject=Kindred%20closed-beta%20feedback`}>
+            Open private feedback email
           </a>
         </div>
       </div>

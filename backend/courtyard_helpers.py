@@ -124,6 +124,7 @@ def build_role_suggestions(event_template: str) -> list[str]:
         "family-reunion": ["organizer", "historian", "elder", "treasurer"],
         "church-gathering": ["organizer", "communications lead", "elder", "historian"],
         "holiday": ["organizer", "contributor", "historian"],
+        "holiday_meal": ["organizer", "contributor", "historian"],
         "wedding": ["organizer", "treasurer", "communications lead"],
         "birthday": ["organizer", "historian", "contributor"],
     }
@@ -167,6 +168,9 @@ def build_planning_checklist(event_template: str, gathering_format: str) -> list
         administrative.append("Confirm seating, vendors, and ceremony timeline")
     if template == "birthday":
         experience.append("Confirm gifts, cake, and tribute moment")
+    if template == "holiday_meal":
+        experience.append("Review the editable meal schedule and contribution list")
+        post_event.append("Invite optional recipe or food-tradition contributions")
 
     if format_label == "online":
         technology.append("Share access links and moderator responsibilities")

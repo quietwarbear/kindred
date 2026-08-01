@@ -55,7 +55,7 @@ async def _authorized_reunion(
     current_user: dict[str, Any],
 ) -> dict[str, Any]:
     event = await get_event_for_user(event_id, current_user)
-    if event.get("event_template") != "reunion":
+    if event.get("event_template") not in {"reunion", "holiday_meal"}:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reunion not found.",

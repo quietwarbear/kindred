@@ -3,7 +3,20 @@
     <head>
         <meta name="referrer" content="no-referrer" />
         <script>
-          window.__kindredSensitiveInvitationRoute =
+          window.__kindredSensitiveSSORoute = /^\/sso\/?$/i.test(window.location.pathname);
+          if (window.__kindredSensitiveSSORoute) {
+            var kindredSsoCode = new URLSearchParams(window.location.search).get("code");
+            if (kindredSsoCode) {
+              Object.defineProperty(window, "__kindredTransientSSOCode", {
+                configurable: true,
+                enumerable: false,
+                value: kindredSsoCode,
+                writable: false
+              });
+            }
+            history.replaceState(null, "", "/sso");
+          }
+          window.__kindredSensitiveInvitationRoute = window.__kindredSensitiveSSORoute ||
             /^\/rsvp\/[^/]+(?:\/|$)/i.test(window.location.pathname)
             || (
               /^\/rsvp\/?$/i.test(window.location.pathname)

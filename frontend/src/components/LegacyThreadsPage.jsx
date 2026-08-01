@@ -54,7 +54,7 @@ const promptsForToday = (() => {
 
 const initialForm = { title: "", category: "oral-history", body: "", elder_name: "" };
 
-export const LegacyThreadsPage = ({ token }) => {
+export const LegacyThreadsPage = ({ token, user }) => {
   const [threads, setThreads] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [audioFile, setAudioFile] = useState(null);
@@ -122,13 +122,15 @@ export const LegacyThreadsPage = ({ token }) => {
     setShowForm(true);
   };
 
-  const [lt, setLt] = useState({ sso_enabled: false });
-  const [syncingId, setSyncingId] = useState(null);
+  const [lt, setLt] = useState({ connection_status: "unavailable", transfer_status: "unavailable" });
+  const [recipePreview, setRecipePreview] = useState(null);
+  const [previewingId, setPreviewingId] = useState(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   const loadLt = useCallback(async () => {
     try {
       const status = await apiRequest("/legacy-table/status", { token });
-      setLt(status || { sso_enabled: false });
+      setLt(status || { connection_status: "unavailable", transfer_status: "unavailable" });
     } catch {
       /* non-fatal — Legacy Table is optional */
     }
@@ -145,16 +147,16 @@ export const LegacyThreadsPage = ({ token }) => {
     }
   };
 
-  const sendRecipe = async (threadId) => {
-    setSyncingId(threadId);
+  const previewRecipe = async (threadId) => {
+    setPreviewingId(threadId);
+    setConsentAccepted(false);
     try {
-      const res = await apiRequest(`/legacy-table/sync-recipe/${threadId}`, { method: "POST", token });
-      setThreads((c) => c.map((t) => (t.id === threadId ? { ...t, legacy_table_recipe_id: res.recipe_id, legacy_table_synced_at: res.synced_at } : t)));
-      toast.success("Recipe sent to Legacy Table — where family recipes live forever.");
+      const preview = await apiRequest("/legacy-table/recipe-preview", { method: "POST", token, data: { thread_id: threadId } });
+      setRecipePreview({ ...preview, threadId });
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Couldn't send to Legacy Table.");
+      toast.error(error.response?.data?.detail || "This recipe cannot be previewed for transfer.");
     } finally {
-      setSyncingId(null);
+      setPreviewingId(null);
     }
   };
 
@@ -215,30 +217,18 @@ export const LegacyThreadsPage = ({ token }) => {
             <div>
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-foreground">Legacy Table</p>
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${lt.sso_enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`} data-testid="legacy-lt-status">
-                  {lt.sso_enabled ? (<><Check className="h-3 w-3" /> Connected</>) : "Not connected"}
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${lt.connection_status === "ready" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`} data-testid="legacy-lt-status">
+                  {lt.connection_status === "ready" ? (<><Check className="h-3 w-3" /> Sign-in ready</>) : (lt.connection_status || "unavailable").replaceAll("_", " ")}
                 </span>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                {lt.sso_enabled
-                  ? (<>Recipes you send are saved to Legacy Table as <span className="font-medium text-foreground/80">{lt.connected_as || "you"}</span> — where family recipes live forever. No second login.</>)
-                  : "Recipe sync switches on once the shared connection is configured. No extra login — your Kindred identity carries over."}
+                Legacy Table is optional. Preview is read-only, and delivery stays unavailable until the destination can safely reconcile retries.
               </p>
             </div>
           </div>
-          {lt.sso_enabled && (
-            <div className="shrink-0 text-right">
-              <p className="font-display text-2xl text-foreground" data-testid="legacy-lt-synced-count">{lt.recipes_synced || 0}</p>
-              <p className="text-xs text-muted-foreground">recipe{(lt.recipes_synced || 0) === 1 ? "" : "s"} sent</p>
-            </div>
-          )}
+          <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground" data-testid="legacy-lt-transfer-status">Transfer {lt.transfer_status || "unavailable"}</span>
         </div>
-        {lt.sso_enabled && lt.last_sync_at && (
-          <p className="mt-3 text-xs text-muted-foreground" data-testid="legacy-lt-last-sync">
-            Last sync: {formatDateTime(lt.last_sync_at)}{lt.last_sync_result ? ` · ${lt.last_sync_result}` : ""}
-          </p>
-        )}
-        {lt.sso_enabled && (
+        {lt.sso_status === "ready" && (
           <button
             className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-muted/60"
             data-testid="legacy-open-lt"
@@ -291,7 +281,7 @@ export const LegacyThreadsPage = ({ token }) => {
             </label>
             {form.category === "recipe-tradition" && (
               <p className="sm:col-span-2 -mt-1 flex items-center gap-1.5 text-xs text-primary" data-testid="legacy-recipe-hint">
-                <Utensils className="h-3.5 w-3.5" /> This can travel to Legacy Table once you save it — where family recipes live forever.
+                <Utensils className="h-3.5 w-3.5" /> Kindred keeps the original. Its author can later inspect a read-only Legacy Table transfer preview.
               </p>
             )}
             <label className="block">
@@ -358,22 +348,42 @@ export const LegacyThreadsPage = ({ token }) => {
 
               {thread.category === "recipe-tradition" && (
                 <div className="mt-3">
-                  {thread.legacy_table_recipe_id ? (
+                  {thread.legacy_table_transfer_state === "completed" ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600" data-testid={`legacy-recipe-synced-${thread.id}`}>
                       <Check className="h-3.5 w-3.5" /> Sent to Legacy Table
                     </span>
-                  ) : (
+                  ) : thread.created_by_id === user?.id ? (
                     <button
                       className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-muted/60 transition disabled:opacity-60"
                       data-testid={`legacy-send-recipe-${thread.id}`}
-                      disabled={syncingId === thread.id}
-                      onClick={() => sendRecipe(thread.id)}
+                      disabled={previewingId === thread.id}
+                      onClick={() => previewRecipe(thread.id)}
                       type="button"
                     >
                       <Utensils className="h-3.5 w-3.5" />
-                      {syncingId === thread.id ? "Sending…" : "Send to Legacy Table"}
+                      {previewingId === thread.id ? "Preparing preview…" : "Preview Legacy Table transfer"}
                     </button>
-                  )}
+                  ) : <p className="text-xs text-muted-foreground">Only the recipe author can open a transfer preview.</p>}
+                </div>
+              )}
+
+              {recipePreview?.threadId === thread.id && (
+                <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid={`legacy-consent-preview-${thread.id}`}>
+                  <p className="font-semibold text-foreground">Exact transfer preview</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">{recipePreview.selected_content.title}</p>
+                  <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{recipePreview.selected_content.instructions_or_story}</p>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                    <li>Your account identity is required for cross-product sign-in.</li>
+                    <li>Only this selected title and instructions or story would leave Kindred.</li>
+                    <li>The destination may create a family cookbook and manages its own retention and deletion.</li>
+                  </ul>
+                  <label className="mt-3 flex items-start gap-2 text-xs text-foreground">
+                    <input checked={consentAccepted} data-testid={`legacy-consent-${thread.id}`} onChange={(event) => setConsentAccepted(event.target.checked)} type="checkbox" />
+                    I understand exactly what would leave Kindred.
+                  </label>
+                  <p className="mt-3 text-xs font-semibold text-amber-700" data-testid={`legacy-transfer-blocked-${thread.id}`}>Live transfer is unavailable until Legacy Table supports safe idempotency and acceptance reconciliation. Your Kindred recipe is unchanged.</p>
+                  <Button className="mt-3 rounded-full" disabled size="sm">Transfer unavailable</Button>
+                  <Button className="ml-2 mt-3 rounded-full" onClick={() => { setRecipePreview(null); setConsentAccepted(false); }} size="sm" variant="outline">Close</Button>
                 </div>
               )}
 

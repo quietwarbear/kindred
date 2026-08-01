@@ -58,7 +58,7 @@ async def _organizer_reunion(
     # canonical role in the user's active community grants organizer access.
     ensure_minimum_role(current_user, "organizer")
     event = await get_event_for_user(event_id, current_user)
-    if event.get("event_template") != "reunion":
+    if event.get("event_template") not in {"reunion", "holiday_meal"}:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reunion not found.",

@@ -28,6 +28,13 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
+test("suppresses content analytics on the SSO landing route", () => {
+  window.history.replaceState({}, "", "/sso");
+  expect(isSensitiveContentRoute()).toBe(true);
+  expect(initAnalytics()).toBe(false);
+  expect(posthog.init).not.toHaveBeenCalled();
+});
+
 test("declares every deliberate reunion funnel event", () => {
   expect(REUNION_EVENTS).toEqual([
     "reunion_start_clicked",

@@ -7,6 +7,12 @@ from typing import Any
 
 ORGANIZER_PRIORITY = (
     "activate_family_space",
+    "finish_holiday_meal_setup",
+    "prepare_holiday_invitation",
+    "review_holiday_response_gaps",
+    "fill_holiday_contribution_gaps",
+    "preserve_holiday_recipe",
+    "review_holiday_recap",
     "finish_reunion_draft",
     "prepare_first_invitation",
     "review_family_access_requests",
@@ -20,6 +26,11 @@ ORGANIZER_PRIORITY = (
 
 MEMBER_PRIORITY = (
     "confirm_family_access",
+    "complete_holiday_rsvp",
+    "review_holiday_schedule",
+    "claim_holiday_contribution",
+    "add_holiday_recipe",
+    "view_holiday_recap",
     "complete_reunion_rsvp",
     "complete_activity_responses",
     "review_updated_itinerary",
@@ -56,6 +67,7 @@ DESTINATION_CATEGORIES = frozenset(
         "family_home",
         "gathering_proposals",
         "gatherings",
+        "legacy_threads",
         "memory_capsule",
         "organizer_command_center",
         "reunion_activation",
