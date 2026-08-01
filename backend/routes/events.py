@@ -15,6 +15,10 @@ from courtyard_helpers import (
 )
 from db import events_collection, users_collection
 from event_privacy import serialize_event_for_user
+from holiday_pilot import (
+    HOLIDAY_PILOT_CONFIRMATION_CODES,
+    build_holiday_pilot_readiness,
+)
 from dependencies import (
     build_invite_reminders_for_user,
     ensure_minimum_role,
@@ -55,6 +59,7 @@ from models import (
     EventCreateRequest,
     EventInviteCreateRequest,
     GatheringPlanRequest,
+    HolidayPilotChecklistRequest,
     EventMeetingLinkRequest,
     EventPublic,
     EventRoleAssignmentRequest,
@@ -69,8 +74,17 @@ from models import (
 router = APIRouter(prefix="/api")
 
 
+def _holiday_setup_revision_filter(event: dict[str, Any]) -> dict[str, Any]:
+    revision = int(event.get("holiday_setup_revision", 0) or 0)
+    if revision == 0:
+        return {"$in": [None, 0]}
+    return revision
+
+
 def _event_with_activity_summaries(event_doc: dict[str, Any]) -> dict[str, Any]:
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
+    if event_doc.get("event_template") == "holiday_meal":
+        event_doc["holiday_pilot_readiness"] = build_holiday_pilot_readiness(event_doc)
     return event_doc
 
 
@@ -223,17 +237,87 @@ async def publish_holiday_draft(
 ):
     ensure_minimum_role(current_user, "organizer")
     event = await get_event_for_user(event_id, current_user)
-    if event.get("event_template") != "holiday_meal" or event.get("publication_state") != "organizer_draft":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Holiday meal draft not found.")
-    await events_collection.update_one(
+    if (
+        event.get("event_template") != "holiday_meal"
+        or event.get("publication_state") != "organizer_draft"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Holiday meal draft not found.",
+        )
+    readiness = build_holiday_pilot_readiness(event)
+    if not readiness.get("can_finish_setup"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "holiday_pilot_setup_incomplete",
+                "next_action_code": readiness.get("next_action_code"),
+            },
+        )
+    updated = await events_collection.update_one(
         {
             "id": event_id,
             "community_id": current_user["community_id"],
             "publication_state": "organizer_draft",
+            "holiday_setup_revision": _holiday_setup_revision_filter(event),
         },
-        {"$set": {"publication_state": "published", "published_at": now_iso()}},
+        {
+            "$set": {"publication_state": "published", "published_at": now_iso()},
+            "$inc": {"holiday_setup_revision": 1},
+        },
     )
+    if updated.modified_count != 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "holiday_pilot_publish_conflict"},
+        )
     event["publication_state"] = "published"
+    return serialize_event_for_user(_event_with_activity_summaries(event), current_user)
+
+
+@router.post("/events/{event_id}/holiday-pilot-checklist", response_model=EventPublic)
+async def update_holiday_pilot_checklist(
+    event_id: str,
+    payload: HolidayPilotChecklistRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Persist one content-free organizer confirmation without provider activity."""
+    ensure_minimum_role(current_user, "organizer")
+    event = await get_event_for_user(event_id, current_user)
+    if event.get("event_template") != "holiday_meal":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Holiday meal not found.",
+        )
+    if payload.code not in HOLIDAY_PILOT_CONFIRMATION_CODES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_holiday_pilot_confirmation"},
+        )
+    operator = "$addToSet" if payload.checked else "$pull"
+    updated = await events_collection.update_one(
+        {
+            "id": event_id,
+            "community_id": current_user["community_id"],
+            "event_template": "holiday_meal",
+            "holiday_setup_revision": _holiday_setup_revision_filter(event),
+        },
+        {
+            operator: {"holiday_pilot_confirmations": payload.code},
+            "$inc": {"holiday_setup_revision": 1},
+        },
+    )
+    if updated.modified_count != 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "holiday_pilot_checklist_conflict"},
+        )
+    confirmations = set(event.get("holiday_pilot_confirmations", []))
+    if payload.checked:
+        confirmations.add(payload.code)
+    else:
+        confirmations.discard(payload.code)
+    event["holiday_pilot_confirmations"] = sorted(confirmations)
     return serialize_event_for_user(_event_with_activity_summaries(event), current_user)
 
 
@@ -254,6 +338,8 @@ async def update_event(
         updates["start_at"] = payload.start_at
     if payload.end_at:
         updates["end_at"] = payload.end_at
+    if payload.rsvp_deadline:
+        updates["rsvp_deadline"] = payload.rsvp_deadline
     if payload.timezone:
         if not valid_timezone(payload.timezone):
             raise HTTPException(
@@ -276,8 +362,12 @@ async def update_event(
     prospective_timezone = updates.get("timezone", event_doc.get("timezone", "UTC"))
     prospective_start = updates.get("start_at", event_doc.get("start_at", ""))
     prospective_end = updates.get("end_at", event_doc.get("end_at", ""))
+    prospective_deadline = updates.get(
+        "rsvp_deadline", event_doc.get("rsvp_deadline", "")
+    )
     parsed_start = parse_local_datetime(prospective_start, prospective_timezone)
     parsed_end = parse_local_datetime(prospective_end, prospective_timezone)
+    parsed_deadline = parse_local_datetime(prospective_deadline, prospective_timezone)
     if prospective_start and not parsed_start:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -292,6 +382,21 @@ async def update_event(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Gathering end must not be before its start.",
+        )
+    if prospective_deadline and not parsed_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="RSVP deadline must be a valid, unambiguous local date and time.",
+        )
+    if (
+        prospective_deadline
+        and parsed_deadline
+        and parsed_start
+        and parsed_deadline > parsed_start
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="RSVP deadline must not be after the gathering starts.",
         )
     if "timezone" in updates:
         inherited_errors = []
@@ -324,7 +429,25 @@ async def update_event(
                 },
             )
     if updates:
-        await events_collection.update_one({"id": event_id}, {"$set": updates})
+        update_filter: dict[str, Any] = {
+            "id": event_id,
+            "community_id": current_user["community_id"],
+        }
+        update_document: dict[str, Any] = {"$set": updates}
+        if event_doc.get("event_template") == "holiday_meal":
+            update_filter["holiday_setup_revision"] = _holiday_setup_revision_filter(
+                event_doc
+            )
+            update_document["$inc"] = {"holiday_setup_revision": 1}
+        updated = await events_collection.update_one(update_filter, update_document)
+        if (
+            event_doc.get("event_template") == "holiday_meal"
+            and updated.modified_count != 1
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "gathering_update_conflict"},
+            )
         event_doc.update(updates)
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
@@ -385,12 +508,21 @@ async def create_event(
     if payload.event_template == "holiday_meal" and len(client_request_id) < 16:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "holiday_draft_idempotency_required", "message": "This private draft needs a retry-safe request ID."},
+            detail={
+                "code": "holiday_draft_idempotency_required",
+                "message": "This private draft needs a retry-safe request ID.",
+            },
         )
-    if payload.event_template == "holiday_meal" and payload.recurrence_frequency != "none":
+    if (
+        payload.event_template == "holiday_meal"
+        and payload.recurrence_frequency != "none"
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "holiday_draft_must_be_one_time", "message": "Create one private holiday meal draft at a time."},
+            detail={
+                "code": "holiday_draft_must_be_one_time",
+                "message": "Create one private holiday meal draft at a time.",
+            },
         )
     if client_request_id:
         existing = await events_collection.find_one(
@@ -413,6 +545,7 @@ async def create_event(
         )
     parsed_start = parse_local_datetime(payload.start_at, payload.timezone)
     parsed_end = parse_local_datetime(payload.end_at, payload.timezone)
+    parsed_deadline = parse_local_datetime(payload.rsvp_deadline, payload.timezone)
     if not parsed_start:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -427,6 +560,21 @@ async def create_event(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Gathering end must not be before its start.",
+        )
+    if payload.rsvp_deadline and not parsed_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="RSVP deadline must be a valid, unambiguous local date and time.",
+        )
+    if (
+        payload.rsvp_deadline
+        and parsed_deadline
+        and parsed_start
+        and parsed_deadline > parsed_start
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="RSVP deadline must not be after the gathering starts.",
         )
     subyard_name = ""
     if payload.subyard_id:
@@ -461,11 +609,16 @@ async def create_event(
         "description": payload.description.strip(),
         "start_at": payload.start_at,
         "end_at": payload.end_at,
+        "rsvp_deadline": payload.rsvp_deadline,
         "timezone": payload.timezone,
         "location": payload.location.strip(),
         "map_url": (payload.map_url or "").strip(),
         "event_template": payload.event_template,
-        "publication_state": "organizer_draft" if payload.event_template == "holiday_meal" else "published",
+        "publication_state": (
+            "organizer_draft"
+            if payload.event_template == "holiday_meal"
+            else "published"
+        ),
         "special_focus": (payload.special_focus or "").strip(),
         "gathering_format": payload.gathering_format,
         "max_attendees": payload.max_attendees,
@@ -484,10 +637,14 @@ async def create_event(
         "zoom_link": (payload.zoom_link or "").strip(),
         "hidden_from_user_ids": payload.hidden_from_member_ids or [],
         "event_invites": [],
-        "event_role_assignments": [] if payload.event_template == "holiday_meal" else [
-            {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
-            for role in assigned_roles
-        ],
+        "event_role_assignments": (
+            []
+            if payload.event_template == "holiday_meal"
+            else [
+                {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
+                for role in assigned_roles
+            ]
+        ),
         "agenda": normalized_agenda,
         "activity_rsvps": [],
         "activity_rsvp_summaries": {},
@@ -509,6 +666,8 @@ async def create_event(
         "rsvp_records": [],
         "created_at": created_at,
         "client_request_id": client_request_id,
+        "holiday_pilot_confirmations": [],
+        "holiday_setup_revision": 0,
         "rsvp_revision": 0,
     }
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
@@ -570,7 +729,9 @@ async def create_event(
         await events_collection.insert_many([item.copy() for item in recurring_docs])
     # Surprise gatherings stay silent — no community-wide notification or activity entry,
     # so the guest(s) of honor never get a hint.
-    if payload.event_template != "holiday_meal" and not (payload.hidden_from_member_ids or []):
+    if payload.event_template != "holiday_meal" and not (
+        payload.hidden_from_member_ids or []
+    ):
         await log_notification_event(
             community_id=current_user["community_id"],
             actor_name=current_user["full_name"],
@@ -713,6 +874,14 @@ async def create_event_invites(
 ):
     ensure_minimum_role(current_user, "organizer")
     event_doc = await get_event_for_user(event_id, current_user)
+    if event_doc.get("publication_state") == "organizer_draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "organizer_draft_invitation_blocked",
+                "message": "Finish the private organizer review before creating invitation credentials.",
+            },
+        )
     existing_invites = event_doc.get("event_invites", [])
     existing_emails = {invite.get("email", "").lower() for invite in existing_invites}
     invite_records = existing_invites[:]

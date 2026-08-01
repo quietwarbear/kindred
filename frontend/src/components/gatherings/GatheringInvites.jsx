@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Copy, MailPlus, Share2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
+import { uniqueGuestCount } from "@/lib/holidayPilot";
 import { trackReunionEvent } from "@/lib/analytics";
 import { fragmentInvitationUrl } from "@/lib/invitationTransport";
 import { toast } from "@/components/ui/sonner";
@@ -97,8 +98,15 @@ const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion }) => {
 
 export const GatheringInvites = ({ event, token, members, onUpdate }) => {
   const [form, setForm] = useState(initialInviteForm);
+  const [draftPreviewed, setDraftPreviewed] = useState(false);
+  const isOrganizerDraft = event.publication_state === "organizer_draft";
+  const guestCount = useMemo(
+    () => uniqueGuestCount(form.guest_emails),
+    [form.guest_emails]
+  );
 
   const toggleMember = (memberId) => {
+    setDraftPreviewed(false);
     setForm((c) => ({
       ...c,
       member_ids: c.member_ids.includes(memberId)
@@ -109,6 +117,10 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isOrganizerDraft) {
+      setDraftPreviewed(true);
+      return;
+    }
     try {
       const payload = await apiRequest(`/events/${event.id}/invites`, {
         method: "POST",
@@ -160,11 +172,25 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
         ))}
       </div>
       <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-        <Input className="field-input" data-testid="gatherings-invite-guests-input" onChange={(e) => setForm((c) => ({ ...c, guest_emails: e.target.value }))} placeholder="guest1@example.com, guest2@example.com" value={form.guest_emails} />
-        <Textarea className="field-textarea" data-testid="gatherings-invite-note-input" onChange={(e) => setForm((c) => ({ ...c, note: e.target.value }))} placeholder="Optional note for invitees" value={form.note} />
+        <Input className="field-input" data-testid="gatherings-invite-guests-input" onChange={(e) => { setDraftPreviewed(false); setForm((c) => ({ ...c, guest_emails: e.target.value })); }} placeholder="guest1@example.com, guest2@example.com" value={form.guest_emails} />
+        <Textarea className="field-textarea" data-testid="gatherings-invite-note-input" onChange={(e) => { setDraftPreviewed(false); setForm((c) => ({ ...c, note: e.target.value })); }} placeholder="Optional note for invitees" value={form.note} />
+        {isOrganizerDraft && draftPreviewed ? (
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid="holiday-invitation-plan-preview">
+            <p className="text-sm font-semibold text-foreground">Private invitation plan preview</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {form.member_ids.length} family member {form.member_ids.length === 1 ? "invitation" : "invitations"} and {guestCount} guest {guestCount === 1 ? "invitation" : "invitations"}. Optional note: {form.note.trim() ? "included" : "not included"}.
+            </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">No links, credentials, notifications, or provider requests were created.</p>
+          </div>
+        ) : null}
         <Button className="w-full rounded-full" data-testid="gatherings-invite-submit-button" type="submit" variant="secondary">
-          Create gathering invites
+          {isOrganizerDraft ? "Preview invitation plan" : "Create gathering invites"}
         </Button>
+        {isOrganizerDraft ? (
+          <p className="text-xs leading-5 text-muted-foreground" data-testid="holiday-invitation-draft-guard">
+            Finish the private organizer checklist before Kindred can create invitation credentials.
+          </p>
+        ) : null}
       </form>
       <div className="mt-4 space-y-3">
         {event.event_invites?.map((invite, index) => (
