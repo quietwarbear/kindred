@@ -211,6 +211,30 @@ async def own_family_access_status(current_user: dict[str, Any] = Depends(get_cu
     return safe_status_projection(request, (community or {}).get("name", ""))
 
 
+@router.post("/family-access/confirm")
+async def confirm_approved_family_access(current_user: dict[str, Any] = Depends(get_current_user)):
+    """Record an explicit, idempotent acknowledgement of approved access."""
+    request = await _request_for_user(current_user["id"])
+    if (
+        not request
+        or request.get("status") != "approved"
+        or request.get("community_id") != current_user.get("community_id")
+        or not await _active_community(str(current_user.get("community_id") or ""))
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approved family access not found.")
+    if not request.get("applicant_confirmed_at"):
+        await family_access_requests_collection.update_one(
+            {
+                "id": request["id"],
+                "applicant_user_id": current_user["id"],
+                "status": "approved",
+                "applicant_confirmed_at": {"$exists": False},
+            },
+            {"$set": {"applicant_confirmed_at": now_iso(), "updated_at": now_iso()}},
+        )
+    return {"status": "approved", "confirmed": True, "next_action_code": "open_family_home"}
+
+
 @router.post("/family-access/cancel")
 async def cancel_own_family_access_request(
     payload: FamilyAccessCancellation,

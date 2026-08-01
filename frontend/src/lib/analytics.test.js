@@ -84,7 +84,42 @@ test("declares every deliberate reunion funnel event", () => {
     "gathering_pulse_viewed",
     "gathering_interest_recorded",
     "gathering_proposal_converted",
+    "family_today_viewed",
+    "family_today_primary_action_shown",
+    "family_today_primary_action_selected",
+    "reunion_draft_saved",
+    "first_invitation_prepared",
+    "first_invitation_shared",
+    "first_rsvp_received",
+    "organizer_return_after_first_rsvp",
+    "memory_contribution_completed",
+    "family_access_approved",
+    "gathering_pulse_completed",
+    "next_private_draft_started",
   ]);
+});
+
+test("Family Today analytics keep only bounded categories", () => {
+  trackReunionEvent("family_today_primary_action_selected", {
+    source: "family_today",
+    viewer_role: "member",
+    lifecycle_state: "active",
+    action_code: "complete_reunion_rsvp",
+    coarse_elapsed_time: "within_week",
+    event_id: "private-event",
+    community_id: "private-community",
+    title: "Private reunion",
+    url: "https://example.invalid/private",
+    exact_count: 1,
+    timestamp: "2028-01-01T00:00:00Z",
+  });
+  expect(posthog.capture).toHaveBeenCalledWith("family_today_primary_action_selected", {
+    source: "family_today",
+    viewer_role: "member",
+    lifecycle_state: "active",
+    action_code: "complete_reunion_rsvp",
+    coarse_elapsed_time: "within_week",
+  });
 });
 
 test("gathering proposal analytics keep only bounded categories", () => {
@@ -167,7 +202,7 @@ test("family activation analytics accept only bounded categories and counts", ()
   });
 });
 
-test("sensitive reunion and activation pages drop autocapture and replay snapshots", () => {
+test("sensitive reunion, Today, and activation pages drop pageviews, autocapture, and replay snapshots", () => {
   window.history.replaceState({}, "", "/family/activate");
   expect(isSensitiveContentRoute()).toBe(true);
   expect(sanitizeAnalyticsEvent({ event: "$autocapture", properties: {} })).toBeNull();
@@ -181,6 +216,9 @@ test("sensitive reunion and activation pages drop autocapture and replay snapsho
   expect(isSensitiveContentRoute()).toBe(true);
   window.history.replaceState({}, "", "/family/join");
   expect(isSensitiveContentRoute()).toBe(true);
+  window.history.replaceState({}, "", "/home");
+  expect(isSensitiveContentRoute()).toBe(true);
+  expect(sanitizeAnalyticsEvent({ event: "$pageview", properties: { $current_url: "https://example.invalid/home" } })).toBeNull();
   window.history.replaceState({}, "", "/pricing");
   expect(isSensitiveContentRoute()).toBe(false);
 });

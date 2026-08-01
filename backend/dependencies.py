@@ -316,7 +316,7 @@ def visible_event_query_for_user(
     return query
 
 
-async def hidden_event_ids_for_user(user: dict[str, Any]) -> list[str]:
+async def hidden_event_ids_for_user(user: dict[str, Any], *, session=None) -> list[str]:
     """Return event ids concealed from this user in their current community."""
     from db import events_collection
 
@@ -331,6 +331,7 @@ async def hidden_event_ids_for_user(user: dict[str, Any]) -> list[str]:
             "$or": concealed_conditions,
         },
         {"_id": 0, "id": 1},
+        session=session,
     ).to_list(length=None)
     return [event["id"] for event in events if event.get("id")]
 
@@ -357,6 +358,8 @@ async def event_derived_query_for_user(
 
 async def notification_query_for_user(
     user: dict[str, Any],
+    *,
+    session=None,
     **extra_filters: Any,
 ) -> dict[str, Any]:
     """Scope notification reads and mutations by audience and event visibility."""
@@ -383,7 +386,7 @@ async def notification_query_for_user(
         ])
     # Event concealment applies to every role. A platform or organizer flag is
     # never a side door into a reunion that explicitly excludes this account.
-    hidden_ids = await hidden_event_ids_for_user(user)
+    hidden_ids = await hidden_event_ids_for_user(user, session=session)
     if hidden_ids:
         conditions.append({"related_id": {"$nin": hidden_ids}})
     return conditions[0] if len(conditions) == 1 else {"$and": conditions}

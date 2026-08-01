@@ -180,6 +180,9 @@ export const ReunionMemoryCapsulePage = ({ session }) => {
           source: "memory_capsule",
           status,
         });
+        if (status === "published") {
+          trackReunionEvent("memory_contribution_completed", { source: "memory_capsule" });
+        }
       }
     });
   };

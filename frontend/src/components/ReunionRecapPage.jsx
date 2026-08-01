@@ -224,6 +224,10 @@ export const ReunionRecapPage = ({ session }) => {
         recap_state: recap.state,
         next_action_category: "continue_planning",
       });
+      trackReunionEvent("next_private_draft_started", {
+        source: "reunion_recap",
+        viewer_role: "organizer",
+      });
       navigate(payload.planning_path);
     } catch (error) {
       if (error.response?.status === 409) setNextPreview(null);

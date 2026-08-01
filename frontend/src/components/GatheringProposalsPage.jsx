@@ -178,6 +178,7 @@ export const GatheringProposalsPage = ({ token, user }) => {
       });
       clearOperationKey(kind, proposal.proposal_reference);
       trackReunionEvent("gathering_interest_recorded", { viewer_role: "member", proposal_state: "published", response_category: response, next_action_category: "respond_to_pulse" });
+      trackReunionEvent("gathering_pulse_completed", { viewer_role: "member", proposal_state: "published", response_category: response, next_action_category: "respond_to_pulse" });
       await load();
     } catch (error) {
       if (error.response?.status === 409) clearOperationKey(kind, proposal.proposal_reference);
@@ -217,6 +218,7 @@ export const GatheringProposalsPage = ({ token, user }) => {
       });
       clearOperationKey("convert", conversionFor.proposal_reference);
       trackReunionEvent("gathering_proposal_converted", { viewer_role: "organizer", proposal_state: "converted", next_action_category: "continue_planning" });
+      trackReunionEvent("next_private_draft_started", { source: "gathering_proposals", viewer_role: "organizer" });
       window.location.assign(payload.planning_path);
     } catch (error) {
       if (error.response?.status === 409) setConversionPreview(null);

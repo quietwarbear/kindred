@@ -11,7 +11,14 @@ import { toast } from "@/components/ui/sonner";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
 
-const ShareMessageButton = ({ isReunion, text, testId }) => {
+const trackFirstInvitationShared = () => {
+  const key = "kindred:first-invitation-shared";
+  if (window.sessionStorage.getItem(key)) return;
+  window.sessionStorage.setItem(key, "shared");
+  trackReunionEvent("first_invitation_shared", { source: "gathering_invites" });
+};
+
+const ShareMessageButton = ({ isFirst, isReunion, text, testId }) => {
   const [copied, setCopied] = useState(false);
   const handleShare = async () => {
     if (isReunion) {
@@ -19,6 +26,7 @@ const ShareMessageButton = ({ isReunion, text, testId }) => {
         source: "gathering_invites",
         status: navigator.share ? "native_share" : "copy",
       });
+      if (isFirst) trackFirstInvitationShared();
     }
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch { /* cancelled */ }
@@ -49,7 +57,7 @@ const ShareMessageButton = ({ isReunion, text, testId }) => {
   );
 };
 
-const CopyRsvpLinkButton = ({ inviteId, isReunion }) => {
+const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion }) => {
   const [copied, setCopied] = useState(false);
   const link = fragmentInvitationUrl(
     typeof window !== "undefined" ? window.location.origin : "https://heykindred.org",
@@ -68,6 +76,7 @@ const CopyRsvpLinkButton = ({ inviteId, isReunion }) => {
     }
     if (isReunion) {
       trackReunionEvent("invite_link_copied", { source: "gathering_invites" });
+      if (isFirst) trackFirstInvitationShared();
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -119,6 +128,9 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
           source: "gathering_invites",
           invite_count: createdCount,
         });
+        if ((event.event_invites?.length || 0) === 0) {
+          trackReunionEvent("first_invitation_prepared", { source: "gathering_invites" });
+        }
       }
       onUpdate(payload);
       setForm(initialInviteForm);
@@ -155,7 +167,7 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
         </Button>
       </form>
       <div className="mt-4 space-y-3">
-        {event.event_invites?.map((invite) => (
+        {event.event_invites?.map((invite, index) => (
           <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-event-invite-${invite.id}`} key={invite.id}>
             <p className="text-sm font-semibold text-foreground">{invite.invitee_name} · {invite.email}</p>
             <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{invite.invite_source} · {invite.delivery_status}</p>
@@ -166,12 +178,13 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
                 <p className="flex-1 text-sm leading-7 text-muted-foreground" data-testid={`gatherings-event-invite-message-${invite.id}`}>{invite.share_message}</p>
                 <ShareMessageButton
                   isReunion={event.event_template === "reunion"}
+                  isFirst={index === 0}
                   text={invite.share_message}
                   testId={`gatherings-event-invite-share-${invite.id}`}
                 />
               </div>
             )}
-            <CopyRsvpLinkButton inviteId={invite.id} isReunion={event.event_template === "reunion"} />
+            <CopyRsvpLinkButton inviteId={invite.id} isFirst={index === 0} isReunion={event.event_template === "reunion"} />
           </div>
         ))}
       </div>

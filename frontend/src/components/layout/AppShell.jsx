@@ -34,23 +34,27 @@ import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-register";
 
-// `module` ties a nav item to a Community OS module; items without one are always-on (the spine).
+const ROLE_ORDER = { member: 1, organizer: 2, host: 3 };
+
+// Existing routes remain intact. Today chooses the small primary set; the rest
+// stay discoverable under More without advertising organizer-only surfaces.
 const navItems = [
-  { label: "Home", path: "/home" },
+  { label: "Today", path: "/home", category: "today" },
   { label: "Ubuntu Guide", path: "/steward", module: "steward" },
-  { label: "Community Health", path: "/health", module: "health" },
-  { label: "Activity", path: "/activity" },
+  { label: "Community Health", path: "/health", module: "health", minimumRole: "organizer" },
+  { label: "Activity", path: "/activity", category: "activity" },
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline", module: "memory" },
-  { label: "Gatherings", path: "/gatherings", module: "gatherings" },
-  { label: "Gathering Proposals", path: "/proposals" },
+  { label: "Gatherings", path: "/gatherings", module: "gatherings", category: "gatherings" },
+  { label: "Gathering Proposals", path: "/proposals", category: "proposals" },
   { label: "Circle of Care", path: "/care", module: "care" },
   { label: "Legacy Threads", path: "/legacy-threads", module: "legacy_threads" },
   { label: "Kinship Map", path: "/kinship-map", module: "kinship" },
   { label: "Polls", path: "/polls", module: "polls" },
   { label: "Funds & Travel", path: "/funds-travel", module: "funds" },
-  { label: "Community Setup", path: "/setup" },
-  { label: "Subscription", path: "/subscription" },
+  { label: "Family activation", path: "/family/activate", category: "family_activation", minimumRole: "organizer" },
+  { label: "Community Setup", path: "/setup", minimumRole: "organizer" },
+  { label: "Subscription", path: "/subscription", minimumRole: "host" },
   { label: "Settings", path: "/settings" },
 ];
 
@@ -64,6 +68,10 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
   const [canInstall, setCanInstall] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [enabledModules, setEnabledModules] = useState(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [todayData, setTodayData] = useState(null);
+  const [todayLoading, setTodayLoading] = useState(true);
+  const [todayError, setTodayError] = useState("");
 
   const refreshUnreadSummary = useCallback(async () => {
     try {
@@ -83,8 +91,22 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
     }
   }, [token]);
 
+  const loadToday = useCallback(async () => {
+    setTodayLoading(true);
+    setTodayError("");
+    try {
+      const payload = await apiRequest("/today", { token });
+      setTodayData(payload);
+    } catch (error) {
+      setTodayError(error.response?.data?.detail || "Today is temporarily unavailable.");
+    } finally {
+      setTodayLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => { refreshUnreadSummary(); }, [location.pathname, refreshUnreadSummary]);
   useEffect(() => { loadMyCommunities(); }, [loadMyCommunities]);
+  useEffect(() => { loadToday(); }, [community?.id, loadToday]);
 
   useEffect(() => {
     let active = true;
@@ -130,6 +152,42 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
       toast.error(error.response?.data?.detail || "Unable to join community.");
     }
   };
+
+  const effectiveRole = todayData?.viewer_role === "new_member" ? "member" : todayData?.viewer_role;
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.module && enabledModules && !enabledModules.includes(item.module)) return false;
+    if (item.minimumRole && (ROLE_ORDER[effectiveRole] || 0) < ROLE_ORDER[item.minimumRole]) return false;
+    if (item.category === "family_activation" && todayData?.lifecycle_state !== "provisional") return false;
+    return true;
+  });
+  const primaryCategories = new Set(todayData?.navigation_categories || ["today", "gatherings", "activity"]);
+  const primaryNavItems = visibleNavItems.filter((item) => item.category && primaryCategories.has(item.category));
+  const moreNavItems = visibleNavItems.filter((item) => !primaryNavItems.includes(item));
+
+  const navLink = (item) => (
+    <NavLink
+      className={({ isActive }) =>
+        `rounded-2xl px-4 py-3 text-sm font-semibold transition duration-300 ${
+          isActive
+            ? "bg-primary text-primary-foreground shadow-[0_16px_36px_-22px_rgba(154,52,18,0.7)]"
+            : "bg-background/70 text-foreground hover:bg-accent/70"
+        }`
+      }
+      data-testid={`nav-link-${item.path.replace(/\//g, "") || "home"}`}
+      key={item.path}
+      onClick={() => setSidebarOpen(false)}
+      to={item.path}
+    >
+      <span className="flex items-center justify-between gap-3">
+        <span>{item.label}</span>
+        {item.path === "/courtyards" && unreadSummary.total_unread > 0 ? (
+          <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary" data-testid="nav-link-courtyards-unread-badge">
+            {unreadSummary.total_unread}
+          </span>
+        ) : null}
+      </span>
+    </NavLink>
+  );
 
   return (
     <div className="app-canvas min-h-screen pb-10" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
@@ -217,30 +275,23 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             </div>
 
             <nav className="grid gap-2" data-testid="shell-navigation">
-              {navItems.filter((item) => !item.module || !enabledModules || enabledModules.includes(item.module)).map((item) => (
-                <NavLink
-                  className={({ isActive }) =>
-                    `rounded-2xl px-4 py-3 text-sm font-semibold transition duration-300 ${
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-[0_16px_36px_-22px_rgba(154,52,18,0.7)]"
-                        : "bg-background/70 text-foreground hover:bg-accent/70"
-                    }`
-                  }
-                  data-testid={`nav-link-${item.path.replace(/\//g, "") || "home"}`}
-                  key={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  to={item.path}
-                >
-                  <span className="flex items-center justify-between gap-3">
-                    <span>{item.label}</span>
-                    {item.path === "/courtyards" && unreadSummary.total_unread > 0 ? (
-                      <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary" data-testid="nav-link-courtyards-unread-badge">
-                        {unreadSummary.total_unread}
-                      </span>
-                    ) : null}
-                  </span>
-                </NavLink>
-              ))}
+              {primaryNavItems.map(navLink)}
+              {moreNavItems.length ? (
+                <div className="grid gap-2">
+                  <button
+                    aria-controls="shell-more-navigation"
+                    aria-expanded={moreOpen}
+                    className="flex items-center justify-between rounded-2xl bg-background/70 px-4 py-3 text-left text-sm font-semibold text-foreground transition hover:bg-accent/70"
+                    data-testid="nav-more-toggle"
+                    onClick={() => setMoreOpen((value) => !value)}
+                    type="button"
+                  >
+                    More
+                    <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {moreOpen ? <div className="grid gap-2 border-l border-border/60 pl-3" id="shell-more-navigation" data-testid="nav-more-items">{moreNavItems.map(navLink)}</div> : null}
+                </div>
+              ) : null}
             </nav>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -293,10 +344,10 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <div>
                 <p className="eyebrow-text">Where your circles gather and grow.</p>
                 <h2 className="font-display text-3xl text-foreground sm:text-4xl" data-testid="shell-header-title">
-                  Plan gatherings like a platform, not a patchwork.
+                  Your family space, without the noise.
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  Keep the same warm visual feel while expanding into courtyards, subyards, kinship mapping, smart planning, timelines, shared funds, and travel coordination.
+                  Start with what matters today. Every existing family tool remains close by under More.
                 </p>
               </div>
               <div className="soft-panel flex items-center gap-3 self-start" data-testid="shell-value-pill">
@@ -309,8 +360,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             </div>
 
             <Routes>
-              <Route element={<HomePage token={token} />} path="dashboard" />
-              <Route element={<HomePage token={token} />} path="home" />
+              <Route element={<HomePage onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="dashboard" />
+              <Route element={<HomePage onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="home" />
               <Route element={<StewardPage token={token} />} path="steward" />
               <Route element={<HealthDashboardPage token={token} />} path="health" />
               <Route element={<CarePage token={token} user={user} />} path="care" />
