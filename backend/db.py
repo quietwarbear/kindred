@@ -22,6 +22,7 @@ subyards_collection = db.subyards
 kinships_collection = db.kinship_relationships
 events_collection = db.events
 invitation_redelivery_operations_collection = db.invitation_redelivery_operations
+invitation_delivery_outbox_collection = db.invitation_delivery_outbox
 guest_family_claims_collection = db.guest_family_claims
 family_access_requests_collection = db.family_access_requests
 reunion_recaps_collection = db.reunion_recaps

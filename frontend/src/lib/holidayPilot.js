@@ -23,3 +23,20 @@ export const uniqueGuestCount = (value) => new Set(
     .map((candidate) => candidate.trim().toLowerCase())
     .filter(Boolean)
 ).size;
+
+// Normalize the server's content-free aggregate counts for display. Every value
+// is a non-negative integer; nothing here is derived from names, emails, links,
+// or credentials — only the bounded counts the readiness endpoint returns.
+export const invitationActivationSummary = (counts) => {
+  const safe = (key) => {
+    const value = Number((counts || {})[key]);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  };
+  return {
+    prepared: safe("active_invitations"),
+    shared: safe("invitations_shared"),
+    opened: safe("invitations_opened"),
+    delivered: safe("invitations_delivered"),
+    responses: safe("responses_received"),
+  };
+};

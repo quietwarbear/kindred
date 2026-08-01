@@ -105,6 +105,37 @@ def _public_view(event: dict, invite: dict) -> dict:
     return serialize_event_for_guest(event, invite)
 
 
+async def _mark_invitation_opened(event_id: str, token: str) -> None:
+    """Stamp a monotonic first-open timestamp; content-free and idempotent.
+
+    A GET here always carries the credential in an Authorization header (the
+    token lives in the URL fragment and is only promoted to a header by the app),
+    so a link scanner or mail-client prefetch of a page URL can never reach this
+    path. A successful resolve therefore represents a genuine recipient open.
+
+    The write goes through the RSVP revision protocol so a concurrent RSVP or
+    activation write (which replaces the whole ``event_invites`` array) cannot
+    silently erase it. First-write-wins on ``opened_at``. Best-effort: an open is
+    a telemetry signal, so a lost revision race is swallowed rather than surfaced.
+    """
+
+    def mutate(current_event: dict) -> dict:
+        invites = current_event.get("event_invites", [])
+        target = next((item for item in invites if item.get("id") == token), None)
+        if target is not None and not target.get("opened_at"):
+            target["opened_at"] = now_iso()
+        return {"event_invites": invites}
+
+    try:
+        await compare_and_swap_event(
+            events_collection,
+            {"id": event_id, "event_invites.id": token},
+            mutate,
+        )
+    except RSVPWriteConflict:
+        return
+
+
 async def _public_rsvp_view(token: str):
     """Minimal gathering + invite info for a held invitation token."""
     event, invite = await _find_event_and_invite(token)
@@ -113,6 +144,8 @@ async def _public_rsvp_view(token: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This invitation link is not valid.",
         )
+    if not invite.get("opened_at"):
+        await _mark_invitation_opened(event["id"], token)
     community = await communities_collection.find_one(
         {"id": event.get("community_id")},
         {"_id": 0, "name": 1, "lifecycle_state": 1},
@@ -173,6 +206,10 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
             )
         if resolved_member_id and current_invite.get("invite_source") == "member":
             current_invite["member_id"] = resolved_member_id
+        # Responding necessarily implies the invitation was opened; record it
+        # inside the same atomic write so it cannot be lost to a concurrent view.
+        if not current_invite.get("opened_at"):
+            current_invite["opened_at"] = now_iso()
         rsvp_uid, respondent_aliases = public_respondent_identity(current_invite)
 
         next_records = [

@@ -17,6 +17,7 @@ from db import (
     gathering_proposal_responses_collection,
     gathering_proposals_collection,
     guest_family_claims_collection,
+    invitation_delivery_outbox_collection,
     invitation_redelivery_operations_collection,
     invites_collection,
     next_gathering_operations_collection,
@@ -46,6 +47,9 @@ from routes.reunion_memories import router as reunion_memories_router
 from routes.reunion_recap import router as reunion_recap_router
 from routes.revenuecat import router as revenuecat_router
 from routes.resend_webhooks import router as resend_webhooks_router
+from routes.invitation_first_send_webhook import (
+    router as invitation_first_send_webhook_router,
+)
 from routes.steward import router as steward_router
 from routes.subscriptions import router as subscriptions_router
 from routes.timeline import router as timeline_router
@@ -88,6 +92,7 @@ app.include_router(reunion_memories_router)
 app.include_router(reunion_recap_router)
 app.include_router(revenuecat_router)
 app.include_router(resend_webhooks_router)
+app.include_router(invitation_first_send_webhook_router)
 app.include_router(steward_router)
 app.include_router(subscriptions_router)
 app.include_router(timeline_router)
@@ -297,6 +302,11 @@ async def ensure_indexes():
     await invitation_redelivery_operations_collection.create_index(
         [("targets.provider_message_id", ASCENDING)],
         name="invitation_redelivery_provider_message_lookup",
+    )
+    await invitation_delivery_outbox_collection.create_index(
+        [("provider_message_id", ASCENDING)],
+        name="invitation_delivery_provider_message_once",
+        unique=True,
     )
     await events_collection.create_index(
         [
