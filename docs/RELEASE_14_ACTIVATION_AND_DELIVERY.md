@@ -107,9 +107,10 @@ a service-account JWT signed with the vendored `PyJWT` — **no new dependency**
 
 ## Verification evidence
 
-- Release 14 focused backend tests: **33 passed** (`test_release14_activation_signals`
-  10, `test_release14_invitation_delivery` 13, `test_release14_push_sender` 10).
-- Offline backend selection: **344 passed** on this branch vs **311 passed** on
+- Release 14 focused backend tests: **39 passed, 1 skipped** (activation signals,
+  invitation delivery, push sender — including the six defect regressions added
+  after the adversarial review).
+- Offline backend selection: **350 passed** on this branch vs **311 passed** on
   the untouched baseline — the same 52 environment-gated live-API failures and
   206 collection errors on both (they require `REACT_APP_BACKEND_URL` / a running
   server and were not pointed at production), so this branch adds **+33 passing
@@ -126,6 +127,55 @@ a service-account JWT signed with the vendored `PyJWT` — **no new dependency**
   campaigns document. It refuses any database whose name is not
   `kindred_disposable_*` and any production URL, and must not be pointed at a
   cloud/Atlas cluster. It remains an owner-environment gate.
+
+## Independent adversarial review (completed)
+
+Three independent adversarial reviewers each attempted to REFUTE the code —
+along privacy/leak, authorization, and correctness/concurrency lines.
+
+- **Privacy/leak: clean.** No name, email, title, link, credential, token, or
+  message body reaches any log, report, or client response across all seven
+  surfaces examined. One by-design item for owner sign-off: the outbox persists
+  the raw `invite_id` server-side (never externally exposed; same trust boundary
+  as the events collection).
+- **Authorization: clean.** No exploitable hole — disabled-by-default gates fail
+  closed, organizer role and community tenancy are enforced, drafts are rejected
+  on send/signal/open-stamp, and the webhook requires a verified signature and
+  never triggers a send.
+- **Correctness/concurrency: one HIGH + four MEDIUM defects found — all fixed
+  and regression-tested** (below).
+
+### Defects found and fixed
+
+1. **HIGH — cross-protocol lost update.** The new `event_invites` writers
+   (`opened_at`, `delivered_at`/`delivery_verified_at`, the submit stamp) used
+   positional updates that did **not** bump `rsvp_revision`, so a concurrent RSVP
+   or activation-signal CAS write (which `$set`s the whole array from a stale
+   snapshot) could erase them — downgrading delivered state, regressing counts,
+   and re-enabling a duplicate send. **Fix:** all three writers now go through
+   `compare_and_swap_event`, so every writer shares the revision protocol and a
+   racing write conflict-retries instead of clobbering. (`invitation_delivery.py`,
+   `routes/public.py`.)
+2. **MEDIUM — `opened_at` non-monotonic** via the same race. Fixed by the same
+   CAS routing.
+3. **MEDIUM — duplicate send of in-flight invites.** `_select_invites` skipped
+   only `delivered_at`; an invite still `submitting` (accepted, delivery callback
+   pending) was re-sent on a repeat call, risking a duplicate email once the
+   provider idempotency window lapses. **Fix:** skip `delivery_status ==
+   "submitting"` as well, and report the count as `skipped`.
+4. **MEDIUM — uncaught `DuplicateKeyError`.** Concurrent identical sends receive
+   the same Resend message id and race the unique outbox insert, 500-ing one
+   request. **Fix:** the outbox upsert catches `DuplicateKeyError` and treats the
+   row as already recorded.
+5. **MEDIUM — FCM mass-prune.** A 400 `INVALID_ARGUMENT` (a malformed request,
+   not a dead token) mapped to prune, so one bad payload could wipe every one of
+   a user's tokens. **Fix:** only 404 `UNREGISTERED` prunes; 400/403 are FAILED;
+   401 additionally clears the cached access token.
+
+A duplicate delivered callback is now a cheap idempotent no-op (early outbox
+short-circuit), and a delivery confirmation that loses the revision race returns
+`conflict` → the webhook responds 503 so the provider retries rather than
+dropping the confirmation.
 
 ## Activation configuration (required before Tiers 2/3 do anything)
 

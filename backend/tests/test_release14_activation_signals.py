@@ -299,7 +299,16 @@ async def test_activation_signal_is_monotonic_first_write_wins(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resolve_stamps_opened_at_once(monkeypatch):
-    capture = _CaptureEvents()
+    # The stamp now flows through the RSVP compare-and-swap so a concurrent
+    # whole-array write cannot erase it; assert the durable result + idempotency.
+    events_col = _CasEvents(
+        {
+            "id": "synthetic-holiday",
+            "community_id": "synthetic-family",
+            "rsvp_revision": 0,
+            "event_invites": [{"id": "cred-a", "rsvp_status": "pending"}],
+        }
+    )
 
     async def fake_find(_token):
         return (
@@ -308,7 +317,7 @@ async def test_resolve_stamps_opened_at_once(monkeypatch):
         )
 
     monkeypatch.setattr(public, "_find_event_and_invite", fake_find)
-    monkeypatch.setattr(public, "events_collection", capture)
+    monkeypatch.setattr(public, "events_collection", events_col)
 
     async def fake_community(*_a, **_k):
         return {"name": "Synthetic Family"}
@@ -322,11 +331,13 @@ async def test_resolve_stamps_opened_at_once(monkeypatch):
     monkeypatch.setattr(public.users_collection, "find_one", fake_user, raising=False)
 
     await public._public_rsvp_view("cred-a")
-    assert len(capture.calls) == 1
-    query, update, array_filters = capture.calls[0]
-    assert query == {"id": "synthetic-holiday", "event_invites.id": "cred-a"}
-    assert set(update["$set"]) == {"event_invites.$[inv].opened_at"}
-    assert array_filters == [{"inv.id": "cred-a", "inv.opened_at": {"$exists": False}}]
+    first = events_col.event["event_invites"][0].get("opened_at")
+    assert first  # a genuine resolve stamped opened_at
+
+    # A second resolve (fake_find still returns no opened_at, so the stamp path
+    # runs again) must not move the timestamp — first-write-wins.
+    await public._public_rsvp_view("cred-a")
+    assert events_col.event["event_invites"][0]["opened_at"] == first
 
 
 @pytest.mark.asyncio

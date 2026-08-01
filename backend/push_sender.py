@@ -207,9 +207,16 @@ class FcmHttpV1Client:
             return PushOutcome.FAILED
         if response.status_code == 200:
             return PushOutcome.DELIVERED
-        if response.status_code in (400, 404):
-            return PushOutcome.INVALID  # unregistered / invalid token → prune
-        if response.status_code in (401, 403):
+        if response.status_code == 404:
+            return PushOutcome.INVALID  # UNREGISTERED token → prune
+        if response.status_code == 401:
+            # Expired/rejected access token; force a fresh mint next send.
+            self._access_token = ""
+            return PushOutcome.FAILED
+        # 400 INVALID_ARGUMENT is usually a malformed request (not a dead token)
+        # and 403 is a sender-id mismatch — never prune the user's tokens on
+        # these; a bad payload would otherwise wipe every token at once.
+        if response.status_code in (400, 403):
             return PushOutcome.FAILED
         return PushOutcome.TRANSIENT  # 429/5xx
 

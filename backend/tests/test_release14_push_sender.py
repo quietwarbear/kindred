@@ -7,9 +7,12 @@ os.environ.setdefault("DB_NAME", "kindred_release14_push_unit")
 
 import pytest
 
+from datetime import datetime, timedelta, timezone
+
 import push_sender
 from push_sender import (
     PUSH_TEMPLATES,
+    FcmHttpV1Client,
     PushOutcome,
     PushSendReport,
     build_push_client,
@@ -17,6 +20,47 @@ from push_sender import (
     push_enabled,
     send_push_to_user,
 )
+
+_FIXED_NOW = datetime(2026, 11, 2, tzinfo=timezone.utc)
+
+
+class _FakeResp:
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+class _FakeHttp:
+    """Minimal httpx-like client: token endpoint returns 200, send returns `send`."""
+
+    def __init__(self, send_status):
+        self.send_status = send_status
+        self.sends = 0
+
+    async def request(self, method, url, **kwargs):
+        if "oauth2" in url or url.endswith("/token"):
+            return _FakeResp(200, {"access_token": "at_test"})
+        self.sends += 1
+        return _FakeResp(self.send_status, {})
+
+
+def _fcm_client(send_status):
+    client = FcmHttpV1Client(
+        service_account={
+            "project_id": "p",
+            "client_email": "c@x.iam.gserviceaccount.com",
+            "private_key": "unused-because-token-is-preseeded",
+        },
+        http_client=_FakeHttp(send_status),
+        clock=lambda: _FIXED_NOW,
+    )
+    # Pre-seed a valid cached access token so deliver() skips JWT minting.
+    client._access_token = "at_test"
+    client._access_expiry = _FIXED_NOW + timedelta(hours=1)
+    return client
 
 
 class _FakeUsers:
@@ -163,6 +207,33 @@ async def test_maybe_notify_swallows_client_errors(monkeypatch):
         template_code="rsvp_received",
         client_factory=broken_factory,
     )
+
+
+@pytest.mark.asyncio
+async def test_fcm_404_prunes_but_400_does_not():
+    # 404 UNREGISTERED = dead token → prune. 400 INVALID_ARGUMENT = usually a
+    # malformed request → FAILED, never prune (else one bad payload wipes every
+    # token the user has).
+    notification = PUSH_TEMPLATES["rsvp_received"]
+    assert await _fcm_client(404).deliver("tok", notification) == PushOutcome.INVALID
+    assert await _fcm_client(400).deliver("tok", notification) == PushOutcome.FAILED
+    assert await _fcm_client(403).deliver("tok", notification) == PushOutcome.FAILED
+
+
+@pytest.mark.asyncio
+async def test_fcm_200_delivers_and_5xx_is_transient():
+    notification = PUSH_TEMPLATES["rsvp_received"]
+    assert await _fcm_client(200).deliver("tok", notification) == PushOutcome.DELIVERED
+    assert await _fcm_client(503).deliver("tok", notification) == PushOutcome.TRANSIENT
+    assert await _fcm_client(429).deliver("tok", notification) == PushOutcome.TRANSIENT
+
+
+@pytest.mark.asyncio
+async def test_fcm_401_clears_cached_token():
+    client = _fcm_client(401)
+    outcome = await client.deliver("tok", PUSH_TEMPLATES["rsvp_received"])
+    assert outcome == PushOutcome.FAILED
+    assert client._access_token == ""  # forces a fresh mint on the next send
 
 
 @pytest.mark.asyncio

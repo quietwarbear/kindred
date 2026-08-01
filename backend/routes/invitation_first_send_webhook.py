@@ -97,5 +97,10 @@ async def invitation_first_send_webhook(request: Request):
         outbox_collection=invitation_delivery_outbox_collection,
         event=event,
     )
+    if result == "conflict":
+        # The invite was under sustained concurrent writes; ask the provider to
+        # retry rather than silently dropping a delivery confirmation.
+        logger.warning("invitation_first_send_webhook status=unavailable code=conflict")
+        return _safe_response("unavailable", 503)
     logger.info("invitation_first_send_webhook status=%s", result)
     return _safe_response("accepted", 200)

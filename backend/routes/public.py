@@ -112,13 +112,28 @@ async def _mark_invitation_opened(event_id: str, token: str) -> None:
     token lives in the URL fragment and is only promoted to a header by the app),
     so a link scanner or mail-client prefetch of a page URL can never reach this
     path. A successful resolve therefore represents a genuine recipient open.
-    The array filter records `opened_at` only once, so repeat opens are no-ops.
+
+    The write goes through the RSVP revision protocol so a concurrent RSVP or
+    activation write (which replaces the whole ``event_invites`` array) cannot
+    silently erase it. First-write-wins on ``opened_at``. Best-effort: an open is
+    a telemetry signal, so a lost revision race is swallowed rather than surfaced.
     """
-    await events_collection.update_one(
-        {"id": event_id, "event_invites.id": token},
-        {"$set": {"event_invites.$[inv].opened_at": now_iso()}},
-        array_filters=[{"inv.id": token, "inv.opened_at": {"$exists": False}}],
-    )
+
+    def mutate(current_event: dict) -> dict:
+        invites = current_event.get("event_invites", [])
+        target = next((item for item in invites if item.get("id") == token), None)
+        if target is not None and not target.get("opened_at"):
+            target["opened_at"] = now_iso()
+        return {"event_invites": invites}
+
+    try:
+        await compare_and_swap_event(
+            events_collection,
+            {"id": event_id, "event_invites.id": token},
+            mutate,
+        )
+    except RSVPWriteConflict:
+        return
 
 
 async def _public_rsvp_view(token: str):

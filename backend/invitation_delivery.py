@@ -26,6 +26,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
+from pymongo.errors import DuplicateKeyError
+
 from dependencies import now_iso
 from invitation_redelivery import (
     DeliveryEnvelope,
@@ -35,6 +37,7 @@ from invitation_redelivery import (
 from invitation_redelivery_provider import ResendInvitationDeliveryProvider
 from invitation_redelivery_webhook import VerifiedDeliveryEvent
 from organizer_command_center import invitation_is_active
+from rsvp_integrity import RSVPWriteConflict, compare_and_swap_event
 
 
 def first_send_enabled() -> bool:
@@ -115,11 +118,19 @@ class DeliverySendReport:
         }
 
 
-def _eligible_invites(
+def _select_invites(
     event: dict[str, Any], invite_ids: Iterable[str] | None
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], int]:
+    """Return (eligible invites, count skipped because already sent/in-flight).
+
+    An invite is skipped when it is already delivered OR currently ``submitting``
+    (a send was accepted but the delivery callback has not resolved yet). This
+    prevents a repeat call from re-sending an in-flight invitation after the
+    provider idempotency window would have lapsed.
+    """
     wanted = {str(i) for i in invite_ids} if invite_ids else None
-    eligible = []
+    eligible: list[dict[str, Any]] = []
+    skipped = 0
     for invite in event.get("event_invites", []):
         invite_id = str(invite.get("id") or "")
         if not invite_id or not invite.get("email"):
@@ -128,10 +139,41 @@ def _eligible_invites(
             continue
         if not invitation_is_active(invite):
             continue
-        if invite.get("delivered_at"):
-            continue  # already confirmed delivered; never re-send
+        if invite.get("delivered_at") or invite.get("delivery_status") == "submitting":
+            skipped += 1  # already delivered or in-flight; never re-send
+            continue
         eligible.append(invite)
-    return eligible
+    return eligible, skipped
+
+
+async def _mark_invite_submitting(
+    events_collection,
+    event_id: str,
+    invite_id: str,
+    now_fn: Callable[[], str],
+) -> None:
+    """Record the cosmetic in-flight status through the RSVP revision protocol.
+
+    Best-effort: a concurrent RSVP may win the revision race; the outbox row is
+    the authoritative record of the send, so a lost status stamp is harmless.
+    """
+
+    def mutate(current_event: dict[str, Any]) -> dict[str, Any]:
+        invites = current_event.get("event_invites", [])
+        target = next((i for i in invites if i.get("id") == invite_id), None)
+        if target is not None:
+            target["delivery_status"] = "submitting"
+            target["delivery_submitted_at"] = now_fn()
+        return {"event_invites": invites}
+
+    try:
+        await compare_and_swap_event(
+            events_collection,
+            {"id": event_id, "event_invites.id": invite_id},
+            mutate,
+        )
+    except RSVPWriteConflict:
+        return
 
 
 async def send_first_invitations(
@@ -155,8 +197,9 @@ async def send_first_invitations(
             status="unavailable", error_code=preflight.error_code.value
         )
 
-    submitted = rejected = ambiguous = failed = skipped = 0
-    for invite in _eligible_invites(event, invite_ids):
+    eligible, skipped = _select_invites(event, invite_ids)
+    submitted = rejected = ambiguous = failed = 0
+    for invite in eligible:
         invite_id = str(invite["id"])
         opaque_target_id = uuid.uuid4().hex
         operation_id = uuid.uuid4().hex
@@ -171,30 +214,29 @@ async def send_first_invitations(
         )
         receipt = await provider.send(envelope)
         if receipt.status == ProviderStatus.ACCEPTED and receipt.provider_message_id:
-            await outbox_collection.update_one(
-                {"provider_message_id": receipt.provider_message_id},
-                {
-                    "$setOnInsert": {
-                        "id": uuid.uuid4().hex,
-                        "provider_message_id": receipt.provider_message_id,
-                        "event_id": event_id,
-                        "invite_id": invite_id,
-                        "opaque_target_id": opaque_target_id,
-                        "status": "submitting",
-                        "created_at": now_fn(),
-                    }
-                },
-                upsert=True,
-            )
-            await events_collection.update_one(
-                {"id": event_id, "event_invites.id": invite_id},
-                {
-                    "$set": {
-                        "event_invites.$[inv].delivery_status": "submitting",
-                        "event_invites.$[inv].delivery_submitted_at": now_fn(),
-                    }
-                },
-                array_filters=[{"inv.id": invite_id}],
+            try:
+                await outbox_collection.update_one(
+                    {"provider_message_id": receipt.provider_message_id},
+                    {
+                        "$setOnInsert": {
+                            "id": uuid.uuid4().hex,
+                            "provider_message_id": receipt.provider_message_id,
+                            "event_id": event_id,
+                            "invite_id": invite_id,
+                            "opaque_target_id": opaque_target_id,
+                            "status": "submitting",
+                            "created_at": now_fn(),
+                        }
+                    },
+                    upsert=True,
+                )
+            except DuplicateKeyError:
+                # A concurrent identical send already recorded this provider
+                # message id (Resend returns the same id for the same
+                # idempotency key). The row exists; treat as recorded.
+                pass
+            await _mark_invite_submitting(
+                events_collection, event_id, invite_id, now_fn
             )
             submitted += 1
         elif receipt.status == ProviderStatus.REJECTED:
@@ -237,26 +279,39 @@ async def apply_first_send_delivery_event(
         return "ignored_unknown"
 
     if event.provider_status == ProviderStatus.DELIVERED:
-        stamp = now_fn()
-        await events_collection.update_one(
-            {"id": event_id, "event_invites.id": invite_id},
-            {
-                "$set": {
-                    "event_invites.$[inv].delivered_at": stamp,
-                    "event_invites.$[inv].delivery_verified_at": stamp,
-                    "event_invites.$[inv].delivery_status": "delivered",
-                }
-            },
-            array_filters=[
-                {"inv.id": invite_id, "inv.delivered_at": {"$exists": False}}
-            ],
-        )
+        # Idempotent: a duplicate delivered callback is a cheap no-op.
+        if record.get("status") == "delivered":
+            return "delivered"
+
+        # Stamp through the RSVP revision protocol so a concurrent RSVP or
+        # activation write cannot silently erase the delivered state with a
+        # stale whole-array replacement. First-write-wins on delivered_at.
+        def mark_delivered(current_event: dict[str, Any]) -> dict[str, Any]:
+            invites = current_event.get("event_invites", [])
+            target = next((i for i in invites if i.get("id") == invite_id), None)
+            if target is not None and not target.get("delivered_at"):
+                stamp = now_fn()
+                target["delivered_at"] = stamp
+                target["delivery_verified_at"] = stamp
+                target["delivery_status"] = "delivered"
+            return {"event_invites": invites}
+
+        try:
+            updated = await compare_and_swap_event(
+                events_collection,
+                {"id": event_id, "event_invites.id": invite_id},
+                mark_delivered,
+            )
+        except RSVPWriteConflict:
+            return "conflict"  # webhook returns 503 so the provider retries
+        if updated is None:
+            return "ignored_unknown"
         await outbox_collection.update_one(
             {
                 "provider_message_id": event.provider_message_id,
                 "status": {"$ne": "delivered"},
             },
-            {"$set": {"status": "delivered", "delivered_at": stamp}},
+            {"$set": {"status": "delivered", "delivered_at": now_fn()}},
         )
         return "delivered"
 

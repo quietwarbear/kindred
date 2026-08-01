@@ -3,6 +3,7 @@
 import os
 import re
 import uuid
+from copy import deepcopy
 
 os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
 os.environ.setdefault("DB_NAME", "kindred_release14_delivery_unit")
@@ -85,12 +86,41 @@ class _FakeProvider:
         )
 
 
-class _FakeEvents:
-    def __init__(self):
-        self.updates = []
+class _Result:
+    def __init__(self, matched_count=1):
+        self.matched_count = matched_count
+        self.modified_count = matched_count
+
+
+class _CasEvents:
+    """Events collection honoring the rsvp_revision guard (delivery goes via CAS)."""
+
+    def __init__(self, event=None):
+        self.event = deepcopy(event) if event else None
+        self.writes = 0
+
+    async def find_one(self, _query, _projection=None):
+        return deepcopy(self.event) if self.event is not None else None
 
     async def update_one(self, query, update, array_filters=None):
-        self.updates.append((query, update, array_filters))
+        self.writes += 1
+        if self.event is None:
+            return _Result(matched_count=0)
+        guard = query.get("rsvp_revision")
+        current = int(self.event.get("rsvp_revision", 0) or 0)
+        if guard is not None and not isinstance(guard, dict) and guard != current:
+            return _Result(matched_count=0)
+        for key, value in update.get("$set", {}).items():
+            self.event[key] = deepcopy(value)
+        for key, value in update.get("$inc", {}).items():
+            self.event[key] = int(self.event.get(key, 0) or 0) + value
+        return _Result(matched_count=1)
+
+    def invite(self, invite_id):
+        for item in (self.event or {}).get("event_invites", []):
+            if item.get("id") == invite_id:
+                return item
+        return None
 
 
 class _FakeOutbox:
@@ -186,7 +216,7 @@ async def test_send_endpoint_blocks_private_draft(monkeypatch):
 @pytest.mark.asyncio
 async def test_send_uses_opaque_target_never_the_credential():
     provider = _FakeProvider()
-    events_col = _FakeEvents()
+    events_col = _CasEvents(_published_event())
     outbox = _FakeOutbox()
     report = await send_first_invitations(
         event=_published_event(),
@@ -212,12 +242,15 @@ async def test_send_uses_opaque_target_never_the_credential():
     setoninsert = outbox.upserts[0][1]["$setOnInsert"]
     assert setoninsert["invite_id"] == "cred-a"
     assert setoninsert["status"] == "submitting"
+    # The in-flight status was stamped through the revision protocol.
+    assert events_col.invite("cred-a")["delivery_status"] == "submitting"
+    assert events_col.event["rsvp_revision"] == 1
 
 
 @pytest.mark.asyncio
 async def test_send_fails_closed_when_preflight_not_ready():
     provider = _FakeProvider(ready=False)
-    events_col = _FakeEvents()
+    events_col = _CasEvents()
     outbox = _FakeOutbox()
     report = await send_first_invitations(
         event=_published_event(),
@@ -250,12 +283,78 @@ async def test_send_skips_already_delivered_invites():
         event=event,
         invite_ids=None,
         provider=provider,
-        events_collection=_FakeEvents(),
+        events_collection=_CasEvents(),
         outbox_collection=_FakeOutbox(),
         app_url="https://www.heykindred.org",
     )
     assert provider.sent == []
     assert report.submitted == 0
+    assert report.skipped == 1  # already delivered → counted, not re-sent
+
+
+@pytest.mark.asyncio
+async def test_send_skips_in_flight_submitting_invites():
+    # An invite already submitted but not yet confirmed delivered must not be
+    # re-sent — this is the guard against a duplicate email once the provider
+    # idempotency window lapses.
+    provider = _FakeProvider()
+    event = _published_event(
+        event_invites=[
+            {
+                "id": "cred-a",
+                "email": "guest-a@example.invalid",
+                "status": "invited",
+                "delivery_status": "submitting",
+            }
+        ]
+    )
+    report = await send_first_invitations(
+        event=event,
+        invite_ids=None,
+        provider=provider,
+        events_collection=_CasEvents(),
+        outbox_collection=_FakeOutbox(),
+        app_url="https://www.heykindred.org",
+    )
+    assert provider.sent == []
+    assert report.submitted == 0
+    assert report.skipped == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_key_on_outbox_upsert_is_swallowed():
+    # A concurrent identical send makes Resend return the same provider message
+    # id; the unique-index insert race must not 500 the request.
+    from pymongo.errors import DuplicateKeyError
+
+    class _DupOutbox:
+        def __init__(self):
+            self.find_calls = 0
+
+        async def update_one(self, query, update, upsert=False, array_filters=None):
+            if upsert:
+                raise DuplicateKeyError("E11000 duplicate key")
+
+        async def find_one(self, *_a, **_k):
+            return None
+
+    provider = _FakeProvider(
+        receipt=ProviderReceipt(
+            status=ProviderStatus.ACCEPTED, provider_message_id="msg_shared0000001"
+        )
+    )
+    events_col = _CasEvents(_published_event())
+    report = await send_first_invitations(
+        event=_published_event(),
+        invite_ids=None,
+        provider=provider,
+        events_collection=events_col,
+        outbox_collection=_DupOutbox(),
+        app_url="https://www.heykindred.org",
+    )
+    # The send is still counted; no exception escaped.
+    assert report.submitted == 1
+    assert events_col.invite("cred-a")["delivery_status"] == "submitting"
 
 
 @pytest.mark.asyncio
@@ -270,7 +369,7 @@ async def test_rejected_receipt_records_no_delivery():
         event=_published_event(),
         invite_ids=None,
         provider=provider,
-        events_collection=_FakeEvents(),
+        events_collection=_CasEvents(),
         outbox_collection=outbox,
         app_url="https://www.heykindred.org",
     )
@@ -305,9 +404,18 @@ def _delivered_event(message_id="msg_abc123deadbeef01"):
     )
 
 
+def _event_with_pending_invite():
+    return {
+        "id": "synthetic-holiday",
+        "community_id": "synthetic-family",
+        "rsvp_revision": 0,
+        "event_invites": [{"id": "cred-a", "rsvp_status": "pending"}],
+    }
+
+
 @pytest.mark.asyncio
-async def test_delivered_event_stamps_invite_once():
-    events_col = _FakeEvents()
+async def test_delivered_event_stamps_invite_through_cas():
+    events_col = _CasEvents(_event_with_pending_invite())
     outbox = _FakeOutbox(
         record={
             "provider_message_id": "msg_abc123deadbeef01",
@@ -323,24 +431,40 @@ async def test_delivered_event_stamps_invite_once():
         now_fn=lambda: "2026-11-02T01:00:00+00:00",
     )
     assert result == "delivered"
-    query, update, array_filters = events_col.updates[0]
-    assert query == {"id": "synthetic-holiday", "event_invites.id": "cred-a"}
-    assert set(update["$set"]) == {
-        "event_invites.$[inv].delivered_at",
-        "event_invites.$[inv].delivery_verified_at",
-        "event_invites.$[inv].delivery_status",
-    }
-    # First-write-wins: only stamps when delivered_at is absent.
-    assert array_filters == [
-        {"inv.id": "cred-a", "inv.delivered_at": {"$exists": False}}
-    ]
+    invite = events_col.invite("cred-a")
+    assert invite["delivered_at"] == "2026-11-02T01:00:00+00:00"
+    assert invite["delivery_verified_at"] == "2026-11-02T01:00:00+00:00"
+    assert invite["delivery_status"] == "delivered"
+    # Stamped through the revision protocol, not a bare positional write.
+    assert events_col.event["rsvp_revision"] == 1
     # Outbox transition guards against re-marking a delivered target.
     assert outbox.updates[0][0]["status"] == {"$ne": "delivered"}
 
 
 @pytest.mark.asyncio
+async def test_duplicate_delivered_is_idempotent_noop():
+    events_col = _CasEvents(_event_with_pending_invite())
+    outbox = _FakeOutbox(
+        record={
+            "provider_message_id": "msg_abc123deadbeef01",
+            "event_id": "synthetic-holiday",
+            "invite_id": "cred-a",
+            "status": "delivered",  # already delivered
+        }
+    )
+    result = await apply_first_send_delivery_event(
+        events_collection=events_col,
+        outbox_collection=outbox,
+        event=_delivered_event(),
+    )
+    assert result == "delivered"
+    assert events_col.writes == 0  # no event write on a duplicate callback
+    assert events_col.invite("cred-a").get("delivered_at") is None
+
+
+@pytest.mark.asyncio
 async def test_unknown_provider_message_is_ignored():
-    events_col = _FakeEvents()
+    events_col = _CasEvents(_event_with_pending_invite())
     outbox = _FakeOutbox(record=None)
     result = await apply_first_send_delivery_event(
         events_collection=events_col,
@@ -348,12 +472,12 @@ async def test_unknown_provider_message_is_ignored():
         event=_delivered_event("msg_unknown0000001"),
     )
     assert result == "ignored_unknown"
-    assert events_col.updates == []
+    assert events_col.writes == 0
 
 
 @pytest.mark.asyncio
 async def test_failure_event_never_downgrades_delivered():
-    events_col = _FakeEvents()
+    events_col = _CasEvents(_event_with_pending_invite())
     outbox = _FakeOutbox(
         record={
             "provider_message_id": "msg_abc123deadbeef01",
@@ -374,6 +498,8 @@ async def test_failure_event_never_downgrades_delivered():
         event=failed,
     )
     assert result == "failed"
-    assert events_col.updates == []  # no invite mutation on failure
+    assert events_col.writes == 0  # no invite mutation on failure
+    # The outbox guard refuses to overwrite a delivered target.
+    assert outbox.updates[0][0]["status"] == {"$nin": ["delivered", "failed"]}
     # The outbox guard refuses to overwrite a delivered target.
     assert outbox.updates[0][0]["status"] == {"$nin": ["delivered", "failed"]}
