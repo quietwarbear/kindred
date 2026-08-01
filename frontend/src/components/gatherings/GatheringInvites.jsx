@@ -19,7 +19,7 @@ const trackFirstInvitationShared = () => {
   trackReunionEvent("first_invitation_shared", { source: "gathering_invites" });
 };
 
-const ShareMessageButton = ({ isFirst, isReunion, text, testId }) => {
+const ShareMessageButton = ({ isFirst, isReunion, onSignal, text, testId }) => {
   const [copied, setCopied] = useState(false);
   const handleShare = async () => {
     if (isReunion) {
@@ -30,7 +30,11 @@ const ShareMessageButton = ({ isFirst, isReunion, text, testId }) => {
       if (isFirst) trackFirstInvitationShared();
     }
     if (navigator.share) {
-      try { await navigator.share({ text }); return; } catch { /* cancelled */ }
+      try {
+        await navigator.share({ text });
+        onSignal?.("shared");
+        return;
+      } catch { /* cancelled */ }
     }
     try {
       await navigator.clipboard.writeText(text);
@@ -42,6 +46,7 @@ const ShareMessageButton = ({ isFirst, isReunion, text, testId }) => {
       document.execCommand("copy");
       document.body.removeChild(ta);
     }
+    onSignal?.("shared");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -58,7 +63,7 @@ const ShareMessageButton = ({ isFirst, isReunion, text, testId }) => {
   );
 };
 
-const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion }) => {
+const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion, onSignal }) => {
   const [copied, setCopied] = useState(false);
   const link = fragmentInvitationUrl(
     typeof window !== "undefined" ? window.location.origin : "https://heykindred.org",
@@ -79,6 +84,7 @@ const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion }) => {
       trackReunionEvent("invite_link_copied", { source: "gathering_invites" });
       if (isFirst) trackFirstInvitationShared();
     }
+    onSignal?.("link_copied");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -104,6 +110,20 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
     () => uniqueGuestCount(form.guest_emails),
     [form.guest_emails]
   );
+
+  // Record a content-free organizer activation signal so the pilot state
+  // machine reflects that a link actually left the app. Best-effort: a failure
+  // here must never disrupt the share/copy the organizer just performed.
+  const recordActivationSignal = async (inviteId, signal) => {
+    if (isOrganizerDraft) return;
+    try {
+      const payload = await apiRequest(
+        `/events/${event.id}/invites/${inviteId}/activation-signal`,
+        { method: "POST", token, data: { signal } }
+      );
+      onUpdate?.(payload);
+    } catch { /* activation signal is best-effort */ }
+  };
 
   const toggleMember = (memberId) => {
     setDraftPreviewed(false);
@@ -205,12 +225,18 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
                 <ShareMessageButton
                   isReunion={event.event_template === "reunion"}
                   isFirst={index === 0}
+                  onSignal={(signal) => recordActivationSignal(invite.id, signal)}
                   text={invite.share_message}
                   testId={`gatherings-event-invite-share-${invite.id}`}
                 />
               </div>
             )}
-            <CopyRsvpLinkButton inviteId={invite.id} isFirst={index === 0} isReunion={event.event_template === "reunion"} />
+            <CopyRsvpLinkButton
+              inviteId={invite.id}
+              isFirst={index === 0}
+              isReunion={event.event_template === "reunion"}
+              onSignal={(signal) => recordActivationSignal(invite.id, signal)}
+            />
           </div>
         ))}
       </div>

@@ -105,6 +105,22 @@ def _public_view(event: dict, invite: dict) -> dict:
     return serialize_event_for_guest(event, invite)
 
 
+async def _mark_invitation_opened(event_id: str, token: str) -> None:
+    """Stamp a monotonic first-open timestamp; content-free and idempotent.
+
+    A GET here always carries the credential in an Authorization header (the
+    token lives in the URL fragment and is only promoted to a header by the app),
+    so a link scanner or mail-client prefetch of a page URL can never reach this
+    path. A successful resolve therefore represents a genuine recipient open.
+    The array filter records `opened_at` only once, so repeat opens are no-ops.
+    """
+    await events_collection.update_one(
+        {"id": event_id, "event_invites.id": token},
+        {"$set": {"event_invites.$[inv].opened_at": now_iso()}},
+        array_filters=[{"inv.id": token, "inv.opened_at": {"$exists": False}}],
+    )
+
+
 async def _public_rsvp_view(token: str):
     """Minimal gathering + invite info for a held invitation token."""
     event, invite = await _find_event_and_invite(token)
@@ -113,6 +129,8 @@ async def _public_rsvp_view(token: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This invitation link is not valid.",
         )
+    if not invite.get("opened_at"):
+        await _mark_invitation_opened(event["id"], token)
     community = await communities_collection.find_one(
         {"id": event.get("community_id")},
         {"_id": 0, "name": 1, "lifecycle_state": 1},
@@ -173,6 +191,10 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
             )
         if resolved_member_id and current_invite.get("invite_source") == "member":
             current_invite["member_id"] = resolved_member_id
+        # Responding necessarily implies the invitation was opened; record it
+        # inside the same atomic write so it cannot be lost to a concurrent view.
+        if not current_invite.get("opened_at"):
+            current_invite["opened_at"] = now_iso()
         rsvp_uid, respondent_aliases = public_respondent_identity(current_invite)
 
         next_records = [

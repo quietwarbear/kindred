@@ -13,8 +13,18 @@ from courtyard_helpers import (
     build_recurring_dates,
     build_role_suggestions,
 )
-from db import events_collection, users_collection
+from db import (
+    events_collection,
+    invitation_delivery_outbox_collection,
+    users_collection,
+)
 from event_privacy import serialize_event_for_user
+from invitation_delivery import (
+    build_invitation_delivery_provider,
+    first_send_enabled,
+    send_first_invitations,
+)
+from push_sender import maybe_notify
 from holiday_pilot import (
     HOLIDAY_PILOT_CONFIRMATION_CODES,
     build_holiday_pilot_readiness,
@@ -64,6 +74,8 @@ from models import (
     EventPublic,
     EventRoleAssignmentRequest,
     EventUpdateRequest,
+    InvitationActivationSignalRequest,
+    InvitationSendRequest,
     PotluckClaimRequest,
     PotluckItemRequest,
     RSVPRequest,
@@ -812,6 +824,13 @@ async def update_rsvp(
         related_id=event_id,
         audience_scope="organizer",
     )
+    # Content-free, fully gated push to the organizer's own devices. A no-op
+    # unless push is enabled and configured; never affects this response.
+    await maybe_notify(
+        users_collection=users_collection,
+        user_id=event_doc.get("created_by", ""),
+        template_code="rsvp_received",
+    )
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
     )
@@ -975,6 +994,142 @@ async def create_event_invites(
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
     )
+
+
+_ACTIVATION_SIGNAL_FIELDS = {
+    "shared": "shared_at",
+    "link_copied": "link_copied_at",
+}
+
+
+@router.post(
+    "/events/{event_id}/invites/{invite_id}/activation-signal",
+    response_model=EventPublic,
+)
+async def record_invitation_activation_signal(
+    event_id: str,
+    invite_id: str,
+    payload: InvitationActivationSignalRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Record a content-free organizer signal that an invitation left the app.
+
+    Writes only a monotonic first-write-wins timestamp (`shared_at` /
+    `link_copied_at`) on the one invitation. No recipient, channel, message, or
+    link is accepted or stored. Blocked while the gathering is a private draft;
+    routed through the RSVP compare-and-swap so it never clobbers a concurrent
+    response.
+    """
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    if event_doc.get("publication_state") == "organizer_draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "organizer_draft_activation_signal_blocked",
+                "message": "Finish the private organizer review before recording activation signals.",
+            },
+        )
+    field = _ACTIVATION_SIGNAL_FIELDS[payload.signal]
+
+    def mutate(current_event: dict[str, Any]) -> dict[str, Any]:
+        invites = current_event.get("event_invites", [])
+        target = next(
+            (invite for invite in invites if invite.get("id") == invite_id), None
+        )
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "invitation_not_found"},
+            )
+        # Monotonic: the first signal of each kind wins; later ones are no-ops.
+        if not target.get(field):
+            target[field] = now_iso()
+        return {"event_invites": invites}
+
+    try:
+        event_doc = await compare_and_swap_event(
+            events_collection,
+            {
+                "id": event_id,
+                "community_id": current_user["community_id"],
+                "event_invites.id": invite_id,
+            },
+            mutate,
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "rsvp_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "invitation_not_found"},
+        )
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
+
+
+@router.post("/events/{event_id}/invites/send")
+async def send_event_invitations(
+    event_id: str,
+    payload: InvitationSendRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Send the invitation credential to selected invites (disabled by default).
+
+    Returns only a content-free categorical status and aggregate counts — never
+    a recipient, message, link, or credential. Fails closed to a categorical
+    ``unavailable`` when delivery is disabled or the provider is unconfigured, so
+    it performs no send until an owner explicitly enables and configures it.
+    """
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    if event_doc.get("publication_state") == "organizer_draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "organizer_draft_send_blocked",
+                "message": "Finish the private organizer review before sending invitations.",
+            },
+        )
+    if not first_send_enabled():
+        return {
+            "status": "unavailable",
+            "error_code": "delivery_disabled",
+            "counts": {
+                "submitted": 0,
+                "rejected": 0,
+                "ambiguous": 0,
+                "failed": 0,
+                "skipped": 0,
+            },
+        }
+    provider = build_invitation_delivery_provider()
+    if provider is None:
+        return {
+            "status": "unavailable",
+            "error_code": "provider_unconfigured",
+            "counts": {
+                "submitted": 0,
+                "rejected": 0,
+                "ambiguous": 0,
+                "failed": 0,
+                "skipped": 0,
+            },
+        }
+    app_url = os.environ.get("APP_URL", "https://www.heykindred.org").rstrip("/")
+    report = await send_first_invitations(
+        event=event_doc,
+        invite_ids=payload.invite_ids or None,
+        provider=provider,
+        events_collection=events_collection,
+        outbox_collection=invitation_delivery_outbox_collection,
+        app_url=app_url,
+    )
+    return report.safe_document()
 
 
 @router.post("/events/{event_id}/role-assignments", response_model=EventPublic)

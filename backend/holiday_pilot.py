@@ -43,11 +43,24 @@ def _confirmation_codes(event: dict[str, Any]) -> set[str]:
 def _has_delivery_evidence(invite: dict[str, Any]) -> bool:
     return bool(
         invite.get("delivered_at")
+        or invite.get("delivery_verified_at")
         or invite.get("opened_at")
         or invite.get("shared_at")
         or invite.get("link_copied_at")
         or invite.get("rsvp_status", "pending") != "pending"
     )
+
+
+def _was_shared(invite: dict[str, Any]) -> bool:
+    return bool(invite.get("shared_at") or invite.get("link_copied_at"))
+
+
+def _was_opened(invite: dict[str, Any]) -> bool:
+    return bool(invite.get("opened_at"))
+
+
+def _was_delivered(invite: dict[str, Any]) -> bool:
+    return bool(invite.get("delivered_at") or invite.get("delivery_verified_at"))
 
 
 def _stage(
@@ -181,6 +194,15 @@ def build_holiday_pilot_readiness(
         "checklist": checklist,
         "aggregate_counts": {
             "active_invitations": min(len(active_invites), 10_000),
+            "invitations_shared": min(
+                sum(1 for invite in active_invites if _was_shared(invite)), 10_000
+            ),
+            "invitations_opened": min(
+                sum(1 for invite in active_invites if _was_opened(invite)), 10_000
+            ),
+            "invitations_delivered": min(
+                sum(1 for invite in active_invites if _was_delivered(invite)), 10_000
+            ),
             "responses_received": min(len(responses), 10_000),
             "potluck_items": min(len(event.get("potluck_items", [])), 10_000),
             "volunteer_positions": min(volunteer_need, 10_000),

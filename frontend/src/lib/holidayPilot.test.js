@@ -1,4 +1,8 @@
-import { toDateTimeLocalValue, uniqueGuestCount } from "./holidayPilot";
+import {
+  invitationActivationSummary,
+  toDateTimeLocalValue,
+  uniqueGuestCount,
+} from "./holidayPilot";
 
 describe("Thanksgiving pilot organizer helpers", () => {
   test("preserves an existing local wall time", () => {
@@ -18,5 +22,30 @@ describe("Thanksgiving pilot organizer helpers", () => {
   test("deduplicates guest plan entries without returning addresses", () => {
     expect(uniqueGuestCount("One@example.invalid, one@example.invalid, two@example.invalid"))
       .toBe(2);
+  });
+
+  test("summarizes activation counts as non-negative integers", () => {
+    expect(
+      invitationActivationSummary({
+        active_invitations: 5,
+        invitations_shared: 3,
+        invitations_opened: 2,
+        invitations_delivered: 1,
+        responses_received: 1,
+      })
+    ).toEqual({ prepared: 5, shared: 3, opened: 2, delivered: 1, responses: 1 });
+  });
+
+  test("coerces missing, negative, or fractional counts to zero-safe integers", () => {
+    expect(
+      invitationActivationSummary({ invitations_shared: -4, invitations_opened: 2.9 })
+    ).toEqual({ prepared: 0, shared: 0, opened: 2, delivered: 0, responses: 0 });
+    expect(invitationActivationSummary(undefined)).toEqual({
+      prepared: 0,
+      shared: 0,
+      opened: 0,
+      delivered: 0,
+      responses: 0,
+    });
   });
 });

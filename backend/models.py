@@ -646,6 +646,27 @@ class HolidayPilotChecklistRequest(BaseModel):
     checked: bool
 
 
+class InvitationActivationSignalRequest(BaseModel):
+    """Content-free organizer signal that an invitation left the app.
+
+    The body carries only an allowlisted categorical code — never a recipient,
+    channel, message, or link. Each signal maps to a monotonic first-write-wins
+    timestamp on the invitation record.
+    """
+
+    signal: Literal["shared", "link_copied"]
+
+
+class InvitationSendRequest(BaseModel):
+    """Optional invite-id selection for the disabled-by-default first-send path.
+
+    An empty list means "every eligible, not-yet-delivered invitation". No
+    recipient, channel, or message content is ever accepted here.
+    """
+
+    invite_ids: list[str] = Field(default_factory=list)
+
+
 class MemoryUpdateRequest(BaseModel):
     title: str = ""
     description: str = ""
