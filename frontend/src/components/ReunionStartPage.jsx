@@ -161,6 +161,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
       });
       clearReunionDraft();
       trackReunionEvent("reunion_saved", { source: "authenticated_reunion_start" });
+      trackReunionEvent("reunion_draft_saved", { source: "reunion_start" });
       navigate(`/reunion/activate/${event.id}`);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to save this reunion draft.");

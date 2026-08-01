@@ -97,6 +97,12 @@ function jsonResponse(request, body, status = 200) {
 }
 
 function safeHomeResponse(pathname) {
+  if (pathname === '/api/today') return {
+    viewer_role: 'host', lifecycle_state: 'active', primary_action_code: 'open_command_center',
+    primary_action: { code: 'open_command_center', state: 'available', destination_category: 'gatherings' },
+    secondary_actions: [], recent_changes: [], navigation_categories: ['today', 'gatherings', 'proposals', 'activity'],
+    milestone_codes: [], refresh_state: 'current',
+  };
   if (pathname === '/api/subscriptions/plans') return { plans: [] };
   if (pathname === '/api/communications/unread-summary') {
     return { announcements_unread: 0, chat_unread: 0, total_unread: 0 };

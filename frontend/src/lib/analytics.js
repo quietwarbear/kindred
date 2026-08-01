@@ -23,6 +23,7 @@ export const isSensitiveContentRoute = () => (
   && (
     /^\/family\/activate\/?$/i.test(window.location.pathname)
     || /^\/family\/join\/?$/i.test(window.location.pathname)
+    || /^\/(?:home|dashboard)\/?$/i.test(window.location.pathname)
     || /^\/proposals(?:\/|$)/i.test(window.location.pathname)
     || /^\/reunion\/(?:activate|command|hub|memories|recap)\//i.test(window.location.pathname)
   )
@@ -61,7 +62,7 @@ export const redactInvitationPaths = (value) => {
 export const sanitizeAnalyticsEvent = (event) => {
   if (
     isSensitiveContentRoute()
-    && ["$autocapture", "$snapshot"].includes(event?.event)
+    && ["$autocapture", "$snapshot", "$pageview"].includes(event?.event)
   ) return null;
   if (!event?.properties) return event;
   return {
@@ -158,6 +159,18 @@ export const REUNION_EVENTS = Object.freeze([
   "gathering_pulse_viewed",
   "gathering_interest_recorded",
   "gathering_proposal_converted",
+  "family_today_viewed",
+  "family_today_primary_action_shown",
+  "family_today_primary_action_selected",
+  "reunion_draft_saved",
+  "first_invitation_prepared",
+  "first_invitation_shared",
+  "first_rsvp_received",
+  "organizer_return_after_first_rsvp",
+  "memory_contribution_completed",
+  "family_access_approved",
+  "gathering_pulse_completed",
+  "next_private_draft_started",
 ]);
 
 const GATHERING_PROPOSAL_EVENTS = new Set([
@@ -165,6 +178,7 @@ const GATHERING_PROPOSAL_EVENTS = new Set([
   "gathering_pulse_viewed",
   "gathering_interest_recorded",
   "gathering_proposal_converted",
+  "gathering_pulse_completed",
 ]);
 
 const GATHERING_PROPOSAL_CATEGORIES = Object.freeze({
@@ -212,6 +226,7 @@ const FAMILY_ACCESS_EVENTS = new Set([
   "guest_family_access_status_viewed",
   "guest_family_access_cancelled",
   "guest_family_access_decided",
+  "family_access_approved",
 ]);
 
 const FAMILY_ACCESS_CATEGORIES = Object.freeze({
@@ -252,6 +267,41 @@ const safeFamilyActivationProperties = (properties) => Object.fromEntries(
   })
 );
 
+const FAMILY_TODAY_EVENTS = new Set([
+  "family_today_viewed",
+  "family_today_primary_action_shown",
+  "family_today_primary_action_selected",
+  "reunion_draft_saved",
+  "first_invitation_prepared",
+  "first_invitation_shared",
+  "first_rsvp_received",
+  "organizer_return_after_first_rsvp",
+  "memory_contribution_completed",
+  "next_private_draft_started",
+]);
+
+const FAMILY_TODAY_CATEGORIES = Object.freeze({
+  source: new Set(["family_today", "reunion_start", "reunion_activation", "organizer_command_center", "attendee_hub", "memory_capsule", "gathering_invites", "gathering_proposals", "reunion_recap"]),
+  viewer_role: new Set(["member", "new_member", "organizer", "host"]),
+  lifecycle_state: new Set(["active", "provisional"]),
+  action_code: new Set([
+    "activate_family_space", "finish_reunion_draft", "prepare_first_invitation",
+    "review_family_access_requests", "resolve_rsvp_attention", "complete_command_task",
+    "review_recap", "review_gathering_proposal", "continue_converted_draft",
+    "open_command_center", "confirm_family_access", "complete_reunion_rsvp",
+    "complete_activity_responses", "review_updated_itinerary", "manage_contribution",
+    "respond_to_gathering_pulse", "continue_memory_contribution", "view_published_recap",
+    "check_family_access_status", "open_family_home",
+  ]),
+  coarse_elapsed_time: new Set(["same_day", "within_week", "within_month", "later", "unknown"]),
+});
+
+const safeFamilyTodayProperties = (properties) => Object.fromEntries(
+  Object.entries(properties).filter(
+    ([key, value]) => typeof value === "string" && FAMILY_TODAY_CATEGORIES[key]?.has(value)
+  )
+);
+
 const SAFE_REUNION_PROPERTY_KEYS = new Set([
   "source",
   "status",
@@ -279,6 +329,10 @@ export function trackReunionEvent(name, properties = {}) {
   if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
   if (FAMILY_ACTIVATION_EVENTS.has(name)) {
     posthog.capture(name, safeFamilyActivationProperties(properties));
+    return;
+  }
+  if (FAMILY_TODAY_EVENTS.has(name)) {
+    posthog.capture(name, safeFamilyTodayProperties(properties));
     return;
   }
   if (FAMILY_ACCESS_EVENTS.has(name)) {

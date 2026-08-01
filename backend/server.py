@@ -49,6 +49,7 @@ from routes.resend_webhooks import router as resend_webhooks_router
 from routes.steward import router as steward_router
 from routes.subscriptions import router as subscriptions_router
 from routes.timeline import router as timeline_router
+from routes.today import router as today_router
 
 load_dotenv()
 
@@ -90,6 +91,7 @@ app.include_router(resend_webhooks_router)
 app.include_router(steward_router)
 app.include_router(subscriptions_router)
 app.include_router(timeline_router)
+app.include_router(today_router)
 
 app.add_middleware(
     CORSMiddleware,

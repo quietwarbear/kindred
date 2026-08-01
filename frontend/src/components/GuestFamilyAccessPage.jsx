@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Clock3, LockKeyhole, RefreshCw, XCircle } from "lucide-react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
@@ -34,6 +34,7 @@ const operationKey = (prefix) => {
 };
 
 export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
+  const navigate = useNavigate();
   const [access, setAccess] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
@@ -116,6 +117,19 @@ export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
     }
   };
 
+  const confirmAccess = async () => {
+    setBusy(true);
+    try {
+      await apiRequest("/family-access/confirm", { method: "POST", token: session.token });
+      await onSessionRefresh?.();
+      navigate("/home");
+    } catch {
+      toast.error("Approved family access could not be confirmed safely.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const status = access?.status || "none";
   const [title, copy] = STATUS_COPY[status] || STATUS_COPY.conflict;
   const Icon = status === "approved" ? CheckCircle2 : status === "pending" ? Clock3 : status === "declined" || status === "cancelled" ? XCircle : LockKeyhole;
@@ -129,7 +143,7 @@ export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
         <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-muted-foreground">{error || copy}</p>
         {status === "approved" && access?.family_space_name ? <p className="mt-4 text-lg font-semibold">{access.family_space_name}</p> : null}
         <div className="mt-7 flex flex-wrap justify-center gap-3">
-          {status === "approved" ? <Button asChild><Link to="/home">Open family home</Link></Button> : null}
+          {status === "approved" ? <Button disabled={busy} onClick={confirmAccess} type="button">Confirm and open family space</Button> : null}
           {status === "pending" ? (
             <>
               <Button disabled={busy} onClick={refresh} type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Check status</Button>

@@ -343,6 +343,11 @@ export const OrganizerCommandCenterPage = ({ session }) => {
       trackReunionEvent("guest_family_access_decided", {
         source: "organizer_command_center", request_state: result.status, decision,
       });
+      if (decision === "approved" && result.status === "approved") {
+        trackReunionEvent("family_access_approved", {
+          source: "organizer_command_center", request_state: "approved", decision: "approved",
+        });
+      }
       toast.success(`Family access request ${result.status}.`);
       await load();
     } catch (error) {
