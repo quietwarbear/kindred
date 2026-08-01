@@ -20,7 +20,7 @@ if not DB_NAME.startswith("kindred_disposable_"):
 
 os.environ["MONGO_URL"] = DISPOSABLE_URL
 
-from invitation_delivery import _mark_invite_reminded
+from invitation_delivery import _claim_reminder
 from models import RSVPRequest
 from routes import events
 
@@ -79,19 +79,43 @@ async def test_reminder_stamp_and_rsvp_both_persist(monkeypatch):
     monkeypatch.setattr(events, "events_collection", collection)
     monkeypatch.setattr(events, "get_event_for_user", fake_event)
 
-    await asyncio.gather(
-        _mark_invite_reminded(
+    claimed, _ = await asyncio.gather(
+        _claim_reminder(
             collection, "synthetic-holiday", "cred-a", "2026-11-20", lambda: "t0"
         ),
         events.update_rsvp("synthetic-holiday", RSVPRequest(status="going"), MEMBER),
     )
 
+    assert claimed is True  # the reminder claim succeeded
     durable = await collection.find_one({"id": "synthetic-holiday"}, {"_id": 0})
     invite = durable["event_invites"][0]
     assert invite.get("reminder_sent_at") == "t0"  # reminder stamp survived
     assert invite.get("last_reminder_bucket") == "2026-11-20"
     assert invite.get("rsvp_status") == "going"  # RSVP survived
     assert durable["rsvp_revision"] == 2  # both writes serialized
+
+    await collection.drop()
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_reminder_claims_exactly_one_wins():
+    client = AsyncIOMotorClient(DISPOSABLE_URL)
+    collection = client[DB_NAME][f"release15_{uuid.uuid4().hex}"]
+    await collection.insert_one(dict(_event()))
+
+    results = await asyncio.gather(
+        _claim_reminder(
+            collection, "synthetic-holiday", "cred-a", "2026-11-20", lambda: "t0"
+        ),
+        _claim_reminder(
+            collection, "synthetic-holiday", "cred-a", "2026-11-20", lambda: "t1"
+        ),
+    )
+    # Exactly one caller may send; the other is denied the claim.
+    assert sorted(results) == [False, True]
+    durable = await collection.find_one({"id": "synthetic-holiday"}, {"_id": 0})
+    assert durable["event_invites"][0]["last_reminder_bucket"] == "2026-11-20"
 
     await collection.drop()
     client.close()

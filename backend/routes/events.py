@@ -175,13 +175,26 @@ async def send_gathering_reminders(
         "email-ready" if os.environ.get("RESEND_API_KEY") else "connection-ready"
     )
     sent_at = now_iso()
-    for invite in pending_invites:
-        invite["reminder_sent_at"] = sent_at
-        invite["reminder_delivery_status"] = delivery_status
-    await events_collection.update_one(
-        {"id": event_id},
-        {"$set": {"event_invites": event_doc.get("event_invites", [])}},
-    )
+
+    # Stamp the prepare labels through the RSVP revision protocol so a concurrent
+    # RSVP (or a first-send delivered_at stamp) cannot be erased by a stale
+    # whole-array replacement. Best-effort — the gated send below is authoritative.
+    def _label_pending(current_event: dict[str, Any]) -> dict[str, Any]:
+        invites = current_event.get("event_invites", [])
+        for invite in invites:
+            if invite.get("rsvp_status", "pending") == "pending":
+                invite["reminder_sent_at"] = sent_at
+                invite["reminder_delivery_status"] = delivery_status
+        return {"event_invites": invites}
+
+    try:
+        updated = await compare_and_swap_event(
+            events_collection, {"id": event_id}, _label_pending
+        )
+        if updated:
+            event_doc = updated
+    except RSVPWriteConflict:
+        pass
     await log_notification_event(
         community_id=current_user["community_id"],
         actor_name=current_user["full_name"],
@@ -225,15 +238,19 @@ async def send_gathering_reminders(
                 app_url=app_url,
             )
             delivery = report.safe_document()
-            # Content-free push to reminded members' own devices (best-effort).
-            for invite in pending_invites:
-                member_id = invite.get("member_id", "")
-                if member_id:
-                    await maybe_notify(
-                        users_collection=users_collection,
-                        user_id=member_id,
-                        template_code="gathering_reminder",
-                    )
+            # Content-free push only to members whose reminder actually went out
+            # this round (pending + not already reminded today), and only when a
+            # send happened. Best-effort; never affects this response.
+            today_bucket = sent_at[:10]
+            if report.submitted:
+                for invite in pending_invites:
+                    member_id = invite.get("member_id", "")
+                    if member_id and invite.get("last_reminder_bucket") != today_bucket:
+                        await maybe_notify(
+                            users_collection=users_collection,
+                            user_id=member_id,
+                            template_code="gathering_reminder",
+                        )
     return {
         "sent_count": len(pending_invites),
         "delivery_status": delivery_status,

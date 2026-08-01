@@ -274,6 +274,37 @@ async def test_reminder_not_re_sent_same_day():
     assert report.skipped == 1
 
 
+@pytest.mark.asyncio
+async def test_reminder_claim_prevents_second_send_even_with_stale_snapshot():
+    # Two rounds against the SAME collection with a fresh (bucket-unset) snapshot
+    # each time. The claim on the durable record must stop the second send.
+    provider = _FakeProvider()
+    events_col = _CasEvents(_published_event())
+
+    first = await send_reminders(
+        event=_published_event(),
+        invite_ids=None,
+        provider=provider,
+        events_collection=events_col,
+        outbox_collection=_FakeOutbox(),
+        app_url="https://www.heykindred.org",
+        now_fn=lambda: "2026-11-20T12:00:00+00:00",
+    )
+    second = await send_reminders(
+        event=_published_event(),  # stale: bucket not yet set in this snapshot
+        invite_ids=None,
+        provider=provider,
+        events_collection=events_col,
+        outbox_collection=_FakeOutbox(),
+        app_url="https://www.heykindred.org",
+        now_fn=lambda: "2026-11-20T18:00:00+00:00",
+    )
+    assert first.submitted == 1
+    assert second.submitted == 0
+    assert second.skipped == 1
+    assert len(provider.sent) == 1  # exactly one email over both rounds
+
+
 # --------------------------------------------------------------------------
 # Delivery callback distinguishes reminder from first-send
 # --------------------------------------------------------------------------

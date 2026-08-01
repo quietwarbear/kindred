@@ -327,32 +327,48 @@ def _select_reminder_invites(
     return eligible, skipped
 
 
-async def _mark_invite_reminded(
+class _AlreadyReminded(Exception):
+    """Signals that this invite already holds today's reminder claim."""
+
+
+async def _claim_reminder(
     events_collection,
     event_id: str,
     invite_id: str,
     day_bucket: str,
     now_fn: Callable[[], str],
-) -> None:
-    """Record the reminder through the revision protocol (best-effort)."""
+) -> bool:
+    """Atomically claim today's reminder for one invite BEFORE sending.
+
+    Returns True only if THIS call set today's bucket, so exactly one caller
+    sends even under concurrency or a double-trigger. The claim is written
+    through the RSVP revision protocol, so it is durable and a concurrent RSVP
+    cannot erase it. If the claim can't be taken safely (already claimed today,
+    invite gone, or sustained write contention) it returns False and the caller
+    does not send — deliberately favoring no-duplicate over guaranteed delivery,
+    since a missed reminder can be retried next round but a duplicate cannot be
+    un-sent.
+    """
 
     def mutate(current_event: dict[str, Any]) -> dict[str, Any]:
         invites = current_event.get("event_invites", [])
         target = next((i for i in invites if i.get("id") == invite_id), None)
-        if target is not None:
-            target["reminder_sent_at"] = now_fn()
-            target["last_reminder_bucket"] = day_bucket
-            target["reminder_delivery_status"] = "submitting"
+        if target is None or target.get("last_reminder_bucket") == day_bucket:
+            raise _AlreadyReminded()
+        target["last_reminder_bucket"] = day_bucket
+        target["reminder_sent_at"] = now_fn()
+        target["reminder_delivery_status"] = "submitting"
         return {"event_invites": invites}
 
     try:
-        await compare_and_swap_event(
+        updated = await compare_and_swap_event(
             events_collection,
             {"id": event_id, "event_invites.id": invite_id},
             mutate,
         )
-    except RSVPWriteConflict:
-        return
+    except (_AlreadyReminded, RSVPWriteConflict):
+        return False
+    return updated is not None
 
 
 async def send_reminders(
@@ -381,6 +397,13 @@ async def send_reminders(
     submitted = rejected = ambiguous = failed = 0
     for invite in eligible:
         invite_id = str(invite["id"])
+        # Claim today's reminder BEFORE sending so exactly one caller sends even
+        # under a concurrent RSVP race or a double-trigger. A lost claim skips.
+        if not await _claim_reminder(
+            events_collection, event_id, invite_id, day_bucket, now_fn
+        ):
+            skipped += 1
+            continue
         opaque_target_id = uuid.uuid4().hex
         operation_id = uuid.uuid4().hex
         rsvp_link = f"{app_url.rstrip('/')}/rsvp#{invite_id}"
@@ -413,9 +436,6 @@ async def send_reminders(
                 )
             except DuplicateKeyError:
                 pass
-            await _mark_invite_reminded(
-                events_collection, event_id, invite_id, day_bucket, now_fn
-            )
             submitted += 1
         elif receipt.status == ProviderStatus.REJECTED:
             rejected += 1

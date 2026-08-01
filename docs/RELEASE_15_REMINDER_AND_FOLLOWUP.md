@@ -74,18 +74,60 @@ no-op when push is disabled and each unable to raise into its request:
 
 ## Verification evidence
 
-- Release 15 focused backend tests: **12 passed** plus **1 disposable-DB proof**
-  (reminder stamp survives a concurrent RSVP, run against a throwaway replica set).
+- Release 15 focused backend tests: **13 passed** plus **2 disposable-DB proofs**
+  (reminder stamp survives a concurrent RSVP; two concurrent claims → exactly one
+  wins), run against a throwaway replica set.
 - Disposable campaigns re-run on the replica set (each in its own process):
-  Release 15 reminder concurrency, Release 14 both concurrency proofs, and
-  Release 13 publish concurrency — all pass, no regression.
-- Offline backend selection: **362 passed** vs **311 baseline** — same 52
+  Release 15 reminder concurrency + concurrent-claim, Release 14 both concurrency
+  proofs, and Release 13 publish concurrency — all pass, no regression.
+- Offline backend selection: **363 passed** vs **311 baseline** — same 52
   environment-gated live-API failures and 206 collection errors on both, so this
   branch adds passing tests with zero new failures or errors.
 - Frontend Jest: **44 passed** (7 suites, +1 for the awaiting-response helper);
   production build compiles.
 - `black 26.1.0` + fatal `flake8` clean on all changed/new backend files;
   `py_compile` and `import server` (229 routes) pass.
+
+## Independent adversarial review (completed)
+
+Two independent reviewers (privacy, and correctness/concurrency/authorization)
+examined every R15 addition.
+
+- **Privacy: clean** on all seven axes — the reminder path reuses R14's opaque
+  `target_id`, redacted envelope, allowlisted content-free push templates, and
+  bounded counts; the new reminder fields stay stripped from member/guest views.
+- **Correctness: two defects found, both fixed and regression-tested; gating,
+  callback stamping, `notify_community`, and counting confirmed clean.**
+
+### Defects found and fixed
+
+1. **HIGH — bare whole-array reminder write (pre-existing, now on the delivery
+   path).** `send_gathering_reminders` stamped its prepare labels with a bare
+   `$set: {event_invites: ...}` from a stale snapshot and no revision guard —
+   the R14 lost-update pattern — and R15 made this handler the reminder-delivery
+   entry point, so it ran against live RSVPs every round. **Fix:** the label
+   write now goes through `compare_and_swap_event`.
+2. **MEDIUM — non-authoritative reminder dedupe.** Same-day dedupe leaned on the
+   `last_reminder_bucket` stamp (set *after* the send, and dropped if its CAS
+   lost the race) plus Resend idempotency, so a duplicate email was reachable at
+   the day boundary or under contention. **Fix:** switched to **claim-before-send**
+   — `_claim_reminder` atomically sets today's bucket via the revision protocol
+   *before* the email leaves and returns True only to the single winning caller;
+   a lost claim skips (favoring no-duplicate over guaranteed delivery). Duplicate
+   protection is now enforced locally, not delegated to the provider.
+3. **LOW — over-notification.** The member reminder push iterated all pending
+   invites, including ones already reminded today. **Fix:** it now pushes only to
+   members whose reminder actually went out this round, and only when a send
+   occurred.
+
+Confirmed clean: the delivery callback stamps the right field by outbox `kind`
+(reminder vs first-send), first-write-wins and revision-safe with no
+cross-stamping and no activation/delivered-count corruption; reminder send fails
+closed at three layers (flag, provider config, preflight) and on drafts;
+`notify_community` is gated, bounded, actor-excluding, and cannot raise into its
+caller; the public-RSVP push cannot fire when disabled or break the guest path;
+`invitations_awaiting_response` is disjoint from `responses_received` (no double
+count).
 
 ## Activation configuration (required before anything sends)
 
