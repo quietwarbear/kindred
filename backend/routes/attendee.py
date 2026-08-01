@@ -27,7 +27,7 @@ async def _attendee_reunion(
     current_user: dict[str, Any],
 ) -> dict[str, Any]:
     event = await get_event_for_user(event_id, current_user)
-    if event.get("event_template") != "reunion":
+    if event.get("event_template") not in {"reunion", "holiday_meal"}:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reunion not found.",
@@ -96,7 +96,7 @@ async def review_attendee_itinerary(
                 "id": event_id,
                 "community_id": current_user["community_id"],
                 "hidden_from_user_ids": {"$ne": current_user["id"]},
-                "event_template": "reunion",
+                "event_template": {"$in": ["reunion", "holiday_meal"]},
             },
             mutate,
         )

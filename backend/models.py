@@ -34,8 +34,15 @@ class SSOExchangeRequest(BaseModel):
     name: str = ""
 
 
+class SSOCodeRequest(SSOExchangeRequest):
+    audience: str = Field(min_length=1, max_length=40)
+    origin: str = Field(min_length=1, max_length=200)
+
+
 class SSORedeemRequest(BaseModel):
     code: str
+    audience: str = "kindred"
+    origin: str = "https://www.heykindred.org"
 
 
 class GatheringPlanRequest(BaseModel):
@@ -375,6 +382,7 @@ class EventPublic(BaseModel):
     travel_coordination_notes: str = ""
     suggested_contribution: float = 0.0
     created_at: str = ""
+    publication_state: str = "published"
 
 
 class MemoryCreateRequest(BaseModel):
@@ -444,7 +452,8 @@ class ThreadPublic(BaseModel):
     comments: list[dict[str, Any]] = Field(default_factory=list)
     transcript: str = ""
     translations: dict[str, str] = Field(default_factory=dict)
-    legacy_table_recipe_id: str = ""
+    legacy_table_transfer_state: str = ""
+    revision: int = 0
     created_at: str = ""
 
 
@@ -520,12 +529,11 @@ class BudgetCreateRequest(BaseModel):
 
 
 class LegacyTableConfigRequest(BaseModel):
-    base_url: str = ""
-    auth_type: str = "ubuntu-sso"
-    sync_members: bool = True
-    sync_stories: bool = True
-    sync_events: bool = True
-    sync_relationships: bool = True
+    enabled: bool = False
+
+
+class LegacyTableRecipePreviewRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=100)
 
 
 class FileAttachmentPayload(BaseModel):

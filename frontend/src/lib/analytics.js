@@ -22,6 +22,7 @@ export const isSensitiveContentRoute = () => (
   typeof window !== "undefined"
   && (
     /^\/family\/activate\/?$/i.test(window.location.pathname)
+    || /^\/sso\/?$/i.test(window.location.pathname)
     || /^\/family\/join\/?$/i.test(window.location.pathname)
     || /^\/(?:home|dashboard)\/?$/i.test(window.location.pathname)
     || /^\/proposals(?:\/|$)/i.test(window.location.pathname)
@@ -42,6 +43,7 @@ const analyticsSuppressed = () => (
     )
   )
   || isSensitiveInvitationRoute()
+  || (typeof window !== "undefined" && /^\/sso\/?$/i.test(window.location.pathname))
 );
 
 export const redactInvitationPaths = (value) => {
@@ -286,6 +288,10 @@ const FAMILY_TODAY_CATEGORIES = Object.freeze({
   lifecycle_state: new Set(["active", "provisional"]),
   action_code: new Set([
     "activate_family_space", "finish_reunion_draft", "prepare_first_invitation",
+    "finish_holiday_meal_setup", "prepare_holiday_invitation", "review_holiday_response_gaps",
+    "fill_holiday_contribution_gaps", "preserve_holiday_recipe", "review_holiday_recap",
+    "complete_holiday_rsvp", "review_holiday_schedule", "claim_holiday_contribution",
+    "add_holiday_recipe", "view_holiday_recap",
     "review_family_access_requests", "resolve_rsvp_attention", "complete_command_task",
     "review_recap", "review_gathering_proposal", "continue_converted_draft",
     "open_command_center", "confirm_family_access", "complete_reunion_rsvp",

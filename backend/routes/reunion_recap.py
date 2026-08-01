@@ -103,7 +103,7 @@ async def _active_reunion(event_id: str, user: dict[str, Any]) -> dict[str, Any]
         {"id": user["community_id"]}, {"_id": 0, "lifecycle_state": 1}
     )
     if (
-        event.get("event_template") != "reunion"
+        event.get("event_template") not in {"reunion", "holiday_meal"}
         or community_lifecycle_state(community or {}) != ACTIVE
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reunion recap not found.")

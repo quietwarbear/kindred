@@ -445,6 +445,7 @@ async def create_thread(
         "id": str(uuid.uuid4()),
         "community_id": current_user["community_id"],
         "created_by": current_user["id"],
+        "created_by_id": current_user["id"],
         "created_by_name": current_user["full_name"],
         "title": payload.title.strip(),
         "body": payload.body.strip(),
@@ -462,6 +463,7 @@ async def create_thread(
         "tags": payload.tags,
         "comments": [],
         "created_at": now_iso(),
+        "revision": 1,
     }
     await threads_collection.insert_one(thread_doc.copy())
     return thread_doc

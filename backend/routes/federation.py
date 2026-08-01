@@ -1,33 +1,36 @@
-"""Cross-product federation jumps — Ubuntu Markets single sign-on handoff.
-
-Kindred mints a single-use code at a trusted sibling product (server-to-server, via the
-shared UBUNTU_SSO_SECRET) and returns a jump URL. The browser opens it; the sibling's
-/sso page redeems the code ONCE for a session. No session token ever rides in the URL —
-only a short-lived, single-use code (OAuth-authorization-code style).
-"""
+"""Strict, server-to-server cross-product SSO handoff."""
 
 import os
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from dependencies import get_current_user
+from legacy_table_sync import (
+    APPROVED_API_ORIGINS,
+    APPROVED_WEB_ORIGINS,
+    validate_approved_origin,
+)
 
 router = APIRouter(prefix="/api")
 
-# Each target: API base (where /auth/sso-code lives) + web base (where /sso lives).
 TARGETS = {
     "legacy_table": {
-        "api": os.environ.get("LEGACY_TABLE_API_URL", "https://api.legacytable.app/api").rstrip("/"),
-        "web": os.environ.get("LEGACY_TABLE_WEB_URL", "https://legacytable.app").rstrip("/"),
-        "label": "Legacy Table",
+        "api_env": "LEGACY_TABLE_API_ORIGIN",
+        "web_env": "LEGACY_TABLE_WEB_ORIGIN",
+        "approved_api": APPROVED_API_ORIGINS,
+        "approved_web": APPROVED_WEB_ORIGINS,
+        "audience": "legacy_table",
     },
     "ile_ubuntu": {
-        "api": os.environ.get("ILE_UBUNTU_API_URL", "https://ileubuntu-production.up.railway.app/api").rstrip("/"),
-        "web": os.environ.get("ILE_UBUNTU_WEB_URL", "https://www.ile-ubuntu.org").rstrip("/"),
-        "label": "Ile Ubuntu",
+        "api_env": "ILE_UBUNTU_API_ORIGIN",
+        "web_env": "ILE_UBUNTU_WEB_ORIGIN",
+        "approved_api": frozenset({"https://ileubuntu-production.up.railway.app"}),
+        "approved_web": frozenset({"https://www.ile-ubuntu.org"}),
+        "audience": "ile_ubuntu",
     },
 }
 
@@ -36,29 +39,48 @@ class JumpRequest(BaseModel):
     target: str
 
 
-@router.post("/federation/jump")
-async def federation_jump(payload: JumpRequest, current_user: dict[str, Any] = Depends(get_current_user)):
-    cfg = TARGETS.get(payload.target)
+def _target_config(target: str) -> tuple[dict[str, Any], str, str]:
+    cfg = TARGETS.get(target)
     if not cfg:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown destination.")
-    secret = os.environ.get("UBUNTU_SSO_SECRET", "")
-    if not secret:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Cross-product sign-in isn't configured.")
-    email = current_user.get("email", "")
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Your account has no email to carry over.")
-
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                f"{cfg['api']}/auth/sso-code",
-                json={"email": email, "secret": secret, "name": current_user.get("full_name", "")},
+        api_origin = validate_approved_origin(os.environ.get(cfg["api_env"], ""), cfg["approved_api"])
+        web_origin = validate_approved_origin(os.environ.get(cfg["web_env"], ""), cfg["approved_web"])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "federation_configuration_invalid", "message": "Cross-product sign-in is unavailable."},
+        ) from exc
+    return cfg, api_origin, web_origin
+
+
+@router.post("/federation/jump")
+async def federation_jump(payload: JumpRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+    cfg, api_origin, web_origin = _target_config(payload.target)
+    secret = os.environ.get("UBUNTU_SSO_SECRET", "")
+    email = current_user.get("email", "")
+    if not secret or not email:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Cross-product sign-in is unavailable.")
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10), follow_redirects=False) as client:
+            response = await client.post(
+                f"{api_origin}/api/auth/sso-code",
+                json={
+                    "email": email,
+                    "secret": secret,
+                    "name": current_user.get("full_name", ""),
+                    "audience": cfg["audience"],
+                    "origin": "https://www.heykindred.org",
+                },
             )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Couldn't reach {cfg['label']} ({exc}).")
-    if resp.status_code != 200:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{cfg['label']} declined the handoff (HTTP {resp.status_code}).")
-    code = resp.json().get("code")
-    if not code:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"{cfg['label']} returned no code.")
-    return {"url": f"{cfg['web']}/sso?code={code}", "label": cfg["label"]}
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Cross-product sign-in is temporarily unavailable.") from exc
+    if response.is_redirect or response.status_code != 200:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Cross-product sign-in was declined.")
+    try:
+        code = response.json().get("code")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Cross-product sign-in returned an invalid response.") from exc
+    if not isinstance(code, str) or not (32 <= len(code) <= 128):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Cross-product sign-in returned an invalid response.")
+    return {"url": f"{web_origin}/sso?{urlencode({'code': code})}", "destination": payload.target}

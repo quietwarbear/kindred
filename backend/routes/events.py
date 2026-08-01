@@ -26,6 +26,7 @@ from dependencies import (
     normalize_email,
     now_iso,
     GATHERING_TEMPLATES,
+    visible_event_query_for_user,
 )
 from ai_gathering import generate_gathering_plan
 from itinerary import (
@@ -194,11 +195,7 @@ async def gatherings_reminders(
 async def list_events(current_user: dict[str, Any] = Depends(get_current_user)):
     events = (
         await events_collection.find(
-            {
-                "community_id": current_user["community_id"],
-                "hidden_from_user_ids": {"$ne": current_user["id"]},
-                "publication_state": {"$ne": "organizer_draft"},
-            },
+            visible_event_query_for_user(current_user),
             {"_id": 0},
         )
         .sort("start_at", 1)
@@ -218,6 +215,26 @@ async def get_event(
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
     )
+
+
+@router.post("/events/{event_id}/publish-holiday-draft")
+async def publish_holiday_draft(
+    event_id: str, current_user: dict[str, Any] = Depends(get_current_user)
+):
+    ensure_minimum_role(current_user, "organizer")
+    event = await get_event_for_user(event_id, current_user)
+    if event.get("event_template") != "holiday_meal" or event.get("publication_state") != "organizer_draft":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Holiday meal draft not found.")
+    await events_collection.update_one(
+        {
+            "id": event_id,
+            "community_id": current_user["community_id"],
+            "publication_state": "organizer_draft",
+        },
+        {"$set": {"publication_state": "published", "published_at": now_iso()}},
+    )
+    event["publication_state"] = "published"
+    return serialize_event_for_user(_event_with_activity_summaries(event), current_user)
 
 
 @router.put("/events/{event_id}", response_model=EventPublic)
@@ -365,6 +382,16 @@ async def create_event(
 ):
     ensure_minimum_role(current_user, "organizer")
     client_request_id = payload.client_request_id.strip()
+    if payload.event_template == "holiday_meal" and len(client_request_id) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "holiday_draft_idempotency_required", "message": "This private draft needs a retry-safe request ID."},
+        )
+    if payload.event_template == "holiday_meal" and payload.recurrence_frequency != "none":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "holiday_draft_must_be_one_time", "message": "Create one private holiday meal draft at a time."},
+        )
     if client_request_id:
         existing = await events_collection.find_one(
             {
@@ -438,6 +465,7 @@ async def create_event(
         "location": payload.location.strip(),
         "map_url": (payload.map_url or "").strip(),
         "event_template": payload.event_template,
+        "publication_state": "organizer_draft" if payload.event_template == "holiday_meal" else "published",
         "special_focus": (payload.special_focus or "").strip(),
         "gathering_format": payload.gathering_format,
         "max_attendees": payload.max_attendees,
@@ -456,7 +484,7 @@ async def create_event(
         "zoom_link": (payload.zoom_link or "").strip(),
         "hidden_from_user_ids": payload.hidden_from_member_ids or [],
         "event_invites": [],
-        "event_role_assignments": [
+        "event_role_assignments": [] if payload.event_template == "holiday_meal" else [
             {"id": str(uuid.uuid4()), "role_name": role, "assignees": []}
             for role in assigned_roles
         ],
@@ -542,7 +570,7 @@ async def create_event(
         await events_collection.insert_many([item.copy() for item in recurring_docs])
     # Surprise gatherings stay silent — no community-wide notification or activity entry,
     # so the guest(s) of honor never get a hint.
-    if not (payload.hidden_from_member_ids or []):
+    if payload.event_template != "holiday_meal" and not (payload.hidden_from_member_ids or []):
         await log_notification_event(
             community_id=current_user["community_id"],
             actor_name=current_user["full_name"],

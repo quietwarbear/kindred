@@ -121,6 +121,25 @@ GATHERING_TEMPLATES = [
         "roles": ["organizer", "historian", "treasurer", "communications lead"],
     },
     {
+        "id": "holiday_meal",
+        "label": "Holiday meal",
+        "description": "A private meal draft with an editable schedule, dishes, supplies, and shared setup.",
+        "roles": ["organizer", "contributor", "historian"],
+        "defaults": {
+            "agenda": [
+                {"title": "Welcome or arrival", "visibility": "draft"},
+                {"title": "Meal time", "visibility": "draft"},
+                {"title": "Cleanup", "visibility": "draft"},
+            ],
+            "potluck_items": ["Main dish", "Side dish", "Dessert", "Drinks or supplies"],
+            "volunteer_slots": [
+                {"title": "Setup", "needed_count": 1},
+                {"title": "Cleanup", "needed_count": 1},
+            ],
+            "recipe_prompt": "Optionally preserve a family recipe or food tradition.",
+        },
+    },
+    {
         "id": "birthday",
         "label": "Birthday",
         "description": "Celebration-focused planning with tributes, food, and guest coordination.",

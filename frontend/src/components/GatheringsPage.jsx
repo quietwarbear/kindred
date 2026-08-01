@@ -21,6 +21,8 @@ const initialEventForm = {
   title: "",
   description: "",
   start_at: "",
+  end_at: "",
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   location: "",
   map_url: "",
   event_template: "reunion",
@@ -37,6 +39,12 @@ const initialEventForm = {
   agenda: [],
   volunteer_slots: [],
   potluck_items: [],
+  client_request_id: "",
+};
+
+const retrySafeRequestId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `holiday-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
 
 export const GatheringsPage = ({ token, user }) => {
@@ -90,6 +98,17 @@ export const GatheringsPage = ({ token, user }) => {
     setEvents((current) => current.map((item) => (item.id === nextEvent.id ? nextEvent : item)));
   };
 
+  const publishHolidayDraft = async () => {
+    if (!activeEvent) return;
+    try {
+      const payload = await apiRequest(`/events/${activeEvent.id}/publish-holiday-draft`, { method: "POST", token });
+      mergeEvent(payload);
+      toast.success("Holiday meal setup is ready for private invitation preparation.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to finish this holiday meal draft.");
+    }
+  };
+
   const loadData = useCallback(async () => {
     try {
       if (!canCreate) {
@@ -133,7 +152,7 @@ export const GatheringsPage = ({ token, user }) => {
         token,
         data: {
           ...eventForm,
-          start_at: new Date(eventForm.start_at).toISOString(),
+          start_at: eventForm.start_at,
           assigned_roles: eventForm.assigned_roles.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean),
           max_attendees: Number(eventForm.max_attendees) || null,
           suggested_contribution: Number(eventForm.suggested_contribution) || 0,
@@ -344,13 +363,22 @@ export const GatheringsPage = ({ token, user }) => {
               </div>
             )}
           </div>
-          <div className="mt-6 grid gap-4 lg:grid-cols-5">
+          <div className="mt-6 grid gap-4 lg:grid-cols-6">
             {templates.map((template) => (
               <button
                 className={`soft-panel text-left ${eventForm.event_template === template.id ? "border-primary bg-primary/5" : ""}`}
                 data-testid={`gathering-template-${template.id}`}
                 key={template.id}
-                onClick={() => setEventForm((current) => ({ ...current, event_template: template.id, assigned_roles: template.roles.join(", ") }))}
+                onClick={() => setEventForm((current) => ({
+                  ...current,
+                  event_template: template.id,
+                  assigned_roles: template.roles.join(", "),
+                  agenda: (template.defaults?.agenda || []).map((item) => ({ ...item })),
+                  volunteer_slots: (template.defaults?.volunteer_slots || []).map((item) => ({ ...item })),
+                  potluck_items: [...(template.defaults?.potluck_items || [])],
+                  special_focus: template.defaults?.recipe_prompt || current.special_focus,
+                  client_request_id: template.id === "holiday_meal" ? (current.client_request_id || retrySafeRequestId()) : "",
+                }))}
                 type="button"
               >
                 <p className="text-base font-semibold text-foreground">{template.label}</p>
@@ -366,6 +394,14 @@ export const GatheringsPage = ({ token, user }) => {
             <label>
               <span className="field-label">Date + time</span>
               <Input className="field-input" data-testid="gatherings-start-input" onChange={(e) => setEventForm((c) => ({ ...c, start_at: e.target.value }))} required type="datetime-local" value={eventForm.start_at} />
+            </label>
+            <label>
+              <span className="field-label">End date + time</span>
+              <Input className="field-input" data-testid="gatherings-end-input" onChange={(e) => setEventForm((c) => ({ ...c, end_at: e.target.value }))} type="datetime-local" value={eventForm.end_at} />
+            </label>
+            <label>
+              <span className="field-label">Timezone</span>
+              <Input className="field-input" data-testid="gatherings-timezone-input" onChange={(e) => setEventForm((c) => ({ ...c, timezone: e.target.value }))} required value={eventForm.timezone} />
             </label>
             <label>
               <span className="field-label">Location</span>
@@ -468,6 +504,12 @@ export const GatheringsPage = ({ token, user }) => {
               <span className="field-label">Description</span>
               <Textarea className="field-textarea" data-testid="gatherings-description-input" onChange={(e) => setEventForm((c) => ({ ...c, description: e.target.value }))} required value={eventForm.description} />
             </label>
+            {eventForm.event_template === "holiday_meal" && (
+              <div className="xl:col-span-2 rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid="holiday-meal-private-draft-notice">
+                <p className="text-sm font-semibold text-foreground">Private organizer draft</p>
+                <p className="mt-1 text-xs text-muted-foreground">Creating this draft sends no invitation, RSVP, assignment, notification, or provider request. Every meal default remains editable after creation.</p>
+              </div>
+            )}
             <label className="xl:col-span-2">
               <span className="field-label">Travel coordination notes</span>
               <Textarea className="field-textarea" data-testid="gatherings-travel-notes-input" onChange={(e) => setEventForm((c) => ({ ...c, travel_coordination_notes: e.target.value }))} value={eventForm.travel_coordination_notes} />
@@ -586,6 +628,13 @@ export const GatheringsPage = ({ token, user }) => {
                     <h3 className="mt-2 font-display text-3xl text-foreground" data-testid="gatherings-active-title">{activeEvent.title}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">{formatDateTime(activeEvent.start_at)} · {activeEvent.location}</p>
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">{activeEvent.description}</p>
+                    {activeEvent.event_template === "holiday_meal" && activeEvent.publication_state === "organizer_draft" && (
+                      <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-4" data-testid="holiday-draft-controls">
+                        <p className="text-sm font-semibold text-foreground">Private organizer draft</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Review the schedule, dishes, supplies, and volunteer needs. Finishing setup makes it visible to signed-in family but still sends nothing.</p>
+                        <Button className="mt-3 rounded-full" data-testid="holiday-draft-publish" onClick={publishHolidayDraft} size="sm">Finish setup</Button>
+                      </div>
+                    )}
                     {activeEvent.hidden_from_user_ids?.length > 0 && (
                       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 dark:bg-amber-900/20" data-testid="gatherings-surprise-banner">
                         <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">

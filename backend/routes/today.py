@@ -34,6 +34,7 @@ from organizer_command_center import (
     planning_progress,
 )
 from reunion_recap import recap_state, reunion_completion
+from rsvp_integrity import member_invite_aliases
 from today import (
     build_today_projection,
     opaque_action_reference,
@@ -173,7 +174,7 @@ async def _snapshot_projection(
 
             event_query: dict[str, Any] = {
                 "community_id": actor["community_id"],
-                "event_template": "reunion",
+                "event_template": {"$in": ["reunion", "holiday_meal"]},
                 "hidden_from_user_ids": {"$ne": actor["id"]},
             }
             if not organizer:
@@ -340,10 +341,25 @@ async def _snapshot_projection(
     milestones: list[str] = []
 
     if organizer:
+        holiday_events = [item for item in events if item.get("event_template") == "holiday_meal"]
+        for event in holiday_events:
+            if event.get("publication_state") == "organizer_draft":
+                add_dynamic("finish_holiday_meal_setup", "draft", "gatherings", event, f"/gatherings/{event['id']}")
+                continue
+            if not event.get("event_invites"):
+                add_dynamic("prepare_holiday_invitation", "ready", "gatherings", event, f"/gatherings/{event['id']}")
+            if event.get("event_invites") and len(event.get("rsvp_records") or []) < len(event.get("event_invites") or []):
+                add_dynamic("review_holiday_response_gaps", "missing", "gatherings", event, f"/gatherings/{event['id']}")
+            if any(not item.get("assigned_to_id") and not item.get("assigned_to") for item in event.get("potluck_items") or []) or any(len(item.get("assigned_members") or []) < int(item.get("needed_count") or 1) for item in event.get("volunteer_slots") or []):
+                add_dynamic("fill_holiday_contribution_gaps", "open", "gatherings", event, f"/gatherings/{event['id']}")
+            add_dynamic("preserve_holiday_recipe", "available", "legacy_threads", event, "/legacy-threads")
+            if reunion_completion(event).get("state") == "ready":
+                add_dynamic("review_holiday_recap", "ready", "reunion_recap", event, f"/reunion/recap/{event['id']}")
         regular_events = [
             item
             for item in events
-            if item.get("publication_state") != "organizer_draft"
+            if item.get("event_template") == "reunion"
+            and item.get("publication_state") != "organizer_draft"
             and reunion_completion(item).get("state") != "ready"
         ]
         command_states: list[
@@ -381,7 +397,8 @@ async def _snapshot_projection(
         other_drafts = [
             item
             for item in events
-            if item.get("publication_state") == "organizer_draft"
+            if item.get("event_template") == "reunion"
+            and item.get("publication_state") == "organizer_draft"
             and item.get("id") not in converted_event_ids
         ]
         for event in other_drafts:
@@ -539,10 +556,23 @@ async def _snapshot_projection(
                 )
             )
 
+        holiday_events = [item for item in events if item.get("event_template") == "holiday_meal" and item.get("publication_state") != "organizer_draft"]
+        for event in holiday_events:
+            aliases = member_invite_aliases(event, actor)
+            own_rsvp = any(row.get("user_id") in aliases for row in event.get("rsvp_records") or [])
+            if not own_rsvp:
+                add_dynamic("complete_holiday_rsvp", "missing", "gatherings", event, f"/gatherings/{event['id']}")
+            add_dynamic("review_holiday_schedule", "available", "gatherings", event, f"/gatherings/{event['id']}")
+            if any(not item.get("assigned_to_id") and not item.get("assigned_to") for item in event.get("potluck_items") or []) or any(len(item.get("assigned_members") or []) < int(item.get("needed_count") or 1) for item in event.get("volunteer_slots") or []):
+                add_dynamic("claim_holiday_contribution", "open", "gatherings", event, f"/gatherings/{event['id']}")
+            add_dynamic("add_holiday_recipe", "available", "legacy_threads", event, "/legacy-threads")
+            if recap_state(event, recap_by_event.get(event.get("id"))) == "published":
+                add_dynamic("view_holiday_recap", "published", "reunion_recap", event, f"/reunion/recap/{event['id']}")
         active_events = [
             item
             for item in events
-            if item.get("publication_state") != "organizer_draft"
+            if item.get("event_template") == "reunion"
+            and item.get("publication_state") != "organizer_draft"
             and reunion_completion(item).get("state") == "not_ready"
         ]
         own_memories_by_event: dict[str, list[dict[str, Any]]] = defaultdict(list)

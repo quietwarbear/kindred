@@ -382,7 +382,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 path="members"
               />
               <Route element={<MemoryVaultPage token={token} user={user} />} path="memories" />
-              <Route element={<LegacyThreadsPage token={token} />} path="legacy-threads" />
+              <Route element={<LegacyThreadsPage token={token} user={user} />} path="legacy-threads" />
               <Route element={<KinshipMapPage token={token} />} path="kinship-map" />
               <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
               <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />

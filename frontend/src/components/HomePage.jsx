@@ -8,6 +8,17 @@ import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 
 const ACTION_COPY = {
+  finish_holiday_meal_setup: ["Finish the holiday meal setup", "Review the private meal draft before inviting anyone.", "Open the draft"],
+  prepare_holiday_invitation: ["Prepare the first invitation", "Review the private invitation before sharing it.", "Open invitation controls"],
+  review_holiday_response_gaps: ["Review response gaps", "See whether invited family still needs a response prompt.", "Review responses"],
+  fill_holiday_contribution_gaps: ["Fill meal contribution gaps", "Review open dishes, supplies, setup, and cleanup needs.", "Review contributions"],
+  preserve_holiday_recipe: ["Preserve a recipe or tradition", "Optionally keep a family food story in Kindred.", "Open Legacy Threads"],
+  review_holiday_recap: ["Review the holiday meal recap", "Complete the private recap and continuity flow.", "Review recap"],
+  complete_holiday_rsvp: ["Respond to the holiday meal", "Share whether you can attend through the private gathering.", "RSVP"],
+  review_holiday_schedule: ["Review the meal schedule", "See the published arrival, meal, and cleanup plan.", "View schedule"],
+  claim_holiday_contribution: ["Claim a dish or volunteer need", "Choose an open contribution or help slot.", "View contributions"],
+  add_holiday_recipe: ["Add an optional recipe or tradition", "Preserve your own food story in Kindred.", "Add a recipe"],
+  view_holiday_recap: ["View the holiday meal recap", "Return to the published memories and next-gathering flow.", "View recap"],
   activate_family_space: ["Name and open your family space", "Your reunion has enough verified participation to become an enduring private family space.", "Complete family setup"],
   finish_reunion_draft: ["Finish the reunion draft", "Complete the remaining reunion details before inviting family.", "Continue the draft"],
   prepare_first_invitation: ["Bring the first person in", "Prepare or safely share the reunion’s first private invitation.", "Open invitation controls"],

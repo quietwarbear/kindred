@@ -19,6 +19,7 @@ from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 
@@ -80,6 +81,7 @@ from db import (
     budget_plans_collection,
     chat_rooms_collection,
     kinships_collection,
+    legacy_table_collection,
     memories_collection,
     next_gathering_operations_collection,
     payments_collection,
@@ -114,6 +116,7 @@ from models import (
     PasswordRecoveryRequest,
     PasswordRecoveryVerifyRequest,
     ProfileUpdateRequest,
+    SSOCodeRequest,
     SSOExchangeRequest,
     SSORedeemRequest,
     UserPublic,
@@ -133,6 +136,14 @@ ALLOWED_MOBILE_GOOGLE_SCHEMES = {
     ).split(",")
     if scheme.strip()
 }
+SSO_AUDIENCE = "kindred"
+SSO_ALLOWED_SOURCE_ORIGINS = frozenset(
+    {"https://legacytable.app", "https://www.ile-ubuntu.org"}
+)
+
+
+def _sso_code_digest(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
 def _append_query_value(url: str, key: str, value: str) -> str:
@@ -620,53 +631,23 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
     return build_auth_response(user_doc, None)
 
 
-@router.post("/auth/exchange", response_model=AuthResponse)
+@router.post("/auth/exchange")
 async def auth_exchange(payload: SSOExchangeRequest):
-    """Ubuntu Markets single-identity exchange — INBOUND federation into Kindred.
-
-    A trusted sibling product (Legacy Table, Ile Ubuntu) presents a verified user's email
-    plus the shared UBUNTU_SSO_SECRET; we find-or-create the Kindred user and open a
-    session, completing the bi-directional fabric. A brand-new federated user has no
-    community yet (community_id ""), so the client routes them into onboarding. No password
-    is exchanged. The secret is server-side only — trust only products you control.
-    """
-    expected = os.environ.get("UBUNTU_SSO_SECRET", "")
-    if not expected or payload.secret != expected:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret")
-
-    email = normalize_email(payload.email)
-    if not email or "@" not in email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
-
-    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
-    if not user_doc:
-        user_doc = {
-            "id": str(uuid.uuid4()),
-            "email": email,
-            "full_name": (payload.name or "").strip() or email.split("@")[0],
-            "password_hash": None,
-            "community_id": "",
-            "community_ids": [],
-            "role": "member",
-            "auth_provider": "ubuntu-sso",
-            "onboarding_completed": False,
-            "created_at": now_iso(),
-        }
-        await users_collection.insert_one(user_doc.copy())
-
-    community_doc = None
-    if user_doc.get("community_id"):
-        community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
-    return build_auth_response(user_doc, community_doc)
+    """Retired token-returning federation contract; use one-time SSO codes."""
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "sso_exchange_retired", "message": "Use the authorization-code handoff."},
+    )
 
 
 async def _find_or_create_sso_user(email: str, name: str) -> dict[str, Any]:
-    user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
+    user_doc = await users_collection.find_one({"email_normalized": email}, {"_id": 0})
     if user_doc:
         return user_doc
     user_doc = {
         "id": str(uuid.uuid4()),
         "email": email,
+        "email_normalized": email,
         "full_name": (name or "").strip() or email.split("@")[0],
         "password_hash": None,
         "community_id": "",
@@ -681,7 +662,7 @@ async def _find_or_create_sso_user(email: str, name: str) -> dict[str, Any]:
 
 
 @router.post("/auth/sso-code")
-async def sso_mint_code(payload: SSOExchangeRequest):
+async def sso_mint_code(payload: SSOCodeRequest):
     """Mint a short-lived, single-use SSO handoff code (server-to-server, secret-gated).
 
     A trusted sibling product (Ile Ubuntu) calls this to start an 'Open in Kindred' jump.
@@ -690,15 +671,22 @@ async def sso_mint_code(payload: SSOExchangeRequest):
     expected = os.environ.get("UBUNTU_SSO_SECRET", "")
     if not expected or payload.secret != expected:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret")
+    if payload.audience != SSO_AUDIENCE or payload.origin not in SSO_ALLOWED_SOURCE_ORIGINS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SSO handoff is not authorized.")
     email = normalize_email(payload.email)
     if not email or "@" not in email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
 
-    user_doc = await _find_or_create_sso_user(email, payload.name)
-    code = uuid.uuid4().hex
+    try:
+        user_doc = await _find_or_create_sso_user(email, payload.name)
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="SSO identity is ambiguous.") from exc
+    code = secrets.token_urlsafe(32)
     await sso_codes_collection.insert_one({
-        "code": code,
+        "code_digest": _sso_code_digest(code),
         "user_id": user_doc["id"],
+        "audience": payload.audience,
+        "origin": payload.origin,
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
         "used": False,
         "created_at": now_iso(),
@@ -709,15 +697,30 @@ async def sso_mint_code(payload: SSOExchangeRequest):
 
 
 @router.post("/auth/sso-redeem", response_model=AuthResponse)
-async def sso_redeem_code(payload: SSORedeemRequest):
+async def sso_redeem_code(payload: SSORedeemRequest, request: Request):
     """Redeem a single-use SSO code for a Kindred session. No secret — the code is the
     one-time credential. New federated users with no community land in onboarding."""
-    rec = await sso_codes_collection.find_one({"code": payload.code}, {"_id": 0})
-    if not rec or rec.get("used"):
+    request_origin = request.headers.get("origin", "")
+    if (
+        payload.audience != SSO_AUDIENCE
+        or payload.origin != "https://www.heykindred.org"
+        or request_origin != payload.origin
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link is invalid or already used.")
-    if (rec.get("expires_at") or "") < now_iso():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link has expired.")
-    await sso_codes_collection.update_one({"code": payload.code}, {"$set": {"used": True, "used_at": now_iso()}})
+    now = now_iso()
+    rec = await sso_codes_collection.find_one_and_update(
+        {
+            "code_digest": _sso_code_digest(payload.code),
+            "audience": payload.audience,
+            "used": False,
+            "expires_at": {"$gt": now},
+        },
+        {"$set": {"used": True, "used_at": now}, "$unset": {"code_digest": ""}},
+        projection={"_id": 0},
+        return_document=ReturnDocument.BEFORE,
+    )
+    if not rec:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link is invalid or already used.")
 
     user_doc = await users_collection.find_one({"id": rec["user_id"]}, {"_id": 0})
     if not user_doc:
@@ -956,6 +959,7 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
     await notification_preferences_collection.delete_many({"user_id": user_id})
     await password_resets_collection.delete_many({"email": current_user.get("email", "")})
     await user_sessions_collection.delete_many({"user_id": user_id})
+    await sso_codes_collection.delete_many({"user_id": user_id})
     await polls_collection.update_many(
         {"community_id": community_id},
         {"$pull": {"options.$[].voter_ids": user_id}},
@@ -1040,6 +1044,7 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         await chat_rooms_collection.delete_many({"community_id": community_id})
         await subyards_collection.delete_many({"community_id": community_id})
         await kinships_collection.delete_many({"community_id": community_id})
+        await legacy_table_collection.delete_many({"community_id": community_id})
         await memories_collection.delete_many({"community_id": community_id})
         await reunion_recaps_collection.delete_many({"community_id": community_id})
         await next_gathering_operations_collection.delete_many({"community_id": community_id})

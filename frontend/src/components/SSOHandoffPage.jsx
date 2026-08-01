@@ -4,20 +4,24 @@ import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/api";
 
 // Ubuntu Markets SSO handoff — redeems a one-time code from a sibling product
-// (e.g. Ile Ubuntu's "Open in Kindred") and signs the user in. Reached at /sso?code=…
+// The bootstrap removes the code from browser history before any third-party script runs.
 export const SSOHandoffPage = ({ onAuthSuccess }) => {
   const navigate = useNavigate();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("code");
+    const code = window.__kindredTransientSSOCode;
+    delete window.__kindredTransientSSOCode;
     if (!code) {
       setError("Missing sign-in code. Please try again from the other app.");
       return;
     }
     (async () => {
       try {
-        const payload = await apiRequest("/auth/sso-redeem", { method: "POST", data: { code } });
+        const payload = await apiRequest("/auth/sso-redeem", {
+          method: "POST",
+          data: { code, audience: "kindred", origin: window.location.origin },
+        });
         onAuthSuccess(payload);
         navigate("/dashboard", { replace: true });
       } catch (e) {
