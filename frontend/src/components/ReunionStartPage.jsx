@@ -13,7 +13,7 @@ import {
   Soup,
   Users,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +86,8 @@ export const ReunionInvitePreview = ({ draft, activities = [], compact = false }
 
 export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const memoryFocus = searchParams.get("focus") === "memory";
   const [draft, setDraft] = useState(() => loadReunionDraft());
   const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(loadReunionDraft()));
   const [showPreview, setShowPreview] = useState(false);
@@ -179,12 +181,14 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <section className="archival-card h-fit" data-testid="reunion-draft-form-card">
-            <p className="eyebrow-text">Start with the gathering</p>
+            <p className="eyebrow-text">{memoryFocus ? "Start with the story" : "Start with the gathering"}</p>
             <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              Make the reunion real in a few minutes.
+              {memoryFocus ? "Give your family's stories a home." : "Make the reunion real in a few minutes."}
             </h1>
             <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
-              Draft first. Preview exactly what family will see. Create an account only when you’re ready to save and share.
+              {memoryFocus
+                ? "Name the space, capture the first memory, and plan a gathering around it whenever you're ready. Create an account only when you want to save and share."
+                : "Draft first. Preview exactly what family will see. Create an account only when you’re ready to save and share."}
             </p>
 
             <form className="mt-7 grid gap-4" onSubmit={createDraft}>

@@ -97,9 +97,9 @@ export const LandingPage = ({ isAuthenticated }) => {
                     className="pill-button"
                     data-testid="landing-primary-cta"
                     onClick={() => trackStart("homepage_hero")}
-                    to="/reunion/start"
+                    to="/start"
                   >
-                    Start planning <ArrowRight className="ml-2 h-4 w-4" />
+                    Get started <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                   <a
                     className="inline-flex items-center rounded-full border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-muted"
