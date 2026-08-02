@@ -125,6 +125,48 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
     } catch { /* activation signal is best-effort */ }
   };
 
+  const [sending, setSending] = useState(false);
+
+  // Email each prepared invitation its private RSVP link via the gated first-send
+  // delivery path. Returns only content-free counts; fails closed to a clear
+  // message when delivery isn't enabled/configured on this deployment.
+  const handleSendByEmail = async () => {
+    setSending(true);
+    try {
+      const report = await apiRequest(`/events/${event.id}/invites/send`, {
+        method: "POST",
+        token,
+        data: {},
+      });
+      if (report.status === "unavailable") {
+        toast.error(
+          report.error_code === "delivery_disabled"
+            ? "Email delivery isn't turned on for this deployment yet."
+            : report.error_code === "provider_unconfigured"
+              ? "Email delivery isn't fully configured yet."
+              : "Email delivery is unavailable right now."
+        );
+      } else {
+        const counts = report.counts || {};
+        const sent = counts.submitted || 0;
+        toast.success(
+          `Emailed ${sent} invitation${sent === 1 ? "" : "s"}.` +
+            (counts.skipped ? ` ${counts.skipped} already sent.` : "")
+        );
+        try {
+          const fresh = await apiRequest(`/events/${event.id}`, { token });
+          onUpdate?.(fresh);
+        } catch {
+          /* refreshing the activation funnel is best-effort */
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Unable to send invitations.");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const toggleMember = (memberId) => {
     setDraftPreviewed(false);
     setForm((c) => ({
@@ -240,6 +282,24 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
           </div>
         ))}
       </div>
+      {!isOrganizerDraft && event.event_invites?.length > 0 ? (
+        <div className="mt-4">
+          <Button
+            className="w-full rounded-full"
+            data-testid="gatherings-invite-send-email"
+            disabled={sending}
+            onClick={handleSendByEmail}
+            type="button"
+          >
+            {sending ? "Sending…" : "Send invitations by email"}
+          </Button>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            Emails each invited person their private RSVP link. Invitations already
+            delivered are skipped. Requires email delivery to be enabled for this
+            deployment.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 };
