@@ -228,16 +228,19 @@ async def send_first_invitations(
     app_url: str,
     now_fn: Callable[[], str] = now_iso,
 ) -> DeliverySendReport:
-    """Send the current invitation credential to selected invites, fail-closed."""
+    """Send the current invitation credential to selected invites, fail-closed.
+
+    We do NOT run the strict DNS/region preflight here: Resend refuses to send
+    from an unverified domain server-side (a non-2xx response maps to REJECTED,
+    so no email leaks), which is the authoritative check. The inherited
+    incident-rotation preflight independently re-verified DNS and hard-coded the
+    us-east-1 region, which produced false negatives for legitimately verified
+    domains. Config presence is already guaranteed by
+    build_invitation_delivery_provider().
+    """
     event_id = str(event.get("id") or "")
     if not event_id or event.get("publication_state") == "organizer_draft":
         return DeliverySendReport(status="unavailable", error_code="draft_or_missing")
-
-    preflight = await provider.preflight()
-    if not preflight.ready:
-        return DeliverySendReport(
-            status="unavailable", error_code=preflight.error_code.value
-        )
 
     eligible, skipped = _select_invites(event, invite_ids)
     submitted = rejected = ambiguous = failed = 0
@@ -386,12 +389,8 @@ async def send_reminders(
     if not event_id or event.get("publication_state") == "organizer_draft":
         return DeliverySendReport(status="unavailable", error_code="draft_or_missing")
 
-    preflight = await provider.preflight()
-    if not preflight.ready:
-        return DeliverySendReport(
-            status="unavailable", error_code=preflight.error_code.value
-        )
-
+    # No strict DNS/region preflight (see send_first_invitations): Resend enforces
+    # domain verification server-side, so an unverified domain rejects safely.
     day_bucket = now_fn()[:10]  # YYYY-MM-DD; one reminder per invite per day
     eligible, skipped = _select_reminder_invites(event, invite_ids, day_bucket)
     submitted = rejected = ambiguous = failed = 0
