@@ -248,22 +248,46 @@ async def test_send_uses_opaque_target_never_the_credential():
 
 
 @pytest.mark.asyncio
-async def test_send_fails_closed_when_preflight_not_ready():
-    provider = _FakeProvider(ready=False)
-    events_col = _CasEvents()
-    outbox = _FakeOutbox()
+async def test_send_does_not_gate_on_local_preflight():
+    # The strict DNS/region preflight no longer blocks: Resend enforces domain
+    # verification at send time. A provider whose preflight is "not ready" still
+    # attempts the send (which Resend would reject for a real unverified domain).
+    provider = _FakeProvider(ready=False)  # would previously have short-circuited
+    events_col = _CasEvents(_published_event())
     report = await send_first_invitations(
         event=_published_event(),
         invite_ids=None,
         provider=provider,
         events_collection=events_col,
+        outbox_collection=_FakeOutbox(),
+        app_url="https://www.heykindred.org",
+    )
+    assert provider.sent  # the send was attempted, not blocked by preflight
+    assert report.submitted == 1
+
+
+@pytest.mark.asyncio
+async def test_unverified_domain_rejects_safely_via_provider():
+    # An unverified domain / bad config surfaces as the provider REJECTING the
+    # send (Resend returns non-2xx) — no email, no outbox row.
+    provider = _FakeProvider(
+        receipt=ProviderReceipt(
+            status=ProviderStatus.REJECTED, error_code=SafeErrorCode.PROVIDER_REJECTED
+        )
+    )
+    outbox = _FakeOutbox()
+    report = await send_first_invitations(
+        event=_published_event(),
+        invite_ids=None,
+        provider=provider,
+        events_collection=_CasEvents(_published_event()),
         outbox_collection=outbox,
         app_url="https://www.heykindred.org",
     )
-    assert report.status == "unavailable"
-    assert report.error_code == "configuration_unavailable"
-    assert provider.sent == []  # never attempted a send
-    assert outbox.upserts == []
+    assert provider.sent  # attempted
+    assert report.rejected == 1
+    assert report.submitted == 0
+    assert outbox.upserts == []  # nothing recorded, no email
 
 
 @pytest.mark.asyncio

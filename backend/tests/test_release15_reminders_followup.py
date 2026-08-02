@@ -217,8 +217,22 @@ async def test_send_reminders_stamps_through_cas_and_records_reminder_kind():
 
 
 @pytest.mark.asyncio
-async def test_send_reminders_fails_closed_on_preflight_and_draft():
-    # preflight not ready → no send
+async def test_send_reminders_still_blocks_on_draft_but_not_preflight():
+    # A private draft never sends (unchanged).
+    provider_draft = _FakeProvider()
+    report_draft = await send_reminders(
+        event=_published_event(publication_state="organizer_draft"),
+        invite_ids=None,
+        provider=provider_draft,
+        events_collection=_CasEvents(),
+        outbox_collection=_FakeOutbox(),
+        app_url="https://www.heykindred.org",
+    )
+    assert report_draft.status == "unavailable"
+    assert report_draft.error_code == "draft_or_missing"
+    assert provider_draft.sent == []
+
+    # A "not ready" preflight no longer blocks — Resend enforces verification.
     provider = _FakeProvider(ready=False)
     report = await send_reminders(
         event=_published_event(),
@@ -227,23 +241,10 @@ async def test_send_reminders_fails_closed_on_preflight_and_draft():
         events_collection=_CasEvents(_published_event()),
         outbox_collection=_FakeOutbox(),
         app_url="https://www.heykindred.org",
+        now_fn=lambda: "2026-11-20T09:00:00+00:00",
     )
-    assert report.status == "unavailable"
-    assert provider.sent == []
-
-    # draft → no send, no preflight
-    provider2 = _FakeProvider()
-    report2 = await send_reminders(
-        event=_published_event(publication_state="organizer_draft"),
-        invite_ids=None,
-        provider=provider2,
-        events_collection=_CasEvents(),
-        outbox_collection=_FakeOutbox(),
-        app_url="https://www.heykindred.org",
-    )
-    assert report2.status == "unavailable"
-    assert report2.error_code == "draft_or_missing"
-    assert provider2.sent == []
+    assert provider.sent  # attempted despite ready=False
+    assert report.submitted == 1
 
 
 @pytest.mark.asyncio
