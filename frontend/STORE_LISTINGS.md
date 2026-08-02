@@ -119,7 +119,8 @@ Terms of Service: https://www.heykindred.org/terms
 
 ### Contact and URLs
 
-- Current verified repository support email: support@ubuntu-village.org
+- Branded support email: support@heykindred.org (MUST be created and monitored
+  before deploy / store submission — do not ship until the mailbox is live)
 - Support URL: https://www.heykindred.org/support
 - Privacy policy: https://www.heykindred.org/privacy
 - Marketing URL: https://www.heykindred.org

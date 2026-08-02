@@ -74,22 +74,21 @@ def test_store_metadata_is_reunion_first_and_unpublished():
     assert "https://www.heykindred.org/support" in store
     assert "https://www.heykindred.org/privacy" in store
     assert "https://www.heykindred.org" in store
-    assert "support@ubuntu-village.org" in store
+    assert "support@heykindred.org" in store
     assert "Nothing in this file has been published" in store
     assert "No data collected" not in store
     assert "Your Community's Digital Home" not in store
     assert "Elder Grove" not in store
 
 
-def test_support_identity_fails_closed_without_inventing_mailbox():
+def test_support_identity_uses_branded_address():
+    # Owner-approved migration to the branded support address. This mailbox MUST
+    # be created and monitored before deploy / store submission (see
+    # STORE_LISTINGS.md) — the app now directs support here.
     identity = read("frontend/src/config/publicIdentity.js")
-    store = read("frontend/STORE_LISTINGS.md")
-    data_map = read("docs/PRIVACY_DATA_MAP.md")
     assert 'canonicalOrigin: "https://www.heykindred.org"' in identity
-    assert 'supportEmail: "support@ubuntu-village.org"' in identity
-    assert "support@heykindred.org" not in identity
-    assert "do not invent" in store.lower()
-    assert "no replacement address may be inferred" in data_map
+    assert 'supportEmail: "support@heykindred.org"' in identity
+    assert "ubuntu-village.org" not in identity
 
 
 def test_store_campaign_is_synthetic_reproducible_and_exact_size():
