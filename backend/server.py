@@ -41,6 +41,7 @@ from routes.gathering_proposals import router as gathering_proposals_router
 from routes.health import router as health_router
 from routes.legacy import router as legacy_router
 from routes.organizer import router as organizer_router
+from routes.pilot import router as pilot_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
 from routes.reunion_memories import router as reunion_memories_router
@@ -86,6 +87,7 @@ app.include_router(gathering_proposals_router)
 app.include_router(health_router)
 app.include_router(legacy_router)
 app.include_router(organizer_router)
+app.include_router(pilot_router)
 app.include_router(polls_router)
 app.include_router(public_router)
 app.include_router(reunion_memories_router)

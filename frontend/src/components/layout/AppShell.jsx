@@ -19,6 +19,7 @@ import { KinshipMapPage } from "@/components/KinshipMapPage";
 import { LegacyThreadsPage } from "@/components/LegacyThreadsPage";
 import { MemoryVaultPage } from "@/components/MemoryVaultPage";
 import { MembersPage } from "@/components/MembersPage";
+import { PilotCohortPage } from "@/components/PilotCohortPage";
 import { PollsPage } from "@/components/PollsPage";
 import { SettingsPage } from "@/components/SettingsPage";
 import { StewardPage } from "@/components/StewardPage";
@@ -55,6 +56,7 @@ const navItems = [
   { label: "Family activation", path: "/family/activate", category: "family_activation", minimumRole: "organizer" },
   { label: "Community Setup", path: "/setup", minimumRole: "organizer" },
   { label: "Subscription", path: "/subscription", minimumRole: "host" },
+  { label: "Pilot cohort", path: "/pilot-cohort", adminOnly: true },
   { label: "Settings", path: "/settings" },
 ];
 
@@ -155,6 +157,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
 
   const effectiveRole = todayData?.viewer_role === "new_member" ? "member" : todayData?.viewer_role;
   const visibleNavItems = navItems.filter((item) => {
+    if (item.adminOnly && !user?.is_platform_admin) return false;
     if (item.module && enabledModules && !enabledModules.includes(item.module)) return false;
     if (item.minimumRole && (ROLE_ORDER[effectiveRole] || 0) < ROLE_ORDER[item.minimumRole]) return false;
     if (item.category === "family_activation" && todayData?.lifecycle_state !== "provisional") return false;
@@ -382,6 +385,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 path="members"
               />
               <Route element={<MemoryVaultPage token={token} user={user} />} path="memories" />
+              <Route element={user?.is_platform_admin ? <PilotCohortPage token={token} user={user} /> : <Navigate replace to="/home" />} path="pilot-cohort" />
               <Route element={<LegacyThreadsPage token={token} user={user} />} path="legacy-threads" />
               <Route element={<KinshipMapPage token={token} />} path="kinship-map" />
               <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
