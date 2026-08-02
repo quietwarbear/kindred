@@ -25,6 +25,7 @@ from pricing import (  # noqa: E402
     price_cents,
     resolve_revenuecat_product,
     resolve_stripe_price,
+    revenuecat_billing_mapping,
     stripe_price_expectation,
     stripe_api_key_matches_environment,
     validate_catalog,
@@ -88,6 +89,36 @@ def test_canonical_pricing_matches_live_schedule_and_provider_mappings():
                     interval,
                     f"{tier_id}_access",
                 )
+
+
+def test_revenuecat_web_billing_catalog_matches_confirmed_dashboard():
+    """The web SDK validates its live offering/package/product against this.
+
+    Values confirmed live in the RevenueCat dashboard (project d52dcc14) on
+    2026-08-02: six web SKUs, no trial/intro, USD, standard packages.
+    """
+    catalog = revenuecat_billing_mapping()
+    assert set(catalog) == set(PAID_TIER_IDS)
+    expected_amounts = {
+        ("sapling", "monthly"): 9_990_000,
+        ("sapling", "annual"): 89_990_000,
+        ("oak", "monthly"): 19_990_000,
+        ("oak", "annual"): 179_990_000,
+        ("redwood", "monthly"): 39_990_000,
+        ("redwood", "annual"): 359_990_000,
+    }
+    for tier_id in PAID_TIER_IDS:
+        for interval in BILLING_INTERVALS:
+            entry = catalog[tier_id][interval]
+            assert entry["product_id"] == f"{tier_id}_{interval}_web_v2"
+            assert entry["offering_id"] == f"{tier_id}_access"
+            assert entry["entitlement_id"] == f"{tier_id}_access"
+            assert entry["package_id"] == (
+                "$rc_monthly" if interval == "monthly" else "$rc_annual"
+            )
+            assert entry["currency"] == "USD"
+            assert entry["period"] == ("P1M" if interval == "monthly" else "P1Y")
+            assert entry["amount_micros"] == expected_amounts[(tier_id, interval)]
 
 
 def test_catalog_rejects_missing_or_contradictory_provider_intervals():
