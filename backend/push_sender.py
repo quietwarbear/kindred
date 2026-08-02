@@ -24,13 +24,14 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import Enum
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 import httpx
 import jwt
 
+from apns_client import build_apns_client
 from dependencies import now_iso
+from push_types import PushClient, PushOutcome
 
 FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -56,19 +57,6 @@ PUSH_TEMPLATES: dict[str, dict[str, str]] = {
         "body": "A surprise gathering was just revealed to your circle.",
     },
 }
-
-
-class PushOutcome(str, Enum):
-    DELIVERED = "delivered"
-    INVALID = "invalid"  # permanently dead token — prune it
-    TRANSIENT = "transient"  # retry later
-    FAILED = "failed"  # configuration/auth failure
-
-
-class PushClient(Protocol):
-    async def deliver(
-        self, device_token: str, notification: dict[str, str]
-    ) -> PushOutcome: ...
 
 
 def push_enabled() -> bool:
@@ -229,29 +217,70 @@ def build_push_client() -> PushClient | None:
     return FcmHttpV1Client(service_account=service_account)
 
 
+def build_push_clients() -> tuple[PushClient | None, PushClient | None]:
+    """Return ``(fcm_client, apns_client)``; either is ``None`` when unconfigured."""
+    return build_push_client(), build_apns_client()
+
+
+def _collect_devices(user: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """Return de-duplicated ``(token, platform)`` pairs for a user.
+
+    New registrations are stored platform-tagged in ``push_devices``. Legacy
+    string tokens in ``push_tokens`` predate platform capture and were all
+    registered through FCM, so they default to ``android``.
+    """
+    user = user or {}
+    devices: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for entry in user.get("push_devices", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        token = entry.get("token")
+        if not token or token in seen:
+            continue
+        platform = (entry.get("platform") or "android").lower()
+        seen.add(token)
+        devices.append((token, platform))
+    for token in user.get("push_tokens", []) or []:
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        devices.append((token, "android"))
+    return devices
+
+
 async def send_push_to_user(
     *,
     users_collection,
     user_id: str,
     template_code: str,
-    client: PushClient,
+    client: PushClient | None = None,
+    apns_client: PushClient | None = None,
     now_fn: Callable[[], str] = now_iso,
 ) -> PushSendReport:
-    """Send one allowlisted template to a user's devices; prune dead tokens."""
+    """Send one allowlisted template to a user's devices; prune dead tokens.
+
+    iOS devices are delivered through ``apns_client``; every other platform
+    (and legacy untagged tokens) through ``client``. A device whose transport
+    is not configured is skipped — never delivered, never pruned.
+    """
     notification = PUSH_TEMPLATES.get(template_code)
     if notification is None:
         return PushSendReport(status="unavailable", error_code="unknown_template")
     user = await users_collection.find_one(
-        {"id": user_id}, {"_id": 0, "push_tokens": 1}
+        {"id": user_id}, {"_id": 0, "push_tokens": 1, "push_devices": 1}
     )
-    tokens = list(dict.fromkeys((user or {}).get("push_tokens", []) or []))
-    if not tokens:
+    devices = _collect_devices(user)
+    if not devices:
         return PushSendReport(status="processed")
 
     delivered = invalid = transient = failed = 0
     dead: list[str] = []
-    for token in tokens:
-        outcome = await client.deliver(token, notification)
+    for token, platform in devices:
+        transport = apns_client if platform == "ios" else client
+        if transport is None:
+            continue  # transport for this platform not configured — skip safely
+        outcome = await transport.deliver(token, notification)
         if outcome == PushOutcome.DELIVERED:
             delivered += 1
         elif outcome == PushOutcome.INVALID:
@@ -263,7 +292,13 @@ async def send_push_to_user(
             failed += 1
     if dead:
         await users_collection.update_one(
-            {"id": user_id}, {"$pull": {"push_tokens": {"$in": dead}}}
+            {"id": user_id},
+            {
+                "$pull": {
+                    "push_tokens": {"$in": dead},
+                    "push_devices": {"token": {"$in": dead}},
+                }
+            },
         )
     return PushSendReport(
         status="processed",
@@ -280,19 +315,22 @@ async def maybe_notify(
     user_id: str,
     template_code: str,
     client_factory: Callable[[], PushClient | None] = build_push_client,
+    apns_factory: Callable[[], PushClient | None] = build_apns_client,
 ) -> None:
     """Best-effort, fully gated trigger. Never raises into the caller's path."""
     if not push_enabled() or not user_id:
         return
     try:
         client = client_factory()
-        if client is None:
+        apns = apns_factory()
+        if client is None and apns is None:
             return
         await send_push_to_user(
             users_collection=users_collection,
             user_id=user_id,
             template_code=template_code,
             client=client,
+            apns_client=apns,
         )
     except Exception:
         # Push is a side channel; a failure here must never affect the request.
@@ -306,6 +344,7 @@ async def notify_community(
     template_code: str,
     exclude_user_ids: tuple[str, ...] = (),
     client_factory: Callable[[], PushClient | None] = build_push_client,
+    apns_factory: Callable[[], PushClient | None] = build_apns_client,
     recipient_cap: int = 500,
 ) -> None:
     """Best-effort content-free push to a community's members with a device.
@@ -318,13 +357,17 @@ async def notify_community(
         return
     try:
         client = client_factory()
-        if client is None:
+        apns = apns_factory()
+        if client is None and apns is None:
             return
         exclude = set(exclude_user_ids or ())
         recipients = await users_collection.find(
             {
                 "community_id": community_id,
-                "push_tokens": {"$exists": True, "$ne": []},
+                "$or": [
+                    {"push_tokens": {"$exists": True, "$ne": []}},
+                    {"push_devices": {"$exists": True, "$ne": []}},
+                ],
             },
             {"_id": 0, "id": 1},
         ).to_list(recipient_cap)
@@ -337,6 +380,7 @@ async def notify_community(
                 user_id=user_id,
                 template_code=template_code,
                 client=client,
+                apns_client=apns,
             )
     except Exception:
         return

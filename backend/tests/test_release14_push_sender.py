@@ -159,9 +159,18 @@ async def test_invalid_tokens_are_pruned_and_counted():
     assert report.delivered == 1
     assert report.invalid == 1
     assert report.transient == 1
-    # Only the permanently-dead token is pruned.
+    # Only the permanently-dead token is pruned — from both the legacy FCM
+    # array and the platform-tagged device list.
     assert users.pulls == [
-        ({"id": "u1"}, {"$pull": {"push_tokens": {"$in": ["dead"]}}})
+        (
+            {"id": "u1"},
+            {
+                "$pull": {
+                    "push_tokens": {"$in": ["dead"]},
+                    "push_devices": {"token": {"$in": ["dead"]}},
+                }
+            },
+        )
     ]
     # The delivered notification is the allowlisted content-free template.
     assert client.delivered[0][1] == PUSH_TEMPLATES["rsvp_received"]

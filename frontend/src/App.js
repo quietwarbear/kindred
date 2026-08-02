@@ -25,7 +25,7 @@ import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
 import { identifyUser, resetAnalytics } from "@/lib/analytics";
-import { configureStatusBar, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
+import { configureStatusBar, getPlatform, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
 import { publicUrl } from "@/config/publicIdentity";
 
 const APP_STATE_KEY = "gathering-cypher-auth";
@@ -237,7 +237,7 @@ function App() {
             apiRequest("/auth/push-token", {
               method: "POST",
               token: session.token,
-              data: { push_token: pushToken },
+              data: { push_token: pushToken, platform: getPlatform() },
             }).catch(() => {});
           },
           (notification) => {

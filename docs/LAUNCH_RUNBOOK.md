@@ -91,11 +91,33 @@ accepted before flipping on. Enable one at a time and re-run the synthetic smoke
       per day (claim-before-send dedupe); the callback stamps `reminder_delivered_at`.
 
 ### Push notifications (R14/R15)
+Push is routed per platform: **Android/web → FCM**, **iOS → APNs**. The single
+`PUSH_NOTIFICATIONS_ENABLED` flag gates both; each transport also stays inert
+until its own credentials are present.
+
+Android/web (FCM):
 - [ ] Configure FCM: `FCM_SERVICE_ACCOUNT_JSON` (or `FCM_PROJECT_ID` +
       `FCM_CLIENT_EMAIL` + `FCM_PRIVATE_KEY`).
+- [ ] Place `google-services.json` in `frontend/android/app/` **before** the
+      release build (it is gitignored; without it the build silently ships with
+      push disabled).
+
+iOS (APNs, direct — no Firebase on iOS):
+- [ ] In the Apple Developer portal, enable the **Push Notifications**
+      capability for App ID `com.ubuntumarket.kindred` and regenerate the
+      distribution provisioning profile. (`aps-environment=production` is
+      already in `App.entitlements`.)
+- [ ] Create an **APNs Auth Key** (.p8) under Keys; note the Key ID and your
+      Team ID. Set on the backend: `APNS_AUTH_KEY` (the .p8 contents; `\n`
+      line breaks are accepted), `APNS_KEY_ID`, `APNS_TEAM_ID`. Optional:
+      `APNS_TOPIC` (defaults to the bundle id), `APNS_ENVIRONMENT`
+      (`production` default; `sandbox` for a dev build).
+
+Then:
 - [ ] Flip `PUSH_NOTIFICATIONS_ENABLED=true`.
-- [ ] Smoke: a synthetic RSVP triggers a content-free push to the organizer's own
-      device; a dead token is pruned; nothing customer-identifying is sent.
+- [ ] Smoke on **both** platforms: a synthetic RSVP triggers a content-free push
+      to the organizer's own device; a dead token is pruned; nothing
+      customer-identifying is sent. iOS tokens route to APNs, Android to FCM.
 
 ### Weekly digest (already built)
 - [ ] Set `DIGEST_CRON_KEY` and point a weekly external trigger at
