@@ -35,7 +35,9 @@ export const invitationActivationSummary = (counts) => {
   return {
     prepared: safe("active_invitations"),
     shared: safe("invitations_shared"),
+    reached: safe("invitations_reached"),
     opened: safe("invitations_opened"),
+    seen: safe("invitations_seen"),
     delivered: safe("invitations_delivered"),
     responses: safe("responses_received"),
     awaiting: safe("invitations_awaiting_response"),

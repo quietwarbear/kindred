@@ -218,6 +218,23 @@ def build_holiday_pilot_readiness(
             "invitations_delivered": min(
                 sum(1 for invite in active_invites if _was_delivered(invite)), 10_000
             ),
+            # Nested-by-construction funnel stages: prepared >= reached >= seen
+            # >= responded. "reached" is any evidence the invite left the app;
+            # "seen" is opened-or-responded. These make the organizer funnel
+            # monotonic (a downstream stage can never exceed an upstream one).
+            "invitations_reached": min(
+                sum(1 for invite in active_invites if _has_delivery_evidence(invite)),
+                10_000,
+            ),
+            "invitations_seen": min(
+                sum(
+                    1
+                    for invite in active_invites
+                    if _was_opened(invite)
+                    or invite.get("rsvp_status", "pending") != "pending"
+                ),
+                10_000,
+            ),
             "responses_received": min(len(responses), 10_000),
             "invitations_awaiting_response": min(len(awaiting_response), 10_000),
             "potluck_items": min(len(event.get("potluck_items", [])), 10_000),

@@ -29,14 +29,18 @@ describe("Thanksgiving pilot organizer helpers", () => {
       invitationActivationSummary({
         active_invitations: 5,
         invitations_shared: 3,
+        invitations_reached: 4,
         invitations_opened: 2,
+        invitations_seen: 3,
         invitations_delivered: 1,
         responses_received: 1,
       })
     ).toEqual({
       prepared: 5,
       shared: 3,
+      reached: 4,
       opened: 2,
+      seen: 3,
       delivered: 1,
       responses: 1,
       awaiting: 0,
@@ -58,7 +62,9 @@ describe("Thanksgiving pilot organizer helpers", () => {
     ).toEqual({
       prepared: 0,
       shared: 0,
+      reached: 0,
       opened: 2,
+      seen: 0,
       delivered: 0,
       responses: 0,
       awaiting: 0,
@@ -66,7 +72,9 @@ describe("Thanksgiving pilot organizer helpers", () => {
     expect(invitationActivationSummary(undefined)).toEqual({
       prepared: 0,
       shared: 0,
+      reached: 0,
       opened: 0,
+      seen: 0,
       delivered: 0,
       responses: 0,
       awaiting: 0,

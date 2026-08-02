@@ -3,7 +3,7 @@ import { CheckCircle2, Circle, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
-import { invitationActivationSummary } from "@/lib/holidayPilot";
+import { ActivationFunnel } from "@/components/gatherings/ActivationFunnel";
 import { toast } from "@/components/ui/sonner";
 
 const STAGE_COPY = {
@@ -32,7 +32,6 @@ export const HolidayPilotReadiness = ({ event, onFinishSetup, onUpdate, token })
   const readiness = event.holiday_pilot_readiness || {};
   const checklist = readiness.checklist || [];
   const counts = readiness.aggregate_counts || {};
-  const activation = invitationActivationSummary(counts);
   const isDraft = readiness.pilot_stage === "draft";
 
   const updateConfirmation = useCallback(async (item) => {
@@ -122,22 +121,9 @@ export const HolidayPilotReadiness = ({ event, onFinishSetup, onUpdate, token })
         <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground">{counts.volunteer_positions || 0}</strong>helping spots</div>
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs" data-testid="holiday-pilot-activation">
-        <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground" data-testid="holiday-pilot-activation-shared">{activation.shared}</strong>shared</div>
-        <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground" data-testid="holiday-pilot-activation-opened">{activation.opened}</strong>opened</div>
-        <div className="rounded-xl bg-background/70 p-3"><strong className="block text-lg text-foreground" data-testid="holiday-pilot-activation-delivered">{activation.delivered}</strong>delivered</div>
+      <div className="mt-4">
+        <ActivationFunnel readiness={readiness} />
       </div>
-      {activation.awaiting > 0 ? (
-        <p
-          className="mt-3 rounded-xl border border-amber-300 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/20 dark:text-amber-200"
-          data-testid="holiday-pilot-followup-nudge"
-        >
-          {activation.awaiting} {activation.awaiting === 1 ? "person was" : "people were"} reached but {activation.awaiting === 1 ? "hasn't" : "haven't"} answered yet — a gentle reminder may help.
-        </p>
-      ) : null}
-      <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-        Activation is measured privately from bounded counts only — never names, contacts, or links.
-      </p>
     </section>
   );
 };
