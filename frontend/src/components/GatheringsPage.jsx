@@ -167,7 +167,19 @@ export const GatheringsPage = ({ token, user }) => {
       setPlanPreview(null);
       setAiPrompt("");
       await loadData();
-      toast.success(eventForm.hidden_from_member_ids.length ? "Surprise gathering created — hidden from the guest(s) of honor." : "Gathering created with a smart checklist.");
+      toast.success(
+        eventForm.hidden_from_member_ids.length
+          ? `“${payload.title}” created ✓ — hidden from the guest(s) of honor. Add invitations below.`
+          : `“${payload.title}” created ✓ — add invitations below to start inviting people.`,
+      );
+      // Land the organizer on the new gathering instead of leaving them on the form.
+      if (typeof document !== "undefined") {
+        requestAnimationFrame(() => {
+          document
+            .querySelector('[data-testid="gatherings-detail-card"]')
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to create gathering.");
     } finally {
