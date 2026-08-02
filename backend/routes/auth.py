@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import re
 import secrets
 import urllib.parse
 import uuid
@@ -47,8 +48,8 @@ def _mobile_scheme_redirect(url: str) -> Response:
     )
     html_safe = url.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     html = (
-        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<title>Returning to Kindred\u2026</title>"
         "<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,"
         "Roboto,sans-serif;background:#0b0b0f;color:#f5f5f5;display:flex;"
@@ -56,12 +57,18 @@ def _mobile_scheme_redirect(url: str) -> Response:
         "text-align:center;padding:24px}a{color:#f0a500}</style>"
         "<script>window.location.replace('" + escaped + "');</script>"
         "</head><body><div><p>Returning to Kindred\u2026</p>"
-        "<p>If nothing happens, <a href=\"" + html_safe + "\">tap here</a>.</p>"
+        '<p>If nothing happens, <a href="' + html_safe + '">tap here</a>.</p>'
         "</div></body></html>"
     )
     return HTMLResponse(content=html)
 
-from courtyard_helpers import ROLE_TOOLING, build_default_subyards, build_planning_checklist, build_role_suggestions
+
+from courtyard_helpers import (
+    ROLE_TOOLING,
+    build_default_subyards,
+    build_planning_checklist,
+    build_role_suggestions,
+)
 from db import (
     communities_collection,
     events_collection,
@@ -156,9 +163,15 @@ def _append_query_value(url: str, key: str, value: str) -> str:
 def _validate_mobile_redirect_uri(redirect_uri: str) -> str:
     parsed = urllib.parse.urlparse(redirect_uri)
     if parsed.scheme not in ALLOWED_MOBILE_GOOGLE_SCHEMES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported mobile redirect URI.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported mobile redirect URI.",
+        )
     if not parsed.netloc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mobile redirect URI must include a host.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mobile redirect URI must include a host.",
+        )
     return redirect_uri
 
 
@@ -166,8 +179,12 @@ def _external_base_url(request: Request) -> str:
     """
     Build the public-facing base URL behind a proxy like Railway.
     """
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    forwarded_proto = (
+        (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    )
+    forwarded_host = (
+        (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    )
 
     if forwarded_proto and forwarded_host:
         return f"{forwarded_proto}://{forwarded_host}"
@@ -180,7 +197,10 @@ def _external_base_url(request: Request) -> str:
 
 
 async def _build_google_auth_response(
-    google_user: dict[str, str], response: Response, *, provider: str = "google",
+    google_user: dict[str, str],
+    response: Response,
+    *,
+    provider: str = "google",
     allow_email_invite: bool = True,
 ):
     email = normalize_email(google_user.get("email", ""))
@@ -381,7 +401,9 @@ async def apple_session_login(payload: AppleSessionRequest, response: Response):
 
     # Reuse the same social auth flow as Google
     return await _build_google_auth_response(
-        apple_user, response, provider="apple",
+        apple_user,
+        response,
+        provider="apple",
         allow_email_invite=not payload.family_access_intent,
     )
 
@@ -393,13 +415,17 @@ DEFAULT_MOBILE_APPLE_REDIRECT = os.environ.get(
 
 
 @router.get("/auth/apple/start")
-async def apple_login_start(request: Request, redirect_uri: str = DEFAULT_MOBILE_APPLE_REDIRECT):
+async def apple_login_start(
+    request: Request, redirect_uri: str = DEFAULT_MOBILE_APPLE_REDIRECT
+):
     """
     Start the Apple Sign In flow for native mobile clients.
     Redirects to Apple's authorize endpoint, which triggers the native
     Apple Sign In sheet. Apple posts back to /api/auth/apple/callback.
     """
-    apple_service_id = os.environ.get("APPLE_SERVICE_ID", "com.ubuntumarket.kindred.signin")
+    apple_service_id = os.environ.get(
+        "APPLE_SERVICE_ID", "com.ubuntumarket.kindred.signin"
+    )
     callback_url = _external_base_url(request) + "/api/auth/apple/callback"
     state = redirect_uri  # pass app redirect URI through state
 
@@ -411,7 +437,9 @@ async def apple_login_start(request: Request, redirect_uri: str = DEFAULT_MOBILE
         "response_mode": "form_post",
         "state": state,
     }
-    auth_url = f"https://appleid.apple.com/auth/authorize?{urllib.parse.urlencode(params)}"
+    auth_url = (
+        f"https://appleid.apple.com/auth/authorize?{urllib.parse.urlencode(params)}"
+    )
     return RedirectResponse(url=auth_url)
 
 
@@ -433,6 +461,7 @@ async def apple_login_callback(request: Request):
     apple_email = ""
     if user_json:
         import json
+
         try:
             user_data = json.loads(user_json)
             name_parts = user_data.get("name", {})
@@ -442,10 +471,14 @@ async def apple_login_callback(request: Request):
             pass
 
     if error_val:
-        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", error_val))
+        return _mobile_scheme_redirect(
+            _append_query_value(state, "apple_error", error_val)
+        )
 
     if not id_token_str:
-        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "no_id_token"))
+        return _mobile_scheme_redirect(
+            _append_query_value(state, "apple_error", "no_id_token")
+        )
 
     response = Response()
     try:
@@ -460,12 +493,16 @@ async def apple_login_callback(request: Request):
             urllib.parse.urlsplit(str(state)).query
         ).get("intent") == ["family-access"]
         auth_payload = await _build_google_auth_response(
-            apple_user, response, provider="apple",
+            apple_user,
+            response,
+            provider="apple",
             allow_email_invite=not family_access_intent,
         )
     except Exception as exc:
         logger.error("Apple OAuth validation failed: %s", exc, exc_info=True)
-        return _mobile_scheme_redirect(_append_query_value(state, "apple_error", "validation_failed"))
+        return _mobile_scheme_redirect(
+            _append_query_value(state, "apple_error", "validation_failed")
+        )
 
     redirect_url = _append_query_value(state, "apple_success", "1")
     redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
@@ -484,7 +521,10 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
     email = normalize_email(payload.email)
     existing_user = await users_collection.find_one({"email": email}, {"_id": 0})
     if existing_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
 
     community_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
@@ -533,15 +573,25 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
                 "description": template["description"],
                 "inherited_roles": True,
                 "role_focus": template["role_focus"],
-                "assigned_tools": sorted({tool for role in template["role_focus"] for tool in ROLE_TOOLING.get(role, [])}),
+                "assigned_tools": sorted(
+                    {
+                        tool
+                        for role in template["role_focus"]
+                        for tool in ROLE_TOOLING.get(role, [])
+                    }
+                ),
                 "visibility": "shared",
                 "created_by": user_id,
                 "created_at": created_at,
             }
         )
     if default_subyards:
-        await subyards_collection.insert_many([item.copy() for item in default_subyards])
-        await ensure_chat_rooms_for_community(community_id, community_doc["name"], default_subyards)
+        await subyards_collection.insert_many(
+            [item.copy() for item in default_subyards]
+        )
+        await ensure_chat_rooms_for_community(
+            community_id, community_doc["name"], default_subyards
+        )
     else:
         await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
 
@@ -551,15 +601,26 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
 @router.post("/auth/register-with-invite", response_model=AuthResponse)
 async def register_with_invite(payload: InviteRegistrationRequest):
     email = normalize_email(payload.email)
-    invite_doc = await invites_collection.find_one({"code": payload.invite_code.strip().upper()}, {"_id": 0})
+    invite_doc = await invites_collection.find_one(
+        {"code": payload.invite_code.strip().upper()}, {"_id": 0}
+    )
     if not invite_doc or invite_doc["status"] != "pending":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite code is invalid or already used.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invite code is invalid or already used.",
+        )
     if normalize_email(invite_doc["email"]) != email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite code does not match this email address.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invite code does not match this email address.",
+        )
 
     existing_user = await users_collection.find_one({"email": email}, {"_id": 0})
     if existing_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
 
     await enforce_member_limit(invite_doc["community_id"])
 
@@ -581,9 +642,14 @@ async def register_with_invite(payload: InviteRegistrationRequest):
         "created_at": created_at,
     }
     await users_collection.insert_one(user_doc.copy())
-    await invites_collection.update_one({"id": invite_doc["id"]}, {"$set": {"status": "accepted", "accepted_at": created_at}})
+    await invites_collection.update_one(
+        {"id": invite_doc["id"]},
+        {"$set": {"status": "accepted", "accepted_at": created_at}},
+    )
 
-    community_doc = await communities_collection.find_one({"id": invite_doc["community_id"]}, {"_id": 0})
+    community_doc = await communities_collection.find_one(
+        {"id": invite_doc["community_id"]}, {"_id": 0}
+    )
     return build_auth_response(user_doc, community_doc)
 
 
@@ -592,8 +658,13 @@ async def login(payload: LoginRequest):
     email = normalize_email(payload.email)
     user_doc = await users_collection.find_one({"email": email}, {"_id": 0})
     if not user_doc or not verify_password(payload.password, user_doc["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-    community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+        )
+    community_doc = await communities_collection.find_one(
+        {"id": user_doc["community_id"]}, {"_id": 0}
+    )
     return build_auth_response(user_doc, community_doc)
 
 
@@ -602,9 +673,15 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
     """Create an authenticated identity without granting community membership."""
     email = normalize_email(payload.email)
     if "@" not in email:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid email is required.")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A valid email is required.",
+        )
     if await users_collection.find_one({"email": email}, {"_id": 1}):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
     identity_digest = hashlib.sha256(email.encode("utf-8")).hexdigest()
     user_doc = {
         "_id": f"guest-account:{identity_digest}",
@@ -627,7 +704,10 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
     try:
         await users_collection.insert_one(user_doc.copy())
     except DuplicateKeyError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        ) from exc
     return build_auth_response(user_doc, None)
 
 
@@ -636,7 +716,10 @@ async def auth_exchange(payload: SSOExchangeRequest):
     """Retired token-returning federation contract; use one-time SSO codes."""
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
-        detail={"code": "sso_exchange_retired", "message": "Use the authorization-code handoff."},
+        detail={
+            "code": "sso_exchange_retired",
+            "message": "Use the authorization-code handoff.",
+        },
     )
 
 
@@ -670,29 +753,45 @@ async def sso_mint_code(payload: SSOCodeRequest):
     """
     expected = os.environ.get("UBUNTU_SSO_SECRET", "")
     if not expected or payload.secret != expected:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret")
-    if payload.audience != SSO_AUDIENCE or payload.origin not in SSO_ALLOWED_SOURCE_ORIGINS:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SSO handoff is not authorized.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret"
+        )
+    if (
+        payload.audience != SSO_AUDIENCE
+        or payload.origin not in SSO_ALLOWED_SOURCE_ORIGINS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SSO handoff is not authorized.",
+        )
     email = normalize_email(payload.email)
     if not email or "@" not in email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required"
+        )
 
     try:
         user_doc = await _find_or_create_sso_user(email, payload.name)
     except DuplicateKeyError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="SSO identity is ambiguous.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="SSO identity is ambiguous."
+        ) from exc
     code = secrets.token_urlsafe(32)
-    await sso_codes_collection.insert_one({
-        "code_digest": _sso_code_digest(code),
-        "user_id": user_doc["id"],
-        "audience": payload.audience,
-        "origin": payload.origin,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
-        "used": False,
-        "created_at": now_iso(),
-        # Real BSON datetime so a TTL index can auto-purge spent codes (see server.py startup).
-        "created_at_dt": datetime.now(timezone.utc),
-    })
+    await sso_codes_collection.insert_one(
+        {
+            "code_digest": _sso_code_digest(code),
+            "user_id": user_doc["id"],
+            "audience": payload.audience,
+            "origin": payload.origin,
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(minutes=5)
+            ).isoformat(),
+            "used": False,
+            "created_at": now_iso(),
+            # Real BSON datetime so a TTL index can auto-purge spent codes (see server.py startup).
+            "created_at_dt": datetime.now(timezone.utc),
+        }
+    )
     return {"code": code, "expires_in": 300}
 
 
@@ -706,7 +805,10 @@ async def sso_redeem_code(payload: SSORedeemRequest, request: Request):
         or payload.origin != "https://www.heykindred.org"
         or request_origin != payload.origin
     ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link is invalid or already used.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This sign-in link is invalid or already used.",
+        )
     now = now_iso()
     rec = await sso_codes_collection.find_one_and_update(
         {
@@ -720,14 +822,21 @@ async def sso_redeem_code(payload: SSORedeemRequest, request: Request):
         return_document=ReturnDocument.BEFORE,
     )
     if not rec:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This sign-in link is invalid or already used.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This sign-in link is invalid or already used.",
+        )
 
     user_doc = await users_collection.find_one({"id": rec["user_id"]}, {"_id": 0})
     if not user_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
+        )
     community_doc = None
     if user_doc.get("community_id"):
-        community_doc = await communities_collection.find_one({"id": user_doc["community_id"]}, {"_id": 0})
+        community_doc = await communities_collection.find_one(
+            {"id": user_doc["community_id"]}, {"_id": 0}
+        )
     return build_auth_response(user_doc, community_doc)
 
 
@@ -767,18 +876,27 @@ async def google_session_login(payload: GoogleSessionRequest, response: Response
             "picture": idinfo.get("picture", ""),
         }
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unable to validate Google session.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unable to validate Google session.",
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google session validation failed.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google session validation failed.",
+        ) from exc
 
     return await _build_google_auth_response(
-        google_user, response,
+        google_user,
+        response,
         allow_email_invite=not payload.family_access_intent,
     )
 
 
 @router.get("/auth/google/start")
-async def google_login_start(request: Request, redirect_uri: str = DEFAULT_MOBILE_GOOGLE_REDIRECT):
+async def google_login_start(
+    request: Request, redirect_uri: str = DEFAULT_MOBILE_GOOGLE_REDIRECT
+):
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
     if not google_client_id or not google_client_secret:
@@ -798,21 +916,34 @@ async def google_login_start(request: Request, redirect_uri: str = DEFAULT_MOBIL
         "prompt": "select_account",
         "state": app_redirect_uri,
     }
-    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    )
     return RedirectResponse(url=auth_url)
 
 
 @router.get("/auth/google/callback")
-async def google_login_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+async def google_login_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-    app_redirect_uri = _validate_mobile_redirect_uri(state or DEFAULT_MOBILE_GOOGLE_REDIRECT)
+    app_redirect_uri = _validate_mobile_redirect_uri(
+        state or DEFAULT_MOBILE_GOOGLE_REDIRECT
+    )
 
     if error:
-        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", error))
+        return _mobile_scheme_redirect(
+            _append_query_value(app_redirect_uri, "google_error", error)
+        )
 
     if not code:
-        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "no_code"))
+        return _mobile_scheme_redirect(
+            _append_query_value(app_redirect_uri, "google_error", "no_code")
+        )
 
     oauth_callback_uri = _external_base_url(request) + "/api/auth/google/callback"
     token_response = requests.post(
@@ -829,15 +960,21 @@ async def google_login_callback(request: Request, code: str | None = None, state
 
     if token_response.status_code != 200:
         try:
-            error_detail = token_response.json().get("error_description", "token_exchange_failed")
+            error_detail = token_response.json().get(
+                "error_description", "token_exchange_failed"
+            )
         except Exception:
             error_detail = "token_exchange_failed"
-        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", error_detail))
+        return _mobile_scheme_redirect(
+            _append_query_value(app_redirect_uri, "google_error", error_detail)
+        )
 
     tokens = token_response.json()
     id_token_value = tokens.get("id_token")
     if not id_token_value:
-        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "missing_id_token"))
+        return _mobile_scheme_redirect(
+            _append_query_value(app_redirect_uri, "google_error", "missing_id_token")
+        )
 
     response = Response()
     try:
@@ -860,7 +997,11 @@ async def google_login_callback(request: Request, code: str | None = None, state
         )
     except Exception as exc:
         logger.error("Google OAuth validation failed: %s", exc, exc_info=True)
-        return _mobile_scheme_redirect(_append_query_value(app_redirect_uri, "google_error", "google_validation_failed"))
+        return _mobile_scheme_redirect(
+            _append_query_value(
+                app_redirect_uri, "google_error", "google_validation_failed"
+            )
+        )
 
     redirect_url = _append_query_value(app_redirect_uri, "google_success", "1")
     redirect_url = _append_query_value(redirect_url, "token", auth_payload["token"])
@@ -888,7 +1029,9 @@ async def request_password_recovery(payload: PasswordRecoveryRequest):
             "$set": {
                 "email": email,
                 "code": code,
-                "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat(),
+                "expires_at": (
+                    datetime.now(timezone.utc) + timedelta(minutes=15)
+                ).isoformat(),
                 "created_at": now_iso(),
             }
         },
@@ -908,47 +1051,78 @@ async def verify_password_recovery(payload: PasswordRecoveryVerifyRequest):
     email = normalize_email(payload.email)
     reset_doc = await password_resets_collection.find_one({"email": email}, {"_id": 0})
     if not reset_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recovery request found for this email.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No recovery request found for this email.",
+        )
     if reset_doc.get("code") != payload.code.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code is invalid.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code is invalid."
+        )
     expires_at = datetime.fromisoformat(reset_doc["expires_at"].replace("Z", "+00:00"))
     if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code has expired.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Recovery code has expired."
+        )
 
-    await users_collection.update_one({"email": email}, {"$set": {"password_hash": hash_password(payload.new_password)}})
+    await users_collection.update_one(
+        {"email": email},
+        {"$set": {"password_hash": hash_password(payload.new_password)}},
+    )
     await password_resets_collection.delete_one({"email": email})
     return {"ok": True}
 
 
 @router.put("/auth/profile", response_model=UserPublic)
-async def update_profile(payload: ProfileUpdateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def update_profile(
+    payload: ProfileUpdateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     update_payload = {
         "full_name": payload.full_name.strip(),
         "nickname": (payload.nickname or "").strip(),
         "phone_number": (payload.phone_number or "").strip(),
         "profile_image_url": (payload.profile_image_url or "").strip(),
     }
-    await users_collection.update_one({"id": current_user["id"]}, {"$set": update_payload})
-    updated_user = await users_collection.find_one({"id": current_user["id"]}, {"_id": 0})
+    await users_collection.update_one(
+        {"id": current_user["id"]}, {"$set": update_payload}
+    )
+    updated_user = await users_collection.find_one(
+        {"id": current_user["id"]}, {"_id": 0}
+    )
     updated_user.pop("password_hash", None)
     return updated_user
 
 
 @router.delete("/auth/account")
-async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def delete_account(
+    payload: AccountDeleteRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     user_id = current_user["id"]
     community_id = current_user["community_id"]
 
     if current_user.get("auth_provider") not in ("google", "apple"):
         if not payload.password:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required to delete your account.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password is required to delete your account.",
+            )
         full_user = await users_collection.find_one({"id": user_id}, {"_id": 0})
-        if not full_user or not verify_password(payload.password, full_user.get("password_hash", "")):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password.")
+        if not full_user or not verify_password(
+            payload.password, full_user.get("password_hash", "")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password."
+            )
 
-    community_doc = await communities_collection.find_one({"id": community_id}, {"_id": 0})
+    community_doc = await communities_collection.find_one(
+        {"id": community_id}, {"_id": 0}
+    )
     is_owner = community_doc and community_doc.get("owner_user_id") == user_id
-    member_count = await users_collection.count_documents({"community_id": community_id})
+    member_count = await users_collection.count_documents(
+        {"community_id": community_id}
+    )
 
     if is_owner and member_count > 1:
         raise HTTPException(
@@ -957,7 +1131,9 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         )
 
     await notification_preferences_collection.delete_many({"user_id": user_id})
-    await password_resets_collection.delete_many({"email": current_user.get("email", "")})
+    await password_resets_collection.delete_many(
+        {"email": current_user.get("email", "")}
+    )
     await user_sessions_collection.delete_many({"user_id": user_id})
     await sso_codes_collection.delete_many({"user_id": user_id})
     await polls_collection.update_many(
@@ -1009,14 +1185,21 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
     await gathering_proposal_responses_collection.delete_many({"user_id": user_id})
     await gathering_proposals_collection.update_many(
         {"proposer_user_id": user_id, "state": {"$in": ["submitted", "published"]}},
-        {"$set": {"state": "withdrawn", "updated_at": now_iso()}, "$inc": {"revision": 1}},
+        {
+            "$set": {"state": "withdrawn", "updated_at": now_iso()},
+            "$inc": {"revision": 1},
+        },
     )
     await gathering_proposals_collection.update_many(
         {"proposer_user_id": user_id},
         {
             "$set": {
-                "working_title": "", "broad_date_window": "", "location_suggestion": "",
-                "organizer_note": "", "proposer_tombstone": True, "updated_at": now_iso(),
+                "working_title": "",
+                "broad_date_window": "",
+                "location_suggestion": "",
+                "organizer_note": "",
+                "proposer_tombstone": True,
+                "updated_at": now_iso(),
             },
             "$unset": {"proposer_user_id": "", "proposer_display_name": ""},
         },
@@ -1031,7 +1214,10 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
     )
     await gathering_proposal_conversions_collection.update_many(
         {"selected_organizer_user_id": user_id},
-        {"$set": {"selected_organizer_tombstone": True}, "$unset": {"selected_organizer_user_id": ""}},
+        {
+            "$set": {"selected_organizer_tombstone": True},
+            "$unset": {"selected_organizer_user_id": ""},
+        },
     )
     await notification_events_collection.update_many(
         {"community_id": community_id},
@@ -1047,11 +1233,19 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
         await legacy_table_collection.delete_many({"community_id": community_id})
         await memories_collection.delete_many({"community_id": community_id})
         await reunion_recaps_collection.delete_many({"community_id": community_id})
-        await next_gathering_operations_collection.delete_many({"community_id": community_id})
+        await next_gathering_operations_collection.delete_many(
+            {"community_id": community_id}
+        )
         await gathering_proposals_collection.delete_many({"community_id": community_id})
-        await gathering_proposal_responses_collection.delete_many({"community_id": community_id})
-        await gathering_proposal_conversions_collection.delete_many({"community_id": community_id})
-        await family_access_requests_collection.delete_many({"community_id": community_id})
+        await gathering_proposal_responses_collection.delete_many(
+            {"community_id": community_id}
+        )
+        await gathering_proposal_conversions_collection.delete_many(
+            {"community_id": community_id}
+        )
+        await family_access_requests_collection.delete_many(
+            {"community_id": community_id}
+        )
         await guest_family_claims_collection.delete_many({"community_id": community_id})
         await threads_collection.delete_many({"community_id": community_id})
         await payments_collection.delete_many({"community_id": community_id})
@@ -1067,7 +1261,10 @@ async def delete_account(payload: AccountDeleteRequest, current_user: dict[str, 
 
 
 @router.post("/community/transfer-ownership")
-async def transfer_ownership(payload: OwnershipTransferRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def transfer_ownership(
+    payload: OwnershipTransferRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     from dependencies import ensure_minimum_role, log_notification_event
 
     ensure_minimum_role(current_user, "host")
@@ -1077,13 +1274,24 @@ async def transfer_ownership(payload: OwnershipTransferRequest, current_user: di
         {"id": payload.new_owner_user_id, "community_id": community_id}, {"_id": 0}
     )
     if not new_owner:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found in this community.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found in this community.",
+        )
     if new_owner["id"] == current_user["id"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You are already the owner.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="You are already the owner."
+        )
 
-    await users_collection.update_one({"id": new_owner["id"]}, {"$set": {"role": "host"}})
-    await users_collection.update_one({"id": current_user["id"]}, {"$set": {"role": "organizer"}})
-    await communities_collection.update_one({"id": community_id}, {"$set": {"owner_user_id": new_owner["id"]}})
+    await users_collection.update_one(
+        {"id": new_owner["id"]}, {"$set": {"role": "host"}}
+    )
+    await users_collection.update_one(
+        {"id": current_user["id"]}, {"$set": {"role": "organizer"}}
+    )
+    await communities_collection.update_one(
+        {"id": community_id}, {"$set": {"owner_user_id": new_owner["id"]}}
+    )
 
     await log_notification_event(
         community_id=community_id,
@@ -1366,14 +1574,52 @@ async def complete_onboarding(
     return build_auth_response(refreshed_user, community_doc)
 
 
+# Device push tokens are opaque provider identifiers (APNs hex, FCM base64-ish).
+# Bound the charset/length so a client can never store control characters or an
+# oversized blob, and cap how many devices one account may accumulate.
+_PUSH_TOKEN_RE = re.compile(r"[A-Za-z0-9_:.\-]{1,4096}")
+MAX_PUSH_DEVICES = 25
+
+
 @router.post("/auth/push-token")
-async def save_push_token(body: dict, current_user: dict[str, Any] = Depends(get_current_user)):
-    """Store device push token for native push notifications."""
-    push_token = body.get("push_token", "")
-    if not push_token:
+async def save_push_token(
+    body: dict, current_user: dict[str, Any] = Depends(get_current_user)
+):
+    """Store a device push token, tagged with its platform, for native push.
+
+    iOS returns an APNs token (delivered via APNs); Android/web return an FCM
+    token (delivered via FCM). New registrations are stored platform-tagged in
+    the bounded ``push_devices`` list so the sender routes each to the right
+    transport. The token is always removed from the legacy untagged
+    ``push_tokens`` array (which the FCM sender treats as Android) — that array
+    is no longer written, so it only shrinks and can never misroute an iOS
+    (APNs) token to FCM.
+    """
+    push_token = str(body.get("push_token", "") or "")
+    if not push_token or not _PUSH_TOKEN_RE.fullmatch(push_token):
         return {"ok": False}
+    platform = str(body.get("platform", "")).strip().lower()
+    if platform not in ("ios", "android", "web"):
+        platform = "android"
+    user_id = current_user["id"]
+    # Idempotent re-tag with bounded storage: drop any prior copy of this token,
+    # append the freshly tagged device, and keep only the newest MAX_PUSH_DEVICES.
     await users_collection.update_one(
-        {"id": current_user["id"]},
-        {"$addToSet": {"push_tokens": push_token}},
+        {"id": user_id}, {"$pull": {"push_devices": {"token": push_token}}}
+    )
+    await users_collection.update_one(
+        {"id": user_id},
+        {
+            "$push": {
+                "push_devices": {
+                    "$each": [{"token": push_token, "platform": platform}],
+                    "$slice": -MAX_PUSH_DEVICES,
+                }
+            }
+        },
+    )
+    # This token now lives in the tagged list; keep it out of the legacy array.
+    await users_collection.update_one(
+        {"id": user_id}, {"$pull": {"push_tokens": push_token}}
     )
     return {"ok": True}

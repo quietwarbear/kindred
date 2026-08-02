@@ -219,6 +219,11 @@ def build_auth_response(
 ) -> dict[str, Any]:
     user_safe = sanitize_doc(user_doc) or {}
     user_safe.pop("password_hash", None)
+    # Device push tokens are private routing identifiers, never client-facing.
+    # Not every build_auth_response caller declares response_model=AuthResponse
+    # (which would drop them), so strip them centrally.
+    user_safe.pop("push_tokens", None)
+    user_safe.pop("push_devices", None)
     user_safe["is_platform_admin"] = is_platform_admin_user(user_safe)
     token = create_access_token(
         user_safe["id"],
