@@ -667,6 +667,18 @@ class InvitationSendRequest(BaseModel):
     invite_ids: list[str] = Field(default_factory=list)
 
 
+class PilotCohortActionRequest(BaseModel):
+    """A platform-admin action on a community's pilot enrollment.
+
+    Content-free: only a categorical action, an optional short cohort label, and
+    an explicit consent confirmation. No customer content is accepted.
+    """
+
+    action: Literal["enroll", "record_consent", "activate", "complete", "withdraw"]
+    cohort_label: str = Field(default="", max_length=64)
+    consent_confirmed: bool = False
+
+
 class MemoryUpdateRequest(BaseModel):
     title: str = ""
     description: str = ""

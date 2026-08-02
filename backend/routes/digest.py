@@ -35,6 +35,7 @@ from dependencies import (
     ensure_minimum_role,
     get_current_user,
     hidden_event_ids_for_user,
+    is_platform_admin_user,
     now_iso,
 )
 from email_service import build_digest_body, send_community_digest
@@ -297,7 +298,7 @@ async def digest_send(current_user: dict[str, Any] = Depends(get_current_user)):
 @router.post("/digest/run-all")
 async def digest_run_all(current_user: dict[str, Any] = Depends(get_current_user)):
     """Send the weekly digest to every community (idempotent). Platform-admin only."""
-    if not current_user.get("is_platform_admin"):
+    if not is_platform_admin_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only."
         )

@@ -44,20 +44,25 @@ CONTRIBUTION_PACKAGES = {
     },
 }
 
+
 def get_community_tier(subscription: dict | None) -> dict:
     """Return the tier config for a subscription, defaulting to seedling."""
     if not subscription_has_paid_access(subscription):
         return SUBSCRIPTION_TIERS["seedling"]
-    return SUBSCRIPTION_TIERS.get(subscription.get("plan_id", "seedling"), SUBSCRIPTION_TIERS["seedling"])
+    return SUBSCRIPTION_TIERS.get(
+        subscription.get("plan_id", "seedling"), SUBSCRIPTION_TIERS["seedling"]
+    )
 
 
 # ---------------------------------------------------------------------------
 # Tier enforcement helpers
 # ---------------------------------------------------------------------------
 
+
 async def _get_active_subscription(community_id: str) -> dict | None:
     """Fetch the active subscription for a community."""
     from db import subscriptions_collection
+
     return await subscriptions_collection.find_one(
         {"community_id": community_id, "status": {"$in": list(PAID_ACCESS_STATUSES)}},
         {"_id": 0},
@@ -91,7 +96,9 @@ async def require_feature(current_user: dict[str, Any], feature_key: str) -> dic
 async def enforce_member_limit(community_id: str) -> None:
     """Raise 403 if the community has reached its member cap for the tier."""
     tier = await get_tier_for_community(community_id)
-    member_count = await users_collection.count_documents({"community_id": community_id})
+    member_count = await users_collection.count_documents(
+        {"community_id": community_id}
+    )
     max_members = tier.get("max_members", 10)
     if member_count >= max_members:
         raise HTTPException(
@@ -103,8 +110,11 @@ async def enforce_member_limit(community_id: str) -> None:
 async def enforce_subyard_limit(community_id: str) -> None:
     """Raise 403 if the community has reached its subyard cap for the tier."""
     from db import subyards_collection
+
     tier = await get_tier_for_community(community_id)
-    subyard_count = await subyards_collection.count_documents({"community_id": community_id})
+    subyard_count = await subyards_collection.count_documents(
+        {"community_id": community_id}
+    )
     max_subyards = tier.get("limits", {}).get("max_subyards", 1)
     if subyard_count >= max_subyards:
         raise HTTPException(
@@ -131,7 +141,12 @@ GATHERING_TEMPLATES = [
                 {"title": "Meal time", "visibility": "draft"},
                 {"title": "Cleanup", "visibility": "draft"},
             ],
-            "potluck_items": ["Main dish", "Side dish", "Dessert", "Drinks or supplies"],
+            "potluck_items": [
+                "Main dish",
+                "Side dish",
+                "Dessert",
+                "Drinks or supplies",
+            ],
             "volunteer_slots": [
                 {"title": "Setup", "needed_count": 1},
                 {"title": "Cleanup", "needed_count": 1},
@@ -184,13 +199,27 @@ def sanitize_doc(document: dict[str, Any] | None) -> dict[str, Any] | None:
     return {key: value for key, value in document.items() if key != "_id"}
 
 
-def build_auth_response(user_doc: dict[str, Any], community_doc: dict[str, Any]) -> dict[str, Any]:
+def is_platform_admin_user(user: dict[str, Any]) -> bool:
+    """Derive platform-admin authority server-side from PLATFORM_ADMIN_EMAIL.
+
+    Always re-derived from the environment against the user's email — never read
+    from a stored or client-supplied ``is_platform_admin`` flag — so a persisted
+    or payload field can never grant admin. Use this at every admin gate;
+    ``get_current_user`` returns the raw user document without this field.
+    """
+    platform_admin_email = normalize_email(os.environ.get("PLATFORM_ADMIN_EMAIL", ""))
+    return bool(
+        platform_admin_email
+        and normalize_email(user.get("email", "")) == platform_admin_email
+    )
+
+
+def build_auth_response(
+    user_doc: dict[str, Any], community_doc: dict[str, Any]
+) -> dict[str, Any]:
     user_safe = sanitize_doc(user_doc) or {}
     user_safe.pop("password_hash", None)
-    platform_admin_email = normalize_email(os.environ.get("PLATFORM_ADMIN_EMAIL", ""))
-    user_safe["is_platform_admin"] = bool(
-        platform_admin_email and normalize_email(user_safe.get("email", "")) == platform_admin_email
-    )
+    user_safe["is_platform_admin"] = is_platform_admin_user(user_safe)
     token = create_access_token(
         user_safe["id"],
         {"community_id": user_safe["community_id"], "role": user_safe["role"]},
@@ -218,10 +247,14 @@ def apply_session_cookie(response, session_token: str):
     )
 
 
-def ensure_minimum_role(user: dict[str, Any], minimum_role: Literal["member", "organizer", "host"]):
+def ensure_minimum_role(
+    user: dict[str, Any], minimum_role: Literal["member", "organizer", "host"]
+):
     if ROLE_ORDER.get(user["role"], 0) < ROLE_ORDER[minimum_role]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to perform this action.")
-
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to perform this action.",
+        )
 
 
 def parse_datetime_safe(value: str | None) -> datetime | None:
@@ -232,16 +265,22 @@ def parse_datetime_safe(value: str | None) -> datetime | None:
         # Legacy gatherings stored local-looking values without an offset.
         # Give those a deterministic UTC interpretation so reminder and
         # dashboard arithmetic never mixes naive and aware datetimes.
-        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        return (
+            parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        )
     except Exception:
         return None
 
 
 async def get_user_from_session_token(session_token: str) -> dict[str, Any] | None:
-    session_doc = await user_sessions_collection.find_one({"session_token": session_token}, {"_id": 0})
+    session_doc = await user_sessions_collection.find_one(
+        {"session_token": session_token}, {"_id": 0}
+    )
     if not session_doc:
         return None
-    user_doc = await users_collection.find_one({"id": session_doc["user_id"]}, {"_id": 0})
+    user_doc = await users_collection.find_one(
+        {"id": session_doc["user_id"]}, {"_id": 0}
+    )
     return user_doc
 
 
@@ -262,18 +301,26 @@ async def get_current_user(request: Request) -> dict[str, Any]:
         if user:
             user.pop("password_hash", None)
             return user
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required."
+    )
 
 
 async def get_community_for_user(user: dict[str, Any]) -> dict[str, Any]:
-    community = await communities_collection.find_one({"id": user["community_id"]}, {"_id": 0})
+    community = await communities_collection.find_one(
+        {"id": user["community_id"]}, {"_id": 0}
+    )
     if not community:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found."
+        )
     return community
 
 
 async def get_notification_preferences_for_user(user: dict[str, Any]) -> dict[str, Any]:
-    prefs = await notification_preferences_collection.find_one({"user_id": user["id"]}, {"_id": 0})
+    prefs = await notification_preferences_collection.find_one(
+        {"user_id": user["id"]}, {"_id": 0}
+    )
     if prefs:
         return prefs
     return {
@@ -339,9 +386,7 @@ async def hidden_event_ids_for_user(user: dict[str, Any], *, session=None) -> li
     """Return event ids concealed from this user in their current community."""
     from db import events_collection
 
-    concealed_conditions: list[dict[str, Any]] = [
-        {"hidden_from_user_ids": user["id"]}
-    ]
+    concealed_conditions: list[dict[str, Any]] = [{"hidden_from_user_ids": user["id"]}]
     if user.get("role") not in {"host", "organizer"}:
         concealed_conditions.append({"publication_state": "organizer_draft"})
     events = await events_collection.find(
@@ -399,10 +444,12 @@ async def notification_query_for_user(
         # Historical named RSVP rows used rsvp-update + audience_scope=event.
         # Newer rows use an organizer audience and may use event-rsvp. Enforce
         # both semantics so old rows cannot reappear or be marked read.
-        conditions.extend([
-            {"audience_scope": {"$ne": "organizer"}},
-            {"event_type": {"$nin": sorted(SENSITIVE_NAMED_RSVP_EVENT_TYPES)}},
-        ])
+        conditions.extend(
+            [
+                {"audience_scope": {"$ne": "organizer"}},
+                {"event_type": {"$nin": sorted(SENSITIVE_NAMED_RSVP_EVENT_TYPES)}},
+            ]
+        )
     # Event concealment applies to every role. A platform or organizer flag is
     # never a side door into a reunion that explicitly excludes this account.
     hidden_ids = await hidden_event_ids_for_user(user, session=session)
@@ -444,7 +491,9 @@ def build_notifications(
         )
 
     for budget in budgets:
-        if budget.get("target_amount", 0) > 0 and budget.get("current_amount", 0) < budget.get("target_amount", 0):
+        if budget.get("target_amount", 0) > 0 and budget.get(
+            "current_amount", 0
+        ) < budget.get("target_amount", 0):
             notifications.append(
                 {
                     "id": str(uuid.uuid4()),
@@ -482,7 +531,9 @@ def build_notifications(
     return notifications[:6]
 
 
-def build_invite_reminders_for_user(user: dict[str, Any], events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_invite_reminders_for_user(
+    user: dict[str, Any], events: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     reminders: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
     for event in events:
@@ -496,7 +547,11 @@ def build_invite_reminders_for_user(user: dict[str, Any], events: list[dict[str,
             continue
 
         invites = event.get("event_invites", [])
-        pending_invites = [invite for invite in invites if invite.get("rsvp_status", "pending") == "pending"]
+        pending_invites = [
+            invite
+            for invite in invites
+            if invite.get("rsvp_status", "pending") == "pending"
+        ]
         if user.get("role") in {"host", "organizer"} and pending_invites:
             reminders.append(
                 {
@@ -509,7 +564,12 @@ def build_invite_reminders_for_user(user: dict[str, Any], events: list[dict[str,
             )
             continue
 
-        if any(normalize_email(invite.get("email", "")) == normalize_email(user.get("email", "")) and invite.get("rsvp_status", "pending") == "pending" for invite in invites):
+        if any(
+            normalize_email(invite.get("email", ""))
+            == normalize_email(user.get("email", ""))
+            and invite.get("rsvp_status", "pending") == "pending"
+            for invite in invites
+        ):
             reminders.append(
                 {
                     "id": str(uuid.uuid4()),
@@ -530,7 +590,9 @@ async def ensure_chat_rooms_for_community(
 ):
     from db import chat_rooms_collection
 
-    existing_rooms = await chat_rooms_collection.find({"community_id": community_id}, {"_id": 0}).to_list(200)
+    existing_rooms = await chat_rooms_collection.find(
+        {"community_id": community_id}, {"_id": 0}
+    ).to_list(200)
     existing_subyard_ids = {room.get("subyard_id", "") for room in existing_rooms}
 
     if not any(room.get("room_type") == "courtyard" for room in existing_rooms):
@@ -560,26 +622,37 @@ async def ensure_chat_rooms_for_community(
 async def get_chat_room_for_user(room_id: str, user: dict[str, Any]) -> dict[str, Any]:
     from db import chat_rooms_collection
 
-    room_doc = await chat_rooms_collection.find_one({"id": room_id, "community_id": user["community_id"]}, {"_id": 0})
+    room_doc = await chat_rooms_collection.find_one(
+        {"id": room_id, "community_id": user["community_id"]}, {"_id": 0}
+    )
     if not room_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat room not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chat room not found."
+        )
     return room_doc
 
 
 async def get_event_for_user(event_id: str, user: dict[str, Any]) -> dict[str, Any]:
     from db import events_collection
 
-    event_doc = await events_collection.find_one({"id": event_id, "community_id": user["community_id"]}, {"_id": 0})
+    event_doc = await events_collection.find_one(
+        {"id": event_id, "community_id": user["community_id"]}, {"_id": 0}
+    )
     if not event_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
     # Surprise gatherings: invisible to the guest(s) of honor on every single-event path.
     if user["id"] in (event_doc.get("hidden_from_user_ids") or []):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
-    if (
-        event_doc.get("publication_state") == "organizer_draft"
-        and user.get("role") not in {"host", "organizer"}
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
+    if event_doc.get("publication_state") == "organizer_draft" and user.get(
+        "role"
+    ) not in {"host", "organizer"}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found."
+        )
     return event_doc
 
 
@@ -601,23 +674,33 @@ async def get_memory_for_user(memory_id: str, user: dict[str, Any]) -> dict[str,
         {"_id": 0},
     )
     if not memory_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found."
+        )
     return memory_doc
 
 
 async def get_thread_for_user(thread_id: str, user: dict[str, Any]) -> dict[str, Any]:
     from db import threads_collection
 
-    thread_doc = await threads_collection.find_one({"id": thread_id, "community_id": user["community_id"]}, {"_id": 0})
+    thread_doc = await threads_collection.find_one(
+        {"id": thread_id, "community_id": user["community_id"]}, {"_id": 0}
+    )
     if not thread_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legacy thread not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Legacy thread not found."
+        )
     return thread_doc
 
 
 async def get_subyard_for_user(subyard_id: str, user: dict[str, Any]) -> dict[str, Any]:
     from db import subyards_collection
 
-    subyard_doc = await subyards_collection.find_one({"id": subyard_id, "community_id": user["community_id"]}, {"_id": 0})
+    subyard_doc = await subyards_collection.find_one(
+        {"id": subyard_id, "community_id": user["community_id"]}, {"_id": 0}
+    )
     if not subyard_doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subyard not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Subyard not found."
+        )
     return subyard_doc
