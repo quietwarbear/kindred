@@ -3,7 +3,7 @@ export const PUBLIC_IDENTITY = Object.freeze({
   companyName: "Ubuntu Market LLC",
   canonicalOrigin: "https://www.heykindred.org",
   canonicalHost: "heykindred.org",
-  supportEmail: "support@ubuntu-village.org",
+  supportEmail: "support@heykindred.org",
 });
 
 export const publicUrl = (path = "/") =>
