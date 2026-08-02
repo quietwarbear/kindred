@@ -183,6 +183,7 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
       setDraftPreviewed(true);
       return;
     }
+    setSending(true);
     try {
       const payload = await apiRequest(`/events/${event.id}/invites`, {
         method: "POST",
@@ -208,9 +209,32 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
       }
       onUpdate(payload);
       setForm(initialInviteForm);
-      toast.success("Event invites created.");
+      // One step: email the invitations right after creating them, so the
+      // organizer isn't left hunting for a separate send button.
+      let sentMessage = "Invitations created.";
+      try {
+        const report = await apiRequest(`/events/${event.id}/invites/send`, {
+          method: "POST",
+          token,
+          data: {},
+        });
+        if (report.status === "unavailable") {
+          sentMessage =
+            "Invitations created — email delivery is off, so share the links below.";
+        } else {
+          const sent = report.counts?.submitted || 0;
+          sentMessage = `Invited and emailed ${sent} ${sent === 1 ? "person" : "people"} ✓`;
+        }
+        const fresh = await apiRequest(`/events/${event.id}`, { token });
+        onUpdate?.(fresh);
+      } catch {
+        sentMessage = "Invitations created. You can email them with the button below.";
+      }
+      toast.success(sentMessage);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to create invites.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -245,8 +269,12 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
             <p className="mt-2 text-xs leading-5 text-muted-foreground">No links, credentials, notifications, or provider requests were created.</p>
           </div>
         ) : null}
-        <Button className="w-full rounded-full" data-testid="gatherings-invite-submit-button" type="submit" variant="secondary">
-          {isOrganizerDraft ? "Preview invitation plan" : "Create gathering invites"}
+        <Button className="w-full rounded-full" data-testid="gatherings-invite-submit-button" disabled={sending} type="submit" variant="secondary">
+          {isOrganizerDraft
+            ? "Preview invitation plan"
+            : sending
+              ? "Sending…"
+              : "Create & send invitations"}
         </Button>
         {isOrganizerDraft ? (
           <p className="text-xs leading-5 text-muted-foreground" data-testid="holiday-invitation-draft-guard">
@@ -291,12 +319,11 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
             onClick={handleSendByEmail}
             type="button"
           >
-            {sending ? "Sending…" : "Send invitations by email"}
+            {sending ? "Sending…" : "Email pending invitations"}
           </Button>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            Emails each invited person their private RSVP link. Invitations already
-            delivered are skipped. Requires email delivery to be enabled for this
-            deployment.
+            Re-sends the private RSVP link to anyone not yet emailed (already
+            delivered invitations are skipped). Requires email delivery to be enabled.
           </p>
         </div>
       ) : null}
