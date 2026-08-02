@@ -119,8 +119,7 @@ Terms of Service: https://www.heykindred.org/terms
 
 ### Contact and URLs
 
-- Branded support email: support@heykindred.org (MUST be created and monitored
-  before deploy / store submission — do not ship until the mailbox is live)
+- Branded support email: support@heykindred.org (mailbox created and monitored)
 - Support URL: https://www.heykindred.org/support
 - Privacy policy: https://www.heykindred.org/privacy
 - Marketing URL: https://www.heykindred.org

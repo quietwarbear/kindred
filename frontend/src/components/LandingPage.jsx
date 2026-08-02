@@ -163,7 +163,7 @@ export const LandingPage = ({ isAuthenticated }) => {
             {[
               [LockKeyhole, "Invitation-only", "Access starts with a host or a private invitation."],
               [Users, "No public profiles", "Family membership is not published or searchable."],
-              [ShieldCheck, "No advertising", "The experience is not built around an ad feed."],
+              [ShieldCheck, "No ads, no data sales", "We track how Kindred is used to keep it running and make it better — never to sell your information or build an ad feed."],
               [CheckCircle2, "Clear privacy controls", "Invite links reveal only the gathering details needed to respond."],
             ].map(([Icon, title, copy]) => (
               <article className="soft-panel" key={title}>
