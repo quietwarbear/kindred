@@ -54,7 +54,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   const hasLightweightIntent = hasReunionIntent || hasFamilyAccessIntent;
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
-  const [activeTab, setActiveTab] = useState(pendingInviteCode ? "join" : intent === "guest" ? "login" : hasFamilyAccessIntent ? "login" : "launch");
+  const [activeTab, setActiveTab] = useState(pendingInviteCode || intent === "join" ? "join" : intent === "guest" ? "login" : hasFamilyAccessIntent ? "login" : "launch");
 
   // Pre-fill invite code from deep link
   useEffect(() => {

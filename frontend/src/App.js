@@ -17,6 +17,7 @@ import { ReunionMemoryCapsulePage } from "@/components/ReunionMemoryCapsulePage"
 import { ReunionRecapPage } from "@/components/ReunionRecapPage";
 import { FamilySpaceActivationPage } from "@/components/FamilySpaceActivationPage";
 import { GuestFamilyAccessPage } from "@/components/GuestFamilyAccessPage";
+import { IntentChooserPage } from "@/components/IntentChooserPage";
 import { ReunionActivationPage } from "@/components/ReunionActivationPage";
 import { ReunionStartPage } from "@/components/ReunionStartPage";
 import { SSOHandoffPage } from "@/components/SSOHandoffPage";
@@ -290,6 +291,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
+            <Route element={<IntentChooserPage />} path="/start" />
             <Route element={<ReunionStartPage onSessionRefresh={handleAuthSuccess} session={session} />} path="/reunion/start" />
             <Route
               element={<ReunionActivationPage session={session} />}
