@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationPanel } from "@/components/layout/NotificationPanel";
 import { ActivityFeedPage } from "@/components/ActivityFeedPage";
-import { ContributionsPage } from "@/components/ContributionsPage";
 import { CourtyardsPage } from "@/components/CourtyardsPage";
 import { FundsTravelPage } from "@/components/FundsTravelPage";
 import { GatheringsPage } from "@/components/GatheringsPage";
@@ -45,6 +44,7 @@ const navItems = [
   { label: "Activity", path: "/activity", category: "activity" },
   { label: "Courtyards", path: "/courtyards" },
   { label: "Timeline", path: "/timeline", module: "memory" },
+  { label: "Memory Vault", path: "/memories", module: "memory" },
   { label: "Gatherings", path: "/gatherings", module: "gatherings", category: "gatherings" },
   { label: "Gathering Proposals", path: "/proposals", category: "proposals" },
   { label: "Circle of Care", path: "/care", module: "care" },
@@ -385,7 +385,6 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <Route element={<LegacyThreadsPage token={token} user={user} />} path="legacy-threads" />
               <Route element={<KinshipMapPage token={token} />} path="kinship-map" />
               <Route element={<ThreadsPage token={token} user={user} />} path="threads" />
-              <Route element={<ContributionsPage token={token} user={user} />} path="contributions" />
               <Route element={<EventsPage token={token} user={user} />} path="events" />
               <Route element={user?.is_platform_admin ? <StrategyPage mode="app" /> : <Navigate replace to="/home" />} path="app-strategy" />
               <Route element={<Navigate replace to="/home" />} path="*" />
