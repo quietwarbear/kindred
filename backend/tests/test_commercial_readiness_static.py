@@ -69,12 +69,25 @@ def test_canonical_pricing_matches_live_schedule_and_provider_mappings():
         assert set(BILLING_PROVIDER_MATRIX[tier_id]) == set(BILLING_INTERVALS)
         for interval in BILLING_INTERVALS:
             provider = BILLING_PROVIDER_MATRIX[tier_id][interval]
-            assert resolve_stripe_price(provider["stripe"]["price_id"]) == (tier_id, interval)
-            assert resolve_revenuecat_product(provider["revenuecat"]["product_id"]) == (
+            assert resolve_stripe_price(provider["stripe"]["price_id"]) == (
                 tier_id,
                 interval,
-                tier_id,
             )
+            revenuecat = provider["revenuecat"]
+            # RevenueCat is the source of truth: <tier>_access offering + entitlement,
+            # standard $rc_ package, and a web/App Store/Play product each.
+            assert revenuecat["entitlement_id"] == f"{tier_id}_access"
+            assert revenuecat["offering_id"] == f"{tier_id}_access"
+            assert revenuecat["package_id"] == (
+                "$rc_monthly" if interval == "monthly" else "$rc_annual"
+            )
+            assert set(revenuecat["products"]) == {"web", "app_store", "play_store"}
+            for product_id in revenuecat["products"].values():
+                assert resolve_revenuecat_product(product_id) == (
+                    tier_id,
+                    interval,
+                    f"{tier_id}_access",
+                )
 
 
 def test_catalog_rejects_missing_or_contradictory_provider_intervals():
@@ -84,8 +97,10 @@ def test_catalog_rejects_missing_or_contradictory_provider_intervals():
         validate_catalog(provider_matrix=missing)
 
     crossed_entitlement = deepcopy(BILLING_PROVIDER_MATRIX)
-    crossed_entitlement["sapling"]["annual"]["revenuecat"]["entitlement_id"] = "oak"
-    with pytest.raises(RuntimeError, match="wrong native entitlement"):
+    crossed_entitlement["sapling"]["annual"]["revenuecat"][
+        "entitlement_id"
+    ] = "oak_access"
+    with pytest.raises(RuntimeError, match="wrong entitlement"):
         validate_catalog(provider_matrix=crossed_entitlement)
 
     duplicate_identifier = deepcopy(BILLING_PROVIDER_MATRIX)
@@ -121,15 +136,23 @@ def test_revenuecat_product_entitlement_and_interval_resolution_fails_closed():
     expiration_ms = 2_000_000_000_000
     event = {
         "product_id": "com.kindred.oak.annual",
-        "entitlement_ids": ["oak"],
+        "entitlement_ids": ["oak_access"],
         "expiration_at_ms": expiration_ms,
     }
-    assert resolve_revenuecat_webhook_purchase(event)[:3] == ("oak", "annual", "oak")
+    assert resolve_revenuecat_webhook_purchase(event)[:3] == (
+        "oak",
+        "annual",
+        "oak_access",
+    )
 
     with pytest.raises(ValueError, match="entitlement"):
-        resolve_revenuecat_webhook_purchase({**event, "entitlement_ids": ["sapling"]})
+        resolve_revenuecat_webhook_purchase(
+            {**event, "entitlement_ids": ["sapling_access"]}
+        )
     with pytest.raises(ValueError, match="Unknown RevenueCat product"):
-        resolve_revenuecat_webhook_purchase({**event, "product_id": "com.kindred.unknown"})
+        resolve_revenuecat_webhook_purchase(
+            {**event, "product_id": "com.kindred.unknown"}
+        )
 
 
 def test_revenuecat_subscriber_rejects_multiple_or_unmapped_active_products():
@@ -139,12 +162,12 @@ def test_revenuecat_subscriber_rejects_multiple_or_unmapped_active_products():
         "subscriptions": {
             "com.kindred.sapling.monthly": {"expires_date": future},
         },
-        "entitlements": {"sapling": {"expires_date": future}},
+        "entitlements": {"sapling_access": {"expires_date": future}},
     }
     assert resolve_revenuecat_subscriber(subscriber, now)[:4] == (
         "sapling",
         "monthly",
-        "sapling",
+        "sapling_access",
         "com.kindred.sapling.monthly",
     )
     contradictory = deepcopy(subscriber)
@@ -172,7 +195,9 @@ def test_lifecycle_access_and_event_ordering_preserve_then_expire_access():
         },
         now,
     )
-    assert not subscription_has_paid_access({"status": "active", "provider": "revenuecat"}, now)
+    assert not subscription_has_paid_access(
+        {"status": "active", "provider": "revenuecat"}, now
+    )
     assert subscription_has_paid_access(
         {"status": "canceling", "current_period_end": "2030-02-01T00:00:00+00:00"},
         now,
@@ -206,7 +231,10 @@ def test_checkout_interval_and_authenticated_toggle_are_explicit():
     subscriptions = read("backend/routes/subscriptions.py")
     subscription_page = read("frontend/src/components/SubscriptionPage.jsx")
     assert 'billing_cycle: Literal["monthly", "annual"]' in models
-    assert '"billing_cycle": "annual",\n                "provider": "admin_override"' not in subscriptions
+    assert (
+        '"billing_cycle": "annual",\n                "provider": "admin_override"'
+        not in subscriptions
+    )
     assert 'aria-label="Billing interval"' in subscription_page
     assert 'role="group"' in subscription_page
     assert 'aria-pressed={billingCycle === "monthly"}' in subscription_page
