@@ -9,7 +9,6 @@ from copy import deepcopy
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
-
 SUBSCRIPTION_TIERS = {
     "seedling": {
         "id": "seedling",
@@ -23,7 +22,14 @@ SUBSCRIPTION_TIERS = {
             "Timeline / memory archive",
             "1 subyard",
         ],
-        "limits": {"max_subyards": 1, "travel_coordination": False, "shared_funds": False, "analytics": False, "custom_branding": False, "multi_admin": False},
+        "limits": {
+            "max_subyards": 1,
+            "travel_coordination": False,
+            "shared_funds": False,
+            "analytics": False,
+            "custom_branding": False,
+            "multi_admin": False,
+        },
     },
     "sapling": {
         "id": "sapling",
@@ -38,7 +44,14 @@ SUBSCRIPTION_TIERS = {
             "RSVP & attendee management",
             "Basic notifications",
         ],
-        "limits": {"max_subyards": 999, "travel_coordination": False, "shared_funds": False, "analytics": False, "custom_branding": False, "multi_admin": False},
+        "limits": {
+            "max_subyards": 999,
+            "travel_coordination": False,
+            "shared_funds": False,
+            "analytics": False,
+            "custom_branding": False,
+            "multi_admin": False,
+        },
     },
     "oak": {
         "id": "oak",
@@ -53,7 +66,14 @@ SUBSCRIPTION_TIERS = {
             "Priority support",
             "Expanded event templates",
         ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": False, "custom_branding": False, "multi_admin": False},
+        "limits": {
+            "max_subyards": 999,
+            "travel_coordination": True,
+            "shared_funds": True,
+            "analytics": False,
+            "custom_branding": False,
+            "multi_admin": False,
+        },
     },
     "redwood": {
         "id": "redwood",
@@ -67,7 +87,14 @@ SUBSCRIPTION_TIERS = {
             "Custom branding (logo, color)",
             "Multi-admin controls",
         ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": True, "custom_branding": True, "multi_admin": True},
+        "limits": {
+            "max_subyards": 999,
+            "travel_coordination": True,
+            "shared_funds": True,
+            "analytics": True,
+            "custom_branding": True,
+            "multi_admin": True,
+        },
     },
     "elder-grove": {
         "id": "elder-grove",
@@ -81,13 +108,22 @@ SUBSCRIPTION_TIERS = {
             "Enterprise-grade privacy & security",
             "Optional partner integrations",
         ],
-        "limits": {"max_subyards": 999, "travel_coordination": True, "shared_funds": True, "analytics": True, "custom_branding": True, "multi_admin": True},
+        "limits": {
+            "max_subyards": 999,
+            "travel_coordination": True,
+            "shared_funds": True,
+            "analytics": True,
+            "custom_branding": True,
+            "multi_admin": True,
+        },
     },
 }
 
 TIER_ORDER = ["seedling", "sapling", "oak", "redwood", "elder-grove"]
 BILLING_INTERVALS = ("monthly", "annual")
-BILLING_ENVIRONMENT = os.environ.get("BILLING_ENVIRONMENT", "production").strip().lower()
+BILLING_ENVIRONMENT = (
+    os.environ.get("BILLING_ENVIRONMENT", "production").strip().lower()
+)
 
 # The only canonical monetary values. Seedling has one explicit non-recurring
 # free option; it does not have a fabricated monthly or annual subscription.
@@ -102,66 +138,188 @@ PRICING_MATRIX = {
         },
     },
     "sapling": {
-        "monthly": {"amount": 9.99, "currency": "usd", "recurring": True, "period": "month"},
-        "annual": {"amount": 89.99, "currency": "usd", "recurring": True, "period": "year"},
+        "monthly": {
+            "amount": 9.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "month",
+        },
+        "annual": {
+            "amount": 89.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "year",
+        },
     },
     "oak": {
-        "monthly": {"amount": 19.99, "currency": "usd", "recurring": True, "period": "month"},
-        "annual": {"amount": 179.99, "currency": "usd", "recurring": True, "period": "year"},
+        "monthly": {
+            "amount": 19.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "month",
+        },
+        "annual": {
+            "amount": 179.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "year",
+        },
     },
     "redwood": {
-        "monthly": {"amount": 39.99, "currency": "usd", "recurring": True, "period": "month"},
-        "annual": {"amount": 359.99, "currency": "usd", "recurring": True, "period": "year"},
+        "monthly": {
+            "amount": 39.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "month",
+        },
+        "annual": {
+            "amount": 359.99,
+            "currency": "usd",
+            "recurring": True,
+            "period": "year",
+        },
     },
     "elder-grove": {},
 }
 
-PAID_TIER_IDS = tuple(tier_id for tier_id in TIER_ORDER if set(PRICING_MATRIX[tier_id]) == set(BILLING_INTERVALS))
+PAID_TIER_IDS = tuple(
+    tier_id
+    for tier_id in TIER_ORDER
+    if set(PRICING_MATRIX[tier_id]) == set(BILLING_INTERVALS)
+)
 
-# Defaults are the current live Stripe Price IDs. Operators may rotate them
-# through environment variables, but checkout verifies the remote amount,
-# currency, interval, and metadata against this catalog before use.
-BILLING_PROVIDER_MATRIX: dict[str, dict[str, dict[str, dict[str, str]]]] = {
+# Canonical billing catalog, reconciled to the RevenueCat dashboard (project
+# Ubuntu Market/Kindred, d52dcc14) verified 2026-08-02. RevenueCat is the source
+# of truth for the subscription catalog on every platform:
+#   - offering + entitlement identifiers are the tier's ``<tier>_access`` value
+#   - packages are the standard ``$rc_monthly`` / ``$rc_annual``
+#   - each interval maps a web (RevenueCat Billing), App Store, and Play Store
+#     product; Play annual uses ``-yearly`` (not ``-annual``), matching the store
+# The ``stripe`` price_ids are the historical direct-Stripe subscription rail,
+# retained (inert; checkout stays HTTP 410) for legacy inbound compatibility;
+# new web purchases go through RevenueCat Billing, not these Price objects.
+BILLING_PROVIDER_MATRIX: dict[str, dict[str, dict]] = {
     "sapling": {
         "monthly": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_SAPLING_MONTHLY", "price_1TCNAdAk1UyEdCJUIlI3clyU")},
-            "revenuecat": {"product_id": "com.kindred.sapling.monthly", "entitlement_id": "sapling"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_SAPLING_MONTHLY", "price_1TCNAdAk1UyEdCJUIlI3clyU"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "sapling_access",
+                "package_id": "$rc_monthly",
+                "entitlement_id": "sapling_access",
+                "products": {
+                    "web": "sapling_monthly_web_v2",
+                    "app_store": "com.kindred.sapling.monthly",
+                    "play_store": "kindred_sapling:sapling-monthly",
+                },
+            },
         },
         "annual": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_SAPLING_ANNUAL", "price_1TCMNIAk1UyEdCJUHIFvOqex")},
-            "revenuecat": {"product_id": "com.kindred.sapling.annual", "entitlement_id": "sapling"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_SAPLING_ANNUAL", "price_1TCMNIAk1UyEdCJUHIFvOqex"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "sapling_access",
+                "package_id": "$rc_annual",
+                "entitlement_id": "sapling_access",
+                "products": {
+                    "web": "sapling_annual_web_v2",
+                    "app_store": "com.kindred.sapling.annual",
+                    "play_store": "kindred_sapling:sapling-yearly",
+                },
+            },
         },
     },
     "oak": {
         "monthly": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_OAK_MONTHLY", "price_1TCN7VAk1UyEdCJU3LdlXY14")},
-            "revenuecat": {"product_id": "com.kindred.oak.monthly", "entitlement_id": "oak"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_OAK_MONTHLY", "price_1TCN7VAk1UyEdCJU3LdlXY14"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "oak_access",
+                "package_id": "$rc_monthly",
+                "entitlement_id": "oak_access",
+                "products": {
+                    "web": "oak_monthly_web_v2",
+                    "app_store": "com.kindred.oak.monthly",
+                    "play_store": "kindred_oak:oak-monthly",
+                },
+            },
         },
         "annual": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_OAK_ANNUAL", "price_1TCMQRAk1UyEdCJU8yS5hdLe")},
-            "revenuecat": {"product_id": "com.kindred.oak.annual", "entitlement_id": "oak"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_OAK_ANNUAL", "price_1TCMQRAk1UyEdCJU8yS5hdLe"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "oak_access",
+                "package_id": "$rc_annual",
+                "entitlement_id": "oak_access",
+                "products": {
+                    "web": "oak_annual_web_v2",
+                    "app_store": "com.kindred.oak.annual",
+                    "play_store": "kindred_oak:oak-yearly",
+                },
+            },
         },
     },
     "redwood": {
         "monthly": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCN3XAk1UyEdCJUuhFERcuD")},
-            "revenuecat": {"product_id": "com.kindred.redwood.monthly", "entitlement_id": "redwood"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_REDWOOD_MONTHLY", "price_1TCN3XAk1UyEdCJUuhFERcuD"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "redwood_access",
+                "package_id": "$rc_monthly",
+                "entitlement_id": "redwood_access",
+                "products": {
+                    "web": "redwood_monthly_web_v2",
+                    "app_store": "com.kindred.redwood.monthly",
+                    "play_store": "kindred_redwood:redwood-monthly",
+                },
+            },
         },
         "annual": {
-            "stripe": {"price_id": os.environ.get("STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCMVYAk1UyEdCJUJqhBRIFc")},
-            "revenuecat": {"product_id": "com.kindred.redwood.annual", "entitlement_id": "redwood"},
+            "stripe": {
+                "price_id": os.environ.get(
+                    "STRIPE_PRICE_REDWOOD_ANNUAL", "price_1TCMVYAk1UyEdCJUJqhBRIFc"
+                )
+            },
+            "revenuecat": {
+                "offering_id": "redwood_access",
+                "package_id": "$rc_annual",
+                "entitlement_id": "redwood_access",
+                "products": {
+                    "web": "redwood_annual_web_v2",
+                    "app_store": "com.kindred.redwood.annual",
+                    "play_store": "kindred_redwood:redwood-yearly",
+                },
+            },
         },
     },
 }
 
+# RevenueCat's entitlement identifiers are the ``<tier>_access`` values shown in
+# the dashboard (verified 2026-08-02), not the bare tier names.
 REVENUECAT_ENTITLEMENT_TO_TIER = {
     "seedling": "seedling",
-    "sapling": "sapling",
-    "oak": "oak",
-    "redwood": "redwood",
+    "sapling_access": "sapling",
+    "oak_access": "oak",
+    "redwood_access": "redwood",
     "elder_grove": "elder-grove",
     "premium": "oak",  # Legacy entitlement retained for existing customers.
 }
+
 
 def get_billing_option(tier_id: str, billing_interval: str) -> dict:
     """Return one canonical plan/interval option or fail closed."""
@@ -209,8 +367,12 @@ def annual_savings(tier_id: str) -> dict:
     """Compare the annual charge with twelve canonical monthly charges."""
     monthly_total = Decimal(str(billing_amount(tier_id, "monthly"))) * 12
     annual_total = Decimal(str(billing_amount(tier_id, "annual")))
-    saved = (monthly_total - annual_total).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    percent = ((saved / monthly_total) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    saved = (monthly_total - annual_total).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    percent = ((saved / monthly_total) * 100).quantize(
+        Decimal("0.1"), rounding=ROUND_HALF_UP
+    )
     return {
         "amount": float(saved),
         "percent": float(percent),
@@ -235,13 +397,57 @@ def plan_payload(tier_id: str) -> dict:
 
 
 def provider_mapping(provider: str) -> dict[str, dict[str, str]]:
-    """Return plan/interval identifiers for one provider."""
-    field = "price_id" if provider == "stripe" else "product_id"
-    if provider not in ("stripe", "revenuecat"):
+    """Return plan/interval Stripe Price IDs (legacy direct-Stripe rail)."""
+    if provider != "stripe":
         raise ValueError("Unknown billing provider.")
     return {
         tier_id: {
-            interval: BILLING_PROVIDER_MATRIX[tier_id][interval][provider][field]
+            interval: BILLING_PROVIDER_MATRIX[tier_id][interval]["stripe"]["price_id"]
+            for interval in BILLING_INTERVALS
+        }
+        for tier_id in PAID_TIER_IDS
+    }
+
+
+def revenuecat_product_mapping(
+    platform: str = "app_store",
+) -> dict[str, dict[str, str]]:
+    """Return plan/interval RevenueCat product identifiers for one platform."""
+    if platform not in {"web", "app_store", "play_store"}:
+        raise ValueError("Unknown RevenueCat platform.")
+    return {
+        tier_id: {
+            interval: BILLING_PROVIDER_MATRIX[tier_id][interval]["revenuecat"][
+                "products"
+            ][platform]
+            for interval in BILLING_INTERVALS
+        }
+        for tier_id in PAID_TIER_IDS
+    }
+
+
+def revenuecat_billing_mapping() -> dict[str, dict[str, dict]]:
+    """Return the RevenueCat Billing (web) catalog the web app validates before
+    any purchase. Fail-closed data only — no gateway is contacted here."""
+    return {
+        tier_id: {
+            interval: {
+                "product_id": BILLING_PROVIDER_MATRIX[tier_id][interval]["revenuecat"][
+                    "products"
+                ]["web"],
+                "offering_id": BILLING_PROVIDER_MATRIX[tier_id][interval]["revenuecat"][
+                    "offering_id"
+                ],
+                "package_id": BILLING_PROVIDER_MATRIX[tier_id][interval]["revenuecat"][
+                    "package_id"
+                ],
+                "entitlement_id": BILLING_PROVIDER_MATRIX[tier_id][interval][
+                    "revenuecat"
+                ]["entitlement_id"],
+                "amount_micros": price_cents(tier_id, interval) * 10_000,
+                "currency": "USD",
+                "period": "P1M" if interval == "monthly" else "P1Y",
+            }
             for interval in BILLING_INTERVALS
         }
         for tier_id in PAID_TIER_IDS
@@ -249,15 +455,21 @@ def provider_mapping(provider: str) -> dict[str, dict[str, str]]:
 
 
 STRIPE_PRICE_IDS = provider_mapping("stripe")
-REVENUECAT_PRODUCT_IDS = provider_mapping("revenuecat")
+# REVENUECAT_PRODUCT_IDS keeps its historical shape (App Store identifiers) for
+# existing callers; the per-platform map exposes web/App Store/Play Store.
+REVENUECAT_PRODUCT_IDS = revenuecat_product_mapping("app_store")
+REVENUECAT_PRODUCT_IDS_BY_PLATFORM = {
+    platform: revenuecat_product_mapping(platform)
+    for platform in ("web", "app_store", "play_store")
+}
 
 
 def resolve_revenuecat_product(product_id: str) -> tuple[str, str, str]:
-    """Resolve a native product to canonical plan, interval, and entitlement."""
+    """Resolve a RevenueCat web/store product to plan, interval, entitlement."""
     for tier_id in PAID_TIER_IDS:
         for interval in BILLING_INTERVALS:
             config = BILLING_PROVIDER_MATRIX[tier_id][interval]["revenuecat"]
-            if config["product_id"] == product_id:
+            if product_id in config["products"].values():
                 return tier_id, interval, config["entitlement_id"]
     raise ValueError("Unknown RevenueCat product.")
 
@@ -266,7 +478,10 @@ def resolve_stripe_price(price_id: str) -> tuple[str, str]:
     """Resolve a Stripe Price ID to one canonical plan and interval."""
     for tier_id in PAID_TIER_IDS:
         for interval in BILLING_INTERVALS:
-            if BILLING_PROVIDER_MATRIX[tier_id][interval]["stripe"]["price_id"] == price_id:
+            if (
+                BILLING_PROVIDER_MATRIX[tier_id][interval]["stripe"]["price_id"]
+                == price_id
+            ):
                 return tier_id, interval
     raise ValueError("Unknown Stripe Price.")
 
@@ -281,22 +496,39 @@ def validate_catalog(
     the process-wide canonical catalog.
     """
     pricing_matrix = PRICING_MATRIX if pricing_matrix is None else pricing_matrix
-    provider_matrix = BILLING_PROVIDER_MATRIX if provider_matrix is None else provider_matrix
+    provider_matrix = (
+        BILLING_PROVIDER_MATRIX if provider_matrix is None else provider_matrix
+    )
     if list(SUBSCRIPTION_TIERS) != TIER_ORDER:
         raise RuntimeError("Pricing tier order must match the canonical catalog.")
     if BILLING_ENVIRONMENT not in {"production", "test"}:
         raise RuntimeError("BILLING_ENVIRONMENT must be 'production' or 'test'.")
     if set(pricing_matrix) != set(TIER_ORDER):
         raise RuntimeError("Every tier must have an explicit pricing-matrix entry.")
-    if set(pricing_matrix["seedling"]) != {"free"} or pricing_matrix["seedling"]["free"]["amount"] != 0:
-        raise RuntimeError("Seedling must have one explicit free option and no recurring intervals.")
+    if (
+        set(pricing_matrix["seedling"]) != {"free"}
+        or pricing_matrix["seedling"]["free"]["amount"] != 0
+    ):
+        raise RuntimeError(
+            "Seedling must have one explicit free option and no recurring intervals."
+        )
     if pricing_matrix["elder-grove"]:
-        raise RuntimeError("Custom-priced Elder Grove cannot expose self-serve billing intervals.")
+        raise RuntimeError(
+            "Custom-priced Elder Grove cannot expose self-serve billing intervals."
+        )
     if set(provider_matrix) != set(PAID_TIER_IDS):
         raise RuntimeError("Every paid tier must have a provider matrix.")
-    if any(mapped not in SUBSCRIPTION_TIERS for mapped in REVENUECAT_ENTITLEMENT_TO_TIER.values()):
+    if any(
+        mapped not in SUBSCRIPTION_TIERS
+        for mapped in REVENUECAT_ENTITLEMENT_TO_TIER.values()
+    ):
         raise RuntimeError("RevenueCat contains an unknown canonical tier.")
-    identifiers = {"stripe": set(), "revenuecat": set()}
+    identifiers = {
+        "stripe": set(),
+        "web": set(),
+        "app_store": set(),
+        "play_store": set(),
+    }
     for tier_id in PAID_TIER_IDS:
         if set(pricing_matrix[tier_id]) != set(BILLING_INTERVALS):
             raise RuntimeError(f"{tier_id} must define monthly and annual pricing.")
@@ -305,19 +537,43 @@ def validate_catalog(
         for interval in BILLING_INTERVALS:
             provider_entry = provider_matrix[tier_id][interval]
             if set(provider_entry) != {"stripe", "revenuecat"}:
-                raise RuntimeError(f"{tier_id}/{interval} must map Stripe and RevenueCat.")
+                raise RuntimeError(
+                    f"{tier_id}/{interval} must map Stripe and RevenueCat."
+                )
             stripe_id = provider_entry["stripe"].get("price_id", "")
+            if not stripe_id:
+                raise RuntimeError(
+                    f"{tier_id}/{interval} has an empty Stripe identifier."
+                )
             revenuecat = provider_entry["revenuecat"]
-            revenuecat_id = revenuecat.get("product_id", "")
-            if not stripe_id or not revenuecat_id:
-                raise RuntimeError(f"{tier_id}/{interval} has an empty provider identifier.")
-            if revenuecat.get("entitlement_id") != tier_id:
-                raise RuntimeError(f"{tier_id}/{interval} resolves to the wrong native entitlement.")
+            expected_package = "$rc_monthly" if interval == "monthly" else "$rc_annual"
+            if revenuecat.get("package_id") != expected_package:
+                raise RuntimeError(
+                    f"{tier_id}/{interval} resolves to the wrong package interval."
+                )
+            if revenuecat.get("offering_id") != f"{tier_id}_access":
+                raise RuntimeError(
+                    f"{tier_id}/{interval} resolves to the wrong offering."
+                )
+            if revenuecat.get("entitlement_id") != f"{tier_id}_access":
+                raise RuntimeError(
+                    f"{tier_id}/{interval} resolves to the wrong entitlement."
+                )
+            products = revenuecat.get("products", {})
+            if set(products) != {"web", "app_store", "play_store"} or not all(
+                products.values()
+            ):
+                raise RuntimeError(
+                    f"{tier_id}/{interval} has an incomplete RevenueCat product mapping."
+                )
             identifiers["stripe"].add(stripe_id)
-            identifiers["revenuecat"].add(revenuecat_id)
+            for platform, product_id in products.items():
+                identifiers[platform].add(product_id)
     expected_count = len(PAID_TIER_IDS) * len(BILLING_INTERVALS)
     if any(len(values) != expected_count for values in identifiers.values()):
-        raise RuntimeError("Provider identifiers must be unique for every plan/interval.")
+        raise RuntimeError(
+            "Provider identifiers must be unique for every plan/interval."
+        )
 
 
 validate_catalog()

@@ -12,6 +12,7 @@ from pricing import (
     REVENUECAT_ENTITLEMENT_TO_TIER,
     REVENUECAT_PRODUCT_IDS,
     SUBSCRIPTION_TIERS,
+    revenuecat_billing_mapping,
 )
 from subscription_lifecycle import (
     resolve_revenuecat_subscriber,
@@ -27,7 +28,9 @@ REVENUECAT_WEBHOOK_SECRET = os.environ.get("REVENUECAT_WEBHOOK_SECRET", "")
 ENTITLEMENT_TO_TIER = REVENUECAT_ENTITLEMENT_TO_TIER
 
 
-def _resolve_paid_purchase(subscriber: dict) -> Optional[tuple[str, str, str, str, str]]:
+def _resolve_paid_purchase(
+    subscriber: dict,
+) -> Optional[tuple[str, str, str, str, str]]:
     return resolve_revenuecat_subscriber(subscriber)
 
 
@@ -35,13 +38,19 @@ def _resolve_webhook_purchase(event: dict) -> tuple[str, str, str, str]:
     try:
         return resolve_revenuecat_webhook_purchase(event)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
 
 
 def _revenuecat_event_identity(event: dict) -> tuple[str, int]:
     event_id = event.get("id")
     event_timestamp_ms = event.get("event_timestamp_ms")
-    if not isinstance(event_id, str) or not event_id or not isinstance(event_timestamp_ms, int):
+    if (
+        not isinstance(event_id, str)
+        or not event_id
+        or not isinstance(event_timestamp_ms, int)
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="RevenueCat lifecycle event is missing its id or timestamp.",
@@ -58,7 +67,9 @@ async def _apply_revenuecat_event(
 ) -> bool:
     """Apply one event only when it is not older than stored provider state."""
     event_id, event_timestamp_ms = _revenuecat_event_identity(event)
-    current = await subscriptions_collection.find_one({"user_id": app_user_id}, {"_id": 0})
+    current = await subscriptions_collection.find_one(
+        {"user_id": app_user_id}, {"_id": 0}
+    )
     if current and current.get("revenuecat_event_id") == event_id:
         return False
     if current and not should_apply_provider_event(
@@ -101,7 +112,10 @@ async def revenuecat_webhook(request: Request):
         )
     authorization = request.headers.get("authorization", "")
     if authorization != f"Bearer {REVENUECAT_WEBHOOK_SECRET}":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid RevenueCat webhook authorization.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid RevenueCat webhook authorization.",
+        )
     body = await request.json()
     event = body.get("event", {})
     event_type = event.get("type", "")
@@ -122,7 +136,9 @@ async def revenuecat_webhook(request: Request):
         "REFUND_REVERSED",
     }
     if event_type in effective_events:
-        active_tier, billing_interval, entitlement_id, expires_at = _resolve_webhook_purchase(event)
+        active_tier, billing_interval, entitlement_id, expires_at = (
+            _resolve_webhook_purchase(event)
+        )
         applied = await _apply_revenuecat_event(
             app_user_id,
             event,
@@ -143,11 +159,23 @@ async def revenuecat_webhook(request: Request):
         )
         if not applied:
             return {"status": "ignored", "reason": "stale event"}
-    elif event_type in {"CANCELLATION", "SUBSCRIPTION_PAUSED", "BILLING_ISSUE", "EXPIRATION"}:
+    elif event_type in {
+        "CANCELLATION",
+        "SUBSCRIPTION_PAUSED",
+        "BILLING_ISSUE",
+        "EXPIRATION",
+    }:
         _, _, _, expires_at = _resolve_webhook_purchase(event)
-        current = await subscriptions_collection.find_one({"user_id": app_user_id}, {"_id": 0})
-        if not current or current.get("revenuecat_product_id") != event.get("product_id"):
-            return {"status": "ignored", "reason": "event does not match the active product"}
+        current = await subscriptions_collection.find_one(
+            {"user_id": app_user_id}, {"_id": 0}
+        )
+        if not current or current.get("revenuecat_product_id") != event.get(
+            "product_id"
+        ):
+            return {
+                "status": "ignored",
+                "reason": "event does not match the active product",
+            }
 
         if event_type == "EXPIRATION":
             values = {"status": "canceled", "current_period_end": expires_at}
@@ -189,17 +217,24 @@ async def validate_mobile_receipt(
     url = f"https://api.revenuecat.com/v1/subscribers/{app_user_id}"
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {REVENUECAT_API_KEY}"})
+        resp = await client.get(
+            url, headers={"Authorization": f"Bearer {REVENUECAT_API_KEY}"}
+        )
 
     if resp.status_code != 200:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Unable to validate receipt with RevenueCat.")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to validate receipt with RevenueCat.",
+        )
 
     subscriber = resp.json().get("subscriber", {})
     entitlements = subscriber.get("entitlements", {})
     try:
         purchase = _resolve_paid_purchase(subscriber)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
 
     active_tier = purchase[0] if purchase else "seedling"
     billing_interval = purchase[1] if purchase else None
@@ -261,32 +296,47 @@ BUNDLE_ID = "com.ubuntumarket.kindred"
 
 
 @router.get("/revenuecat/offerings")
-async def revenuecat_offerings(current_user: dict[str, Any] = Depends(get_current_user)):
+async def revenuecat_offerings(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     """Fetch current product offerings from RevenueCat for display in mobile app."""
     import httpx
 
     if not REVENUECAT_API_KEY:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="RevenueCat not configured.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RevenueCat not configured.",
+        )
 
     app_user_id = current_user["id"]
     url = f"https://api.revenuecat.com/v1/subscribers/{app_user_id}"
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers={
-            "Authorization": f"Bearer {REVENUECAT_API_KEY}",
-            "X-Platform": "ios",
-        })
+        resp = await client.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {REVENUECAT_API_KEY}",
+                "X-Platform": "ios",
+            },
+        )
 
     if resp.status_code == 404:
         # Create subscriber on first fetch
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers={
-                "Authorization": f"Bearer {REVENUECAT_API_KEY}",
-                "X-Platform": "ios",
-            })
+            resp = await client.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {REVENUECAT_API_KEY}",
+                    "X-Platform": "ios",
+                },
+            )
 
     if resp.status_code != 200:
-        return {"offerings": [], "subscriber": {}, "error": "Unable to fetch from RevenueCat."}
+        return {
+            "offerings": [],
+            "subscriber": {},
+            "error": "Unable to fetch from RevenueCat.",
+        }
 
     data = resp.json()
     subscriber = data.get("subscriber", {})
@@ -307,13 +357,18 @@ async def restore_purchases(current_user: dict[str, Any] = Depends(get_current_u
     import httpx
 
     if not REVENUECAT_API_KEY:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="RevenueCat not configured.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RevenueCat not configured.",
+        )
 
     app_user_id = current_user["id"]
     url = f"https://api.revenuecat.com/v1/subscribers/{app_user_id}"
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {REVENUECAT_API_KEY}"})
+        resp = await client.get(
+            url, headers={"Authorization": f"Bearer {REVENUECAT_API_KEY}"}
+        )
 
     if resp.status_code != 200:
         return {"restored": False, "error": "Unable to fetch subscriber data."}
@@ -323,7 +378,9 @@ async def restore_purchases(current_user: dict[str, Any] = Depends(get_current_u
     try:
         purchase = _resolve_paid_purchase(subscriber)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
 
     active_tier = purchase[0] if purchase else "seedling"
     billing_interval = purchase[1] if purchase else None
@@ -394,3 +451,20 @@ async def revenuecat_config():
         "product_mapping": REVENUECAT_PRODUCT_IDS,
         "webhook_url": "/api/revenuecat/webhook",
     }
+
+
+@router.get("/revenuecat/web-catalog")
+async def revenuecat_web_catalog(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Return the canonical RevenueCat Billing (web) catalog.
+
+    The web SDK validates the live offering / package / product it fetches from
+    RevenueCat against this catalog (product + offering + package + entitlement
+    ids, amount, currency, interval) and refuses to purchase on any mismatch.
+
+    Catalog data only — no gateway is contacted and no charge is created here.
+    Web purchases stay inert until the deployment configures the RevenueCat
+    Billing public key on the client; this endpoint never enables a charge.
+    """
+    return {"catalog": revenuecat_billing_mapping()}
