@@ -25,10 +25,17 @@ import {
   restorePurchases,
   syncRevenueCatUser,
 } from "@/lib/revenuecat";
+import {
+  isRevenueCatWebCancellation,
+  makeRevenueCatWebPurchase,
+} from "@/lib/revenuecatWeb";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
 
 const WEB_SUBSCRIPTION_MESSAGE = "Web subscriptions are temporarily unavailable while billing is being updated.";
+// Web purchases go live only when the deployment sets the RevenueCat Billing
+// public key. Until then the web flow stays fail-closed on the message above.
+const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);
 
 const TIER_ICONS = {
   seedling: Leaf,
@@ -488,6 +495,28 @@ export const SubscriptionPage = ({ token, user }) => {
             toast.error("Unable to complete purchase. Please try again.");
           }
         }
+      } else if (WEB_PURCHASES_ENABLED) {
+        // Web: RevenueCat Billing (Web SDK). The SDK validates the live
+        // offering/package/product against the backend catalog and refuses on
+        // any mismatch; the RevenueCat webhook grants access server-side.
+        try {
+          const { catalog } = await apiRequest("/revenuecat/web-catalog", { token });
+          await makeRevenueCatWebPurchase({
+            appUserId: user?.id,
+            email: user?.email,
+            mapping: catalog,
+            planId,
+            billingInterval: billingCycle,
+          });
+          toast.success("Purchase completed! Activating your plan...");
+          setTimeout(() => loadCurrentSub(), 2000);
+        } catch (error) {
+          if (isRevenueCatWebCancellation(error)) {
+            toast.info("Purchase was cancelled.");
+          } else {
+            toast.error(error?.message || "Unable to complete the web purchase.");
+          }
+        }
       } else {
         toast.info(WEB_SUBSCRIPTION_MESSAGE);
       }
@@ -604,7 +633,7 @@ export const SubscriptionPage = ({ token, user }) => {
         )}
       </div>
 
-      {!isIOS() && (
+      {!isIOS() && !WEB_PURCHASES_ENABLED && (
         <div
           className="archival-card border-amber-500/40 bg-amber-500/10 text-center"
           data-testid="web-subscription-unavailable"
