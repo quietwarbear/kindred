@@ -2544,6 +2544,11 @@
   dependencies:
     "@revenuecat/purchases-typescript-internal-esm" "17.25.0"
 
+"@revenuecat/purchases-js@1.48.1":
+  version "1.48.1"
+  resolved "https://registry.yarnpkg.com/@revenuecat/purchases-js/-/purchases-js-1.48.1.tgz#7190a0542448ccbef0d32148888713a566beffa3"
+  integrity sha512-8VPyFOr0Mc5HmBZEO3So03XhWCc+rsyAAl5MWhZo678A+q/eiSnzukcz7vZOXG6ndpfXQ7BnqFFNPu8doLrYAg==
+
 "@revenuecat/purchases-typescript-internal-esm@17.25.0":
   version "17.25.0"
   resolved "https://registry.npmjs.org/@revenuecat/purchases-typescript-internal-esm/-/purchases-typescript-internal-esm-17.25.0.tgz"
