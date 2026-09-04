@@ -67,30 +67,32 @@ Warnings observed but not treated as test failures: Starlette multipart pending 
 ### Android
 
 - Application ID: `com.ubuntumarket.kindred`
-- Source version name: **3.1.0**
-- Source version code: **18**
+- Public version: **3.1.0 (18)**
+- Prepared source version name: **3.1.1**
+- Prepared source version code: **19**
 - Minimum API: **24**
 - Target/compile SDK: **36**
-- Disposable debug APK size: **11,461,970 bytes**
-- Disposable debug APK SHA-256: `b87b790bfcfb90e66f58a52170325f60744f43546e53c037698d4f6efbd5761a`
+- Disposable debug APK size: **13,950,281 bytes**
+- Disposable debug APK SHA-256: `0d83bd5dc328c20b1706b51e4a8d2de0f92a2a4b945d1cdca67c60331a77f8e0`
 - Result: Capacitor sync and debug compilation passed.
 - Limitation: debug APK only; no signed release AAB, Play signing verification, upload, internal test, or physical-device test.
 
 ### iOS
 
 - Bundle ID: `com.ubuntumarket.kindred`
-- Marketing version: **3.1.0**
-- Build number: **65**
+- Public version/build: **3.1.0 (65)**
+- Prepared marketing version: **3.1.1**
+- Prepared build number: **66**
 - Xcode: **26.6**
-- Disposable unsigned app executable size: **72,688 bytes**
-- Disposable unsigned app executable SHA-256: `566d2f72e3bf89bca7630f766c58598e0ea507eb61cba8bfcffa31d9c5f7bed8`
-- Result: Capacitor sync, CocoaPods install, and unsigned generic-device compilation passed.
+- Disposable unsigned simulator app executable size: **164,288 bytes**
+- Disposable unsigned simulator app executable SHA-256: `1f3fcbd19bbb184473c7ff89501f334cd5c3ecdd0cdca617012038171e08f32c`
+- Result: Capacitor sync, CocoaPods install, and unsigned release-simulator compilation passed.
 - Limitation: no signing, archive, App Store validation, upload, TestFlight, or physical-device test.
 - Warnings: one unassigned AppIcon child, a CocoaPods embed phase configured to run every build, and no AppIntents metadata.
 
 ### Proposed store-build treatment
 
-The console evidence indicates version 3.1.0 is already public. Therefore the reunion-first listing correction should be treated as **metadata/privacy/screenshot work with no binary upload** unless the console requires a new version container. If a new binary is required, do not reuse Android code 18 or iOS build 65: increment the applicable build identifier, create signed release artifacts, verify their provenance, and repeat native/device testing before approval.
+Version 3.1.0 is public, but direct inspection of the published Android 18 bundle's source map proves it predates the corrected Apple/Google passwordless deletion UI, the retired bulk Legacy Table configuration UI, and the privacy-safe potluck/volunteer aggregate consumers now on `main`. The iOS 3.1.0 release also predates those changes. A new binary is therefore required to deliver them. Source is prepared as **3.1.1 (Android 19 / iOS 66)**; signed artifacts, provenance, and device testing remain required before approval.
 
 ## Canonical screenshot validation
 
@@ -303,8 +305,9 @@ Current read-only observations:
 - Managed Publishing is **off**.
 - Publishing overview says last published **August 2, 2026**.
 - Dashboard displays the latest production release as released **August 3, 2026**; this is likely a console date/time-zone presentation difference and should be reconciled before the final record.
-- Data Safety shows **Complete Data safety questionnaire** under changes not yet submitted for review.
-- The reunion-first app name and short/full descriptions are present as unsaved draft content on the default listing.
+- Publishing overview reports **no unpublished changes**.
+- The public Data Safety section now discloses collected data, encryption in transit, and a deletion-request mechanism; its exact answers still require owner/legal reconciliation against the engineering map.
+- The public listing remains the broad community-platform positioning; the reunion-first name and short/full descriptions are not live or pending.
 - The AI-asset declaration is unset.
 - The current listing draft does not contain the canonical five Google phone screenshots.
 - No listing, privacy, or publication control was saved or submitted.
@@ -327,7 +330,7 @@ Current read-only observation: a fresh Apple sign-in is required, so no Apple ap
 
 Future action after sign-in and blockers clear:
 
-1. Verify whether metadata and screenshots can be changed on the current 3.1.0 version or require a new version container.
+1. Create the 3.1.1 version container only after the remaining owner/privacy and signed-build gates are cleared.
 2. Enter the exact name, subtitle, promotional text, description, keywords, categories, URLs, and release notes above.
 3. Upload only the five canonical iPhone and five canonical iPad screenshots in manifest order.
 4. Reconcile App Privacy to the linked-data table above; do not preserve “Data Not Linked to You” for linked paths.
@@ -340,11 +343,11 @@ Future action after sign-in and blockers clear:
 
 - Google Managed Publishing is off. A review approval can therefore publish eligible changes without a second managed-publication hold.
 - Apple publication behavior could not be reverified while signed out.
-- Google Data Safety remains a pending, unsubmitted console change.
+- Google shows no unpublished changes; any corrected Data Safety or reunion-first metadata must be prepared again and reviewed field by field.
 - Canonical screenshots have not been uploaded to either store.
 - The Play listing AI declaration is not selected.
 - Current production analytics, diagnostics, processor contracts, deletion/retention, and cross-company use remain unproven.
-- Store metadata correction without a new binary may be possible, but the console-specific version container requirements must be confirmed.
+- Store metadata correction is separate from the now-confirmed 3.1.1 binary requirement.
 - Debug/unsigned native builds do not establish release-artifact provenance.
 - The complete synthetic backend collection is green; no unresolved engineering test failure remains in this packet.
 
@@ -353,7 +356,8 @@ Future action after sign-in and blockers clear:
 ### Engineering
 
 - [x] Resolve or intentionally update all 15 failing HTTP integration assertions; complete synthetic result is 747 passed, 8 intentional skips, and 0 failures.
-- [ ] Confirm whether a new binary is required. If yes, increment build identifiers, create signed store artifacts, record hashes/provenance, and run authorized device tests.
+- [x] Confirm a new binary is required and increment source identifiers to Android 19 / iOS 66.
+- [ ] Create signed 3.1.1 store artifacts, record hashes/provenance, and run authorized device tests.
 - [ ] If a new binary is required, perform Android and iOS physical-device smoke tests for sign-in, reunion creation, private invitation/RSVP, deletion, push permission behavior, and restore purchases without enabling checkout.
 - [ ] Verify RevenueCat/Stripe products and fail-closed pricing behavior without enabling subscription checkout.
 

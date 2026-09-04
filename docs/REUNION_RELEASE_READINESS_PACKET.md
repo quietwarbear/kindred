@@ -98,10 +98,11 @@ Completed in the subsequent engineering-gate pass:
 - The canonical 15-image manifest passed hash, dimension, PNG, and no-alpha checks. A fresh disposable scripted render generated and visually validated all 15 frames without generative AI or external provider traffic.
 - Android Capacitor sync and debug compilation passed in a disposable copy. iOS Capacitor sync, CocoaPods installation, and an unsigned generic-device build also passed in disposable locations.
 - All 15 canonical screenshots passed hash, dimension, RGB/no-alpha, sensitive-marker, and visual-clipping validation.
+- A September 4 published-binary audit downloaded the public Play 3.1.0 (18) bundle read-only and inspected its bundled source map. It does not contain the current passwordless Apple deletion treatment, retired bulk-sync settings, or privacy-safe gathering consumers. A 3.1.1 candidate was therefore prepared as Android code 19 and iOS build 66; all 59 frontend tests, production build/prerender, Capacitor sync, Android compilation, and unsigned iOS compilation passed in disposable locations.
 
 Still not completed:
 
-- Signed Android AAB or iOS archive provenance and authorized physical-device smoke tests if a new binary is required.
+- Signed Android 3.1.1 AAB and iOS 3.1.1 archive provenance plus authorized physical-device smoke tests.
 - Live production/provider-console verification and owner/legal privacy confirmation.
 
 ## Store and release boundary
@@ -139,4 +140,4 @@ Once the store release is privacy-complete and approved, the next growth work sh
 **Ready for continued repository review and store-draft preparation: yes.**  
 **Ready for store submission or publication: no.**
 
-The next authorized action is to resolve the owner/legal questionnaire, verify live provider facts through authorized read-only evidence, and prepare both store drafts with the canonical five-frame assets. If the stores require a new binary, signed artifact provenance and device testing must be completed first. Submission remains a separate final approval.
+The next authorized action is to resolve the owner/legal questionnaire, verify live provider facts through authorized read-only evidence, diagnose the failing Railway/Xcode Cloud production checks with authenticated logs, create signed 3.1.1 artifacts, and prepare both store drafts with the canonical five-frame assets. Signed provenance and device testing must be completed before approval. Submission remains a separate final approval.
