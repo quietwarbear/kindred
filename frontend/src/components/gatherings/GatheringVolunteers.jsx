@@ -44,20 +44,25 @@ export const GatheringVolunteers = ({ event, token, canCreate, onUpdate }) => {
         <p className="text-lg font-semibold text-foreground">Volunteer sign-ups</p>
       </div>
       <div className="mt-4 space-y-3">
-        {(event.volunteer_slots || []).map((slot) => (
+        {(event.volunteer_slots || []).map((slot) => {
+          const assignedNames = slot.assigned_members || [];
+          const filledCount = slot.filled_count ?? assignedNames.length;
+          const openings = slot.openings ?? Math.max(0, slot.needed_count - filledCount);
+          return (
           <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3" data-testid={`gatherings-volunteer-slot-${slot.id}`} key={slot.id}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">{slot.title}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{slot.assigned_members.length}/{slot.needed_count} filled</p>
+                <p className="mt-1 text-xs text-muted-foreground">{filledCount}/{slot.needed_count} filled</p>
               </div>
-              <Button className="rounded-full" data-testid={`gatherings-volunteer-join-${slot.id}`} onClick={() => handleSignup(slot.id)} size="sm" type="button" variant="secondary">
-                Join
+              <Button className="rounded-full" data-testid={`gatherings-volunteer-join-${slot.id}`} disabled={slot.is_mine || openings === 0} onClick={() => handleSignup(slot.id)} size="sm" type="button" variant="secondary">
+                {slot.is_mine ? "Joined" : openings === 0 ? "Filled" : "Join"}
               </Button>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">{slot.assigned_members.join(", ") || "No one assigned yet."}</p>
+            {assignedNames.length ? <p className="mt-2 text-sm text-muted-foreground">{assignedNames.join(", ")}</p> : null}
           </div>
-        ))}
+          );
+        })}
       </div>
       {canCreate && (
         <form className="mt-4 space-y-3" onSubmit={handleAddSlot}>

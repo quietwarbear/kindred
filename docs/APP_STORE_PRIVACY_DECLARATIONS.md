@@ -46,7 +46,7 @@ Answer **Yes, data is collected**.
 
 - **Does the app collect or share any of the required user data types?** Yes.
 - **Is all user data encrypted in transit?** Select Yes only after confirming every production endpoint and vendor path uses HTTPS/TLS. The intended first-party and vendor URLs are HTTPS.
-- **Do you provide a way for users to request deletion?** Yes: in-app Settings account deletion and `support@ubuntu-village.org`. Disclose the ownership-transfer limitation and community-content retention behavior accurately.
+- **Do you provide a way for users to request deletion?** Yes: in-app Settings account deletion and `support@heykindred.org`. Disclose the ownership-transfer limitation and community-content retention behavior accurately.
 - **Is data collection required?** Account identity and core community content are required for corresponding features. Profile phone/image, push, analytics where consent law applies, AI actions, voice notes, translations, Google/Apple sign-in, cross-product SSO, and purchases are optional or feature-dependent.
 
 ### Data types to declare
@@ -74,7 +74,7 @@ Answer **Yes, data is collected**.
 - Public support: `https://www.heykindred.org/support`
 - Public website: `https://www.heykindred.org`
 - In-app deletion: Settings → Delete Account
-- External deletion request/contact: `support@ubuntu-village.org`
+- External deletion request/contact: `support@heykindred.org`
 - Account deletion behavior: immediate first-party deletion for the records enumerated in `backend/routes/auth.py`; owners with other members must transfer ownership; some community, subscription, vendor, log, backup, and legal-retention records require confirmation and may persist.
 
 ## Before submitting either store form

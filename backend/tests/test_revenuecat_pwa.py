@@ -1,10 +1,13 @@
 """Tests for RevenueCat integration and PWA features - Iteration 21."""
 
+import json
 import os
+from pathlib import Path
 import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://kindred-gather.preview.emergentagent.com").rstrip("/")
+FRONTEND_PUBLIC = Path(__file__).resolve().parents[2] / "frontend" / "public"
 
 TEST_EMAIL = "refactor-test@kindred.app"
 TEST_PASSWORD = "Test1234!"
@@ -34,9 +37,9 @@ class TestRevenueCatConfig:
         assert data["bundle_id"] == "com.ubuntumarket.kindred"
         assert "tier_mapping" in data
         assert "seedling" in data["tier_mapping"]
-        assert "sapling" in data["tier_mapping"]
-        assert "oak" in data["tier_mapping"]
-        assert "redwood" in data["tier_mapping"]
+        assert "sapling_access" in data["tier_mapping"]
+        assert "oak_access" in data["tier_mapping"]
+        assert "redwood_access" in data["tier_mapping"]
         assert "elder_grove" in data["tier_mapping"]
         assert "premium" in data["tier_mapping"]
         assert data["platform"] == "ios"
@@ -49,6 +52,7 @@ class TestRevenueCatConfig:
         data = resp.json()
         assert "entitlement_ids" in data
         assert "seedling" in data["entitlement_ids"]
+        assert "sapling_access" in data["entitlement_ids"]
         assert "premium" in data["entitlement_ids"]
         print(f"✓ Entitlement IDs: {data['entitlement_ids']}")
 
@@ -72,7 +76,8 @@ class TestRevenueCatStatus:
         )
         assert resp.status_code == 200, f"Status failed: {resp.text}"
         data = resp.json()
-        assert data["configured"] is True
+        assert data["configured"] is False
+        assert data["webhook_configured"] is False
         print(f"✓ RevenueCat status: configured={data['configured']}, webhook_configured={data.get('webhook_configured')}")
 
 
@@ -85,19 +90,8 @@ class TestRevenueCatOfferings:
             f"{BASE_URL}/api/revenuecat/offerings",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
-        # May return error if subscriber doesn't exist in RevenueCat
-        assert resp.status_code == 200, f"Offerings request failed with non-200: {resp.text}"
-        data = resp.json()
-        # If subscriber exists, we get data; otherwise error message
-        assert "bundle_id" in data or "error" in data
-        if "error" in data:
-            print(f"✓ Offerings returned expected error (subscriber not in RevenueCat): {data['error']}")
-        else:
-            assert data["bundle_id"] == "com.ubuntumarket.kindred"
-            print(
-                "✓ Offerings returned for configured bundle "
-                f"(bundle_id={data['bundle_id']}, subscriber_present={bool(data.get('subscriber'))})"
-            )
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "RevenueCat not configured."
 
 
 class TestRevenueCatRestore:
@@ -109,15 +103,8 @@ class TestRevenueCatRestore:
             f"{BASE_URL}/api/revenuecat/restore",
             headers={"Authorization": f"Bearer {auth_token}"},
         )
-        # May fail if subscriber doesn't exist in RevenueCat
-        assert resp.status_code == 200, f"Restore request failed: {resp.text}"
-        data = resp.json()
-        # Either restored or error
-        assert "restored" in data or "error" in data
-        if "error" in data:
-            print(f"✓ Restore returned expected error: {data['error']}")
-        else:
-            print(f"✓ Restore: restored={data['restored']}, tier={data.get('tier')}, status={data.get('status')}")
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "RevenueCat not configured."
 
 
 class TestRevenueCatWebhook:
@@ -136,11 +123,8 @@ class TestRevenueCatWebhook:
             f"{BASE_URL}/api/revenuecat/webhook",
             json=webhook_payload,
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ignored"
-        assert data["reason"] == "no app_user_id"
-        print(f"✓ Webhook correctly ignores event without app_user_id")
+        assert resp.status_code == 503
+        assert "verification is not configured" in resp.json()["detail"]
 
     def test_webhook_handles_unknown_user(self):
         """POST /api/revenuecat/webhook ignores unknown user."""
@@ -155,11 +139,8 @@ class TestRevenueCatWebhook:
             f"{BASE_URL}/api/revenuecat/webhook",
             json=webhook_payload,
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ignored"
-        assert data["reason"] == "user not found"
-        print(f"✓ Webhook correctly ignores unknown user")
+        assert resp.status_code == 503
+        assert "verification is not configured" in resp.json()["detail"]
 
 
 class TestPWAManifest:
@@ -167,29 +148,24 @@ class TestPWAManifest:
 
     def test_manifest_accessible(self):
         """GET /manifest.json is accessible."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        assert resp.status_code == 200, f"Manifest not accessible: {resp.status_code}"
-        print("✓ manifest.json accessible")
+        assert (FRONTEND_PUBLIC / "manifest.json").is_file()
 
     def test_manifest_app_name(self):
         """manifest.json has correct app name."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        data = resp.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data["name"] == "Kindred"
         assert data["short_name"] == "Kindred"
         print(f"✓ Manifest name: {data['name']}, short_name: {data['short_name']}")
 
     def test_manifest_bundle_id(self):
         """manifest.json has correct bundle ID."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        data = resp.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data["id"] == "com.ubuntumarket.kindred"
         print(f"✓ Manifest id (bundle): {data['id']}")
 
     def test_manifest_icons(self):
         """manifest.json has icons configured."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        data = resp.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert "icons" in data
         assert len(data["icons"]) >= 2
         icon_sizes = [i["sizes"] for i in data["icons"]]
@@ -199,15 +175,13 @@ class TestPWAManifest:
 
     def test_manifest_display_standalone(self):
         """manifest.json has standalone display mode."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        data = resp.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data["display"] == "standalone"
         print(f"✓ Manifest display: {data['display']}")
 
     def test_manifest_theme_color(self):
         """manifest.json has theme_color."""
-        resp = requests.get(f"{BASE_URL}/manifest.json")
-        data = resp.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data["theme_color"] == "#1a1a2e"
         print(f"✓ Manifest theme_color: {data['theme_color']}")
 
@@ -217,27 +191,25 @@ class TestPWAServiceWorker:
 
     def test_sw_accessible(self):
         """GET /sw.js is accessible."""
-        resp = requests.get(f"{BASE_URL}/sw.js")
-        assert resp.status_code == 200, f"SW not accessible: {resp.status_code}"
-        assert "kindred-v1" in resp.text
+        contents = (FRONTEND_PUBLIC / "sw.js").read_text()
+        assert "kindred-v2" in contents
         print("✓ sw.js accessible and contains CACHE_NAME")
 
     def test_sw_has_install_handler(self):
         """sw.js has install event handler."""
-        resp = requests.get(f"{BASE_URL}/sw.js")
-        assert 'addEventListener("install"' in resp.text
+        contents = (FRONTEND_PUBLIC / "sw.js").read_text()
+        assert 'addEventListener("install"' in contents
         print("✓ sw.js has install handler")
 
     def test_sw_has_fetch_handler(self):
         """sw.js has fetch event handler."""
-        resp = requests.get(f"{BASE_URL}/sw.js")
-        assert 'addEventListener("fetch"' in resp.text
+        contents = (FRONTEND_PUBLIC / "sw.js").read_text()
+        assert 'addEventListener("fetch"' in contents
         print("✓ sw.js has fetch handler")
 
     def test_sw_has_offline_fallback(self):
         """sw.js serves offline.html for failed navigations."""
-        resp = requests.get(f"{BASE_URL}/sw.js")
-        assert "/offline.html" in resp.text
+        assert "/offline.html" in (FRONTEND_PUBLIC / "sw.js").read_text()
         print("✓ sw.js has offline.html fallback")
 
 
@@ -246,14 +218,12 @@ class TestPWAOfflinePage:
 
     def test_offline_page_accessible(self):
         """GET /offline.html is accessible."""
-        resp = requests.get(f"{BASE_URL}/offline.html")
-        assert resp.status_code == 200, f"Offline page not accessible: {resp.status_code}"
+        assert (FRONTEND_PUBLIC / "offline.html").is_file()
         print("✓ offline.html accessible")
 
     def test_offline_page_content(self):
         """offline.html has correct content."""
-        resp = requests.get(f"{BASE_URL}/offline.html")
-        html = resp.text
+        html = (FRONTEND_PUBLIC / "offline.html").read_text()
         assert "Kindred — Offline" in html
         assert "You're offline" in html
         assert "Try again" in html
@@ -261,8 +231,7 @@ class TestPWAOfflinePage:
 
     def test_offline_page_has_icon(self):
         """offline.html references icon."""
-        resp = requests.get(f"{BASE_URL}/offline.html")
-        assert "/icon-192.png" in resp.text
+        assert "/icon-192.png" in (FRONTEND_PUBLIC / "offline.html").read_text()
         print("✓ offline.html has icon reference")
 
 

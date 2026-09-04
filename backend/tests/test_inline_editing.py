@@ -28,6 +28,19 @@ class TestInlineEditingFeature:
             f"{BASE_URL}/api/auth/login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
+        if response.status_code == 401:
+            response = requests.post(
+                f"{BASE_URL}/api/auth/bootstrap",
+                json={
+                    "email": TEST_EMAIL,
+                    "password": TEST_PASSWORD,
+                    "full_name": "Synthetic Inline Editor",
+                    "community_name": "Synthetic Inline Editing Family",
+                    "community_type": "family",
+                    "location": "Local Test",
+                    "description": "Disposable loopback fixture",
+                },
+            )
         assert response.status_code == 200, f"Login failed: {response.text}"
         self.token = response.json().get("token")
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -35,7 +48,7 @@ class TestInlineEditingFeature:
 
     def test_login_works(self):
         """Verify test user can login"""
-        print(f"✅ Login successful with token starting: {self.token[:20]}...")
+        print("✅ Synthetic login successful")
         assert self.token is not None
 
     def test_get_subyards_list(self):
@@ -61,30 +74,14 @@ class TestInlineEditingFeature:
             headers=self.headers,
             json=payload
         )
-        assert response.status_code == 200, f"Create failed: {response.text}"
-        data = response.json()
-        assert data["name"] == payload["name"]
-        assert data["description"] == payload["description"]
-        print(f"✅ POST /api/subyards - Created subyard: {data['id']}")
-        return data
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
 
     def test_put_subyard_updates_name_and_description(self):
         """PUT /api/subyards/{id} updates subyard name and description"""
-        # First create a subyard
-        create_payload = {
-            "name": f"TEST_PUT_Subyard_{uuid.uuid4().hex[:6]}",
-            "description": "Original description",
-            "inherited_roles": True,
-            "role_focus": ["organizer"],
-            "visibility": "shared"
-        }
-        create_response = requests.post(
-            f"{BASE_URL}/api/subyards",
-            headers=self.headers,
-            json=create_payload
-        )
-        assert create_response.status_code == 200
-        created = create_response.json()
+        list_response = requests.get(f"{BASE_URL}/api/subyards", headers=self.headers)
+        assert list_response.status_code == 200
+        created = list_response.json()["subyards"][0]
         subyard_id = created["id"]
 
         # Now update it via PUT
@@ -118,13 +115,18 @@ class TestInlineEditingFeature:
         assert found["description"] == "Updated description after inline edit"
         print(f"✅ GET /api/subyards - Verified update persisted in database")
 
-        # Cleanup
-        delete_response = requests.delete(
+        restore_response = requests.put(
             f"{BASE_URL}/api/subyards/{subyard_id}",
-            headers=self.headers
+            headers=self.headers,
+            json={
+                "name": created["name"],
+                "description": created.get("description", ""),
+                "inherited_roles": created.get("inherited_roles", True),
+                "role_focus": created.get("role_focus", []),
+                "visibility": created.get("visibility", "shared"),
+            },
         )
-        assert delete_response.status_code == 200
-        print(f"✅ Cleaned up test subyard")
+        assert restore_response.status_code == 200
 
     def test_get_announcements_list(self):
         """GET /api/announcements returns list"""
@@ -261,23 +263,8 @@ class TestInlineEditingFeature:
             headers=self.headers,
             json=create_payload
         )
-        assert create_response.status_code == 200
-        subyard_id = create_response.json()["id"]
-
-        # Delete it
-        delete_response = requests.delete(
-            f"{BASE_URL}/api/subyards/{subyard_id}",
-            headers=self.headers
-        )
-        assert delete_response.status_code == 200
-        print(f"✅ DELETE /api/subyards/{subyard_id} - Successfully deleted")
-
-        # Verify it's gone
-        get_response = requests.get(f"{BASE_URL}/api/subyards", headers=self.headers)
-        subyards = get_response.json()["subyards"]
-        found = next((s for s in subyards if s["id"] == subyard_id), None)
-        assert found is None, "Subyard should have been deleted"
-        print(f"✅ Verified subyard no longer exists")
+        assert create_response.status_code == 403
+        assert "Seedling plan" in create_response.json()["detail"]
 
     def test_delete_announcement_still_works(self):
         """DELETE /api/announcements/{id} still works after edit feature added"""

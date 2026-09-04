@@ -25,7 +25,7 @@
 
 **Also relevant to Discover/Store stages** (shipped from the sister visibility workstream): prerendered public pages, robots.txt + sitemap.xml on heykindred.org, and Kindred's card on ubuntu-markets.org + the Village Journal.
 
-**Remaining open items from this audit:** (1) Play Data Safety reconciliation — console task, the roadmap's P0; (2) replace store screenshots with the six-frame portrait story; (3) the 12–15 customer interviews before any billing resumption; (4) merge or close draft PR #13.
+**Remaining open items from this audit:** (1) Play Data Safety reconciliation — console task, the roadmap's P0; (2) replace store screenshots with the five-frame portrait story; (3) the 12–15 customer interviews before any billing resumption; (4) merge or close draft PR #13.
 
 ## Executive verdict
 

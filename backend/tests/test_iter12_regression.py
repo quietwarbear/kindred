@@ -134,13 +134,8 @@ class TestSubyardsCRUD:
                 "visibility": "shared"
             }
         )
-        assert response.status_code == 200, f"Create subyard failed: {response.text}"
-        data = response.json()
-        assert data["name"] == f"{TEST_PREFIX}Test Subyard"
-        assert "role_focus" in data
-        # Store for later tests
-        test_community["subyard_id"] = data["id"]
-        return data["id"]
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
     
     def test_list_subyards(self, api_client, test_community):
         """GET /api/subyards returns subyards list"""
@@ -370,11 +365,8 @@ class TestBudgetPlansCRUD:
                 "notes": "Test budget for iteration 12"
             }
         )
-        assert response.status_code == 200, f"Create budget failed: {response.text}"
-        data = response.json()
-        assert data["title"] == f"{TEST_PREFIX}Test Budget"
-        test_community["budget_id"] = data["id"]
-        return data["id"]
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
     
     def test_list_budgets(self, api_client, test_community):
         """GET /api/budget-plans returns budgets list"""
@@ -383,7 +375,7 @@ class TestBudgetPlansCRUD:
             headers={"Authorization": f"Bearer {test_community['token']}"}
         )
         assert response.status_code == 200
-        assert "budget_plans" in response.json()
+        assert "budgets" in response.json()
     
     def test_update_budget(self, api_client, test_community):
         """PUT /api/budget-plans/{id} updates budget"""
@@ -458,11 +450,8 @@ class TestTravelPlansCRUD:
                 "estimated_cost": 150.0,
             }
         )
-        assert response.status_code == 200, f"Create travel plan failed: {response.text}"
-        data = response.json()
-        assert data["traveler_name"] == f"{TEST_PREFIX}Test Traveler"
-        test_community["travel_plan_id"] = data["id"]
-        return data["id"]
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
     
     def test_list_travel_plans(self, api_client, test_community):
         """GET /api/travel-plans returns travel plans list"""

@@ -125,7 +125,7 @@ Terms of Service: https://www.heykindred.org/terms
 - Marketing URL: https://www.heykindred.org
 - Terms: https://www.heykindred.org/terms
 
-The support email is a verified existing fallback but is not on the canonical `heykindred.org` domain. Do not invent or publish a replacement mailbox until the owner verifies that it exists and receives mail.
+The branded support mailbox is verified as created and monitored. Store publication remains separately approval-gated.
 
 ### Release notes
 
@@ -133,14 +133,13 @@ A clearer reunion-first start, private multiday planning, no-account guest RSVP,
 
 ## Screenshot captions and order
 
-Use the same six-frame narrative on Apple and Google:
+Use the same five-frame narrative on Apple and Google:
 
 1. **Start a family reunion** — Name the gathering, dates, and place.
 2. **Build a multiday itinerary** — Keep every activity and update in one plan.
-3. **Share one private invitation** — Invite family without posting details publicly.
-4. **RSVP without an account** — Relatives can answer from a private web link.
-5. **See what still needs attention** — Track responses, gaps, and planning progress.
-6. **Keep the stories** — Preserve photos, voices, and memories after the reunion.
+3. **Share one private RSVP** — Relatives can answer from a private link without creating an account.
+4. **See what needs attention** — Track responses, gaps, and planning progress.
+5. **Keep the stories** — Preserve photos, voices, and memories after the reunion.
 
 The reproducible source campaign, exact dimensions, alt text, and synthetic-data statement are in `frontend/store-assets/README.md`.
 
@@ -156,5 +155,5 @@ The reproducible source campaign, exact dimensions, alt text, and synthetic-data
 
 - Apple product name, subtitle, description, keywords, categories, release notes, reviewer instructions, URLs, screenshot order, screenshots, and App Privacy answers.
 - Google app name, short/full descriptions, category, release notes, contact/support URLs, screenshot order, screenshots, and Data Safety answers.
-- Any branded support-mailbox replacement.
+- Any support-identity console change.
 - Any price, product, subscription, or purchase-console change.

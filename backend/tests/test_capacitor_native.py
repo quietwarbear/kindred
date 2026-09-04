@@ -4,11 +4,14 @@ Tests: Push token storage, RevenueCat config/offerings/restore endpoints,
 and ensures all previous features still work (regression).
 """
 
+import json
 import os
+from pathlib import Path
 import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+FRONTEND_PUBLIC = Path(__file__).resolve().parents[2] / "frontend" / "public"
 TEST_EMAIL = "refactor-test@kindred.app"
 TEST_PASSWORD = "Test1234!"
 
@@ -77,7 +80,7 @@ class TestRevenueCatConfig:
         assert "entitlement_ids" in data
         assert isinstance(data["entitlement_ids"], list)
         # Should have subscription tiers
-        expected_entitlements = ["seedling", "sapling", "oak", "redwood", "elder_grove", "premium"]
+        expected_entitlements = ["seedling", "sapling_access", "oak_access", "redwood_access", "elder_grove", "premium"]
         for ent in expected_entitlements:
             assert ent in data["entitlement_ids"]
 
@@ -89,7 +92,7 @@ class TestRevenueCatConfig:
         assert "tier_mapping" in data
         tier_mapping = data["tier_mapping"]
         assert tier_mapping.get("seedling") == "seedling"
-        assert tier_mapping.get("oak") == "oak"
+        assert tier_mapping.get("oak_access") == "oak"
         assert tier_mapping.get("premium") == "oak"  # premium maps to oak
 
     def test_revenuecat_config_returns_webhook_url(self):
@@ -127,11 +130,8 @@ class TestRevenueCatOfferings:
             f"{BASE_URL}/api/revenuecat/offerings",
             headers=self.headers,
         )
-        # Should return 200 (may have error in response if RevenueCat subscriber not found)
-        assert response.status_code == 200
-        data = response.json()
-        # Should have bundle_id even if subscriber not found
-        assert "bundle_id" in data or "error" in data or "subscriber" in data
+        assert response.status_code == 503
+        assert response.json()["detail"] == "RevenueCat not configured."
 
     def test_revenuecat_offerings_requires_auth(self):
         """GET /api/revenuecat/offerings requires authentication"""
@@ -159,14 +159,8 @@ class TestRevenueCatRestore:
             f"{BASE_URL}/api/revenuecat/restore",
             headers=self.headers,
         )
-        assert response.status_code == 200
-        data = response.json()
-        # Should return restored, tier, status, entitlements fields
-        assert "restored" in data or "error" in data
-        if "restored" in data:
-            assert "tier" in data
-            assert "status" in data
-            assert "entitlements" in data
+        assert response.status_code == 503
+        assert response.json()["detail"] == "RevenueCat not configured."
 
     def test_revenuecat_restore_requires_auth(self):
         """POST /api/revenuecat/restore requires authentication"""
@@ -179,21 +173,16 @@ class TestPWAManifest:
 
     def test_manifest_accessible(self):
         """GET /manifest.json is accessible"""
-        response = requests.get(f"{BASE_URL}/manifest.json")
-        assert response.status_code == 200
+        assert (FRONTEND_PUBLIC / "manifest.json").is_file()
 
     def test_manifest_has_correct_bundle_id(self):
         """manifest.json has correct bundle ID"""
-        response = requests.get(f"{BASE_URL}/manifest.json")
-        assert response.status_code == 200
-        data = response.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data.get("id") == "com.ubuntumarket.kindred"
 
     def test_manifest_has_correct_name(self):
         """manifest.json has correct name"""
-        response = requests.get(f"{BASE_URL}/manifest.json")
-        assert response.status_code == 200
-        data = response.json()
+        data = json.loads((FRONTEND_PUBLIC / "manifest.json").read_text())
         assert data.get("name") == "Kindred"
         assert data.get("short_name") == "Kindred"
 

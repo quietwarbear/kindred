@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-30T18:32:05.596Z",
+  "generated_at": "2026-08-10T04:35:57.341Z",
   "source": "Real production frontend build with synthetic disposable in-process API responses.",
   "synthetic_data": true,
   "published": false,
@@ -12,7 +12,7 @@
       "title": "Start a family reunion",
       "subtitle": "Name the gathering, dates, and place.",
       "alt": "Kindred reunion setup with synthetic reunion name, dates, organizer, and location.",
-      "sha256": "ae4507aab7768aa3f53d435fd8c37fab82d55508608a9fa4e4823482f6f983a4"
+      "sha256": "f3c82c0b1dd4353c6e5fe78f93cfdc7d3e73e0ace839a179f631b278266d889f"
     },
     {
       "platform": "apple-iphone-6.9",
@@ -22,47 +22,37 @@
       "title": "Build a multiday itinerary",
       "subtitle": "Keep every activity and update in one plan.",
       "alt": "Kindred multiday reunion itinerary with synthetic welcome, workshop, outing, dinner, and brunch activities.",
-      "sha256": "bd0ed9f9c25a9bc8372e30658a4eb7098ee90b44b1109b39a9e260ef78f7acc8"
+      "sha256": "6749fba7526a9f3ada632a575aa256debabf66d42097de7bff3f51688f1e0380"
     },
     {
       "platform": "apple-iphone-6.9",
-      "file": "apple/iphone-6.9/03-private-invitation.png",
+      "file": "apple/iphone-6.9/03-private-rsvp.png",
       "width": 1320,
       "height": 2868,
-      "title": "Share one private invitation",
-      "subtitle": "Invite family without posting details publicly.",
-      "alt": "Kindred private invitation preview for a synthetic family reunion.",
-      "sha256": "f25e1bc885f4abba86bb6367854f4e64b828fff568fd541d1b3340edc2fd1912"
-    },
-    {
-      "platform": "apple-iphone-6.9",
-      "file": "apple/iphone-6.9/04-no-account-rsvp.png",
-      "width": 1320,
-      "height": 2868,
-      "title": "RSVP without an account",
-      "subtitle": "Relatives can answer from a private web link.",
+      "title": "Share one private RSVP",
+      "subtitle": "Relatives can answer without creating an account.",
       "alt": "Kindred no-account RSVP choices for a synthetic multiday family reunion.",
-      "sha256": "908f4b6b743a140256dc20fc572dc3fe7131a72df38a216f0ea1f8784723b4c4"
+      "sha256": "41e549e91972d5f6e1982cdf7060ed5098021275dd2293efdd8ebf857189d568"
     },
     {
       "platform": "apple-iphone-6.9",
-      "file": "apple/iphone-6.9/05-planning-progress.png",
+      "file": "apple/iphone-6.9/04-planning-progress.png",
       "width": 1320,
       "height": 2868,
-      "title": "See what still needs attention",
+      "title": "See what needs attention",
       "subtitle": "Track responses, gaps, and planning progress.",
       "alt": "Kindred organizer progress view with synthetic RSVP totals and unanswered invitations.",
-      "sha256": "6bc83bb5b1d751ae921813f3377f4148213415416c469f66627d6627d1b2b1f9"
+      "sha256": "6e8e0b9ee9feb4dcb1477f09bedc49b44ca21bd6c0ecf29b4281f2ed12a72b7b"
     },
     {
       "platform": "apple-iphone-6.9",
-      "file": "apple/iphone-6.9/06-stories-memories.png",
+      "file": "apple/iphone-6.9/05-stories-memories.png",
       "width": 1320,
       "height": 2868,
       "title": "Keep the stories",
       "subtitle": "Preserve photos, voices, and memories after the reunion.",
       "alt": "Kindred family story prompt containing a clearly synthetic reunion memory.",
-      "sha256": "3f3fa58bb039f3fa3ead23c4bee25875a4cb87e9b1901445dbaae7ba137d1000"
+      "sha256": "1b12dc2c4c3d60350f8ec2db403c623ce95c4f85e8aee561701aa429b2714f23"
     },
     {
       "platform": "apple-ipad-13",
@@ -72,7 +62,7 @@
       "title": "Start a family reunion",
       "subtitle": "Name the gathering, dates, and place.",
       "alt": "Kindred reunion setup with synthetic reunion name, dates, organizer, and location.",
-      "sha256": "7a0496411dcbbf83fb6f75edb7d8f3e7fc439ded6bc6b4a0f083d768c69ab247"
+      "sha256": "69f74306aaec5f2c571d84892570293d13adc2b31ff352c4cd5a717d198cde41"
     },
     {
       "platform": "apple-ipad-13",
@@ -82,47 +72,37 @@
       "title": "Build a multiday itinerary",
       "subtitle": "Keep every activity and update in one plan.",
       "alt": "Kindred multiday reunion itinerary with synthetic welcome, workshop, outing, dinner, and brunch activities.",
-      "sha256": "d52818e0f81528386b9ca8b58eb8bbb8be913b56bb2c0d57c9a397867aec8fe0"
+      "sha256": "034ff3c3358efc061e868dc82d86380b6112084fdb905a130a87b7255f7c8d61"
     },
     {
       "platform": "apple-ipad-13",
-      "file": "apple/ipad-13/03-private-invitation.png",
+      "file": "apple/ipad-13/03-private-rsvp.png",
       "width": 2064,
       "height": 2752,
-      "title": "Share one private invitation",
-      "subtitle": "Invite family without posting details publicly.",
-      "alt": "Kindred private invitation preview for a synthetic family reunion.",
-      "sha256": "941c178f7d5091248bb4e6bcd308ecca18053e166d3312ce229122f0194b2b17"
-    },
-    {
-      "platform": "apple-ipad-13",
-      "file": "apple/ipad-13/04-no-account-rsvp.png",
-      "width": 2064,
-      "height": 2752,
-      "title": "RSVP without an account",
-      "subtitle": "Relatives can answer from a private web link.",
+      "title": "Share one private RSVP",
+      "subtitle": "Relatives can answer without creating an account.",
       "alt": "Kindred no-account RSVP choices for a synthetic multiday family reunion.",
-      "sha256": "8bd0c518347b62197dcb13129eb2f97c858ff72cdf893b862277ebe8a3bd0098"
+      "sha256": "8811e268f456e4ebd893b4174a52730b324bc036a36b298ebee262023b23d6b0"
     },
     {
       "platform": "apple-ipad-13",
-      "file": "apple/ipad-13/05-planning-progress.png",
+      "file": "apple/ipad-13/04-planning-progress.png",
       "width": 2064,
       "height": 2752,
-      "title": "See what still needs attention",
+      "title": "See what needs attention",
       "subtitle": "Track responses, gaps, and planning progress.",
       "alt": "Kindred organizer progress view with synthetic RSVP totals and unanswered invitations.",
-      "sha256": "8d6442dfa033511aa13bd6826b13fb1595e9be0039acba3e64f6ad4f78c3b6eb"
+      "sha256": "ecebfda3806edf61b0c57fc1dbced6351c7982242cad4ab6e4479f2f6fab897d"
     },
     {
       "platform": "apple-ipad-13",
-      "file": "apple/ipad-13/06-stories-memories.png",
+      "file": "apple/ipad-13/05-stories-memories.png",
       "width": 2064,
       "height": 2752,
       "title": "Keep the stories",
       "subtitle": "Preserve photos, voices, and memories after the reunion.",
       "alt": "Kindred family story prompt containing a clearly synthetic reunion memory.",
-      "sha256": "4365bc349c34f9f21241f49daeba384d0eebff8b4a7459433be3d5ca68595520"
+      "sha256": "68db2d623ec5bce49812b53d33b7486e61905a42aac72fc570ef508440230700"
     },
     {
       "platform": "google-phone",
@@ -132,7 +112,7 @@
       "title": "Start a family reunion",
       "subtitle": "Name the gathering, dates, and place.",
       "alt": "Kindred reunion setup with synthetic reunion name, dates, organizer, and location.",
-      "sha256": "5b33e0be63be5b3179e7b7de8b9255c4dee496675f7149a87cb33c49004b1c0f"
+      "sha256": "7d76f6ca0ee8b98cc46338016a498d76daabd2af02ab187a85264259e68cd6a4"
     },
     {
       "platform": "google-phone",
@@ -142,47 +122,37 @@
       "title": "Build a multiday itinerary",
       "subtitle": "Keep every activity and update in one plan.",
       "alt": "Kindred multiday reunion itinerary with synthetic welcome, workshop, outing, dinner, and brunch activities.",
-      "sha256": "25a6c8f4e880dfc87d2165e88624ad5f12d703a1ff6f4144a2d8a42a37aea383"
+      "sha256": "fba9c2a49060afcb04304fa161cde564e4c0c186662232385d154cf46059f6df"
     },
     {
       "platform": "google-phone",
-      "file": "google/phone/03-private-invitation.png",
+      "file": "google/phone/03-private-rsvp.png",
       "width": 1080,
       "height": 1920,
-      "title": "Share one private invitation",
-      "subtitle": "Invite family without posting details publicly.",
-      "alt": "Kindred private invitation preview for a synthetic family reunion.",
-      "sha256": "5da323b06c61c6842900401adeb67f68fc34b3f69687f0896bbeeb2991e80e33"
-    },
-    {
-      "platform": "google-phone",
-      "file": "google/phone/04-no-account-rsvp.png",
-      "width": 1080,
-      "height": 1920,
-      "title": "RSVP without an account",
-      "subtitle": "Relatives can answer from a private web link.",
+      "title": "Share one private RSVP",
+      "subtitle": "Relatives can answer without creating an account.",
       "alt": "Kindred no-account RSVP choices for a synthetic multiday family reunion.",
-      "sha256": "c8d70e66b33d15f34942c9aa49460d8584a8ad366a9b1d374f83225b7ed988d0"
+      "sha256": "a45e7530033c343e10a16144dd7eaffdb17e3ec5700e5841e483d90953a37c00"
     },
     {
       "platform": "google-phone",
-      "file": "google/phone/05-planning-progress.png",
+      "file": "google/phone/04-planning-progress.png",
       "width": 1080,
       "height": 1920,
-      "title": "See what still needs attention",
+      "title": "See what needs attention",
       "subtitle": "Track responses, gaps, and planning progress.",
       "alt": "Kindred organizer progress view with synthetic RSVP totals and unanswered invitations.",
-      "sha256": "f845a117251b5d391261a3f46a7834906910eaf474a745fef1dd9c0c786716f5"
+      "sha256": "0c520f9fc55c7d71066968a4c3df94cc94dad4b58ed07481f19d55286e8f6187"
     },
     {
       "platform": "google-phone",
-      "file": "google/phone/06-stories-memories.png",
+      "file": "google/phone/05-stories-memories.png",
       "width": 1080,
       "height": 1920,
       "title": "Keep the stories",
       "subtitle": "Preserve photos, voices, and memories after the reunion.",
       "alt": "Kindred family story prompt containing a clearly synthetic reunion memory.",
-      "sha256": "fcc810379652de90ec73c2885eeda372bef2cb870fc4e3f9661587f499f6a6cd"
+      "sha256": "f650985cf9c03e11dc90f26769976c2ba83c7daff13fe754278f79c323ce2807"
     }
   ]
 }

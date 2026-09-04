@@ -1,7 +1,7 @@
 """Pydantic models for request / response validation."""
 
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
 
 
 class CommunityBootstrapRequest(BaseModel):
@@ -468,6 +468,7 @@ class PaymentCheckoutRequest(BaseModel):
 class DashboardOverview(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     community: dict[str, Any] = Field(default_factory=dict)
+    user: dict[str, Any] = Field(default_factory=dict)
     members: list[dict[str, Any]] = Field(default_factory=list)
     subyards: list[dict[str, Any]] = Field(default_factory=list)
     kinship_entries: list[dict[str, Any]] = Field(default_factory=list)
@@ -570,8 +571,15 @@ class LegacyTableTransferAcknowledgement(BaseModel):
 
 
 class FileAttachmentPayload(BaseModel):
-    file_data: str = ""
-    file_name: str = ""
+    model_config = ConfigDict(populate_by_name=True)
+    data_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("data_url", "file_data"),
+    )
+    name: str = Field(
+        default="",
+        validation_alias=AliasChoices("name", "file_name"),
+    )
     mime_type: str = ""
 
 

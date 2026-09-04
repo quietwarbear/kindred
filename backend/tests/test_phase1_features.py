@@ -48,7 +48,7 @@ class TestAuthentication:
                                 headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == "refactor-test@kindred.app"
+        assert data["user"]["email"] == "refactor-test@kindred.app"
 
 
 class TestActivityFeed:
@@ -466,12 +466,12 @@ class TestRegressionEndpoints:
         return response.json()["token"]
 
     def test_auth_bootstrap(self, token):
-        """GET /api/auth/bootstrap returns community bootstrap data"""
-        response = requests.get(f"{BASE_URL}/api/auth/bootstrap",
+        """GET /api/auth/me returns the authenticated bootstrap envelope"""
+        response = requests.get(f"{BASE_URL}/api/auth/me",
                                headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
         data = response.json()
-        assert "user" in data or "community" in data
+        assert "user" in data and "community" in data
 
     def test_polls_endpoint(self, token):
         """GET /api/polls returns polls list"""
@@ -479,7 +479,7 @@ class TestRegressionEndpoints:
                                headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data["polls"], list)
 
     def test_announcements_endpoint(self, token):
         """GET /api/announcements returns announcements list"""
@@ -487,7 +487,7 @@ class TestRegressionEndpoints:
                                headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data["announcements"], list)
 
     def test_subscriptions_plans(self, token):
         """GET /api/subscriptions/plans returns subscription plans"""

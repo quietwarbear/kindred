@@ -183,7 +183,11 @@ def test_events_hub_end_to_end(api_client, test_context):
     )
     assert rsvp_response.status_code == 200
     rsvp_data = rsvp_response.json()
-    assert any(record["user_id"] == test_context["member_user"]["id"] for record in rsvp_data["rsvp_records"])
+    # Ordinary members receive only their own RSVP projection. Named RSVP
+    # records are organizer-only private data.
+    assert "rsvp_records" not in rsvp_data
+    assert rsvp_data["my_rsvp_status"] == "going"
+    assert rsvp_data["my_rsvp_guests"] == 2
 
     agenda_response = api_client.post(
         f"{BASE_URL}/api/events/{event_data['id']}/agenda",
@@ -214,7 +218,9 @@ def test_events_hub_end_to_end(api_client, test_context):
     assert signup_response.status_code == 200
     signup_data = signup_response.json()
     updated_slot = next(slot for slot in signup_data["volunteer_slots"] if slot["id"] == created_slot["id"])
-    assert test_context["member_user"]["full_name"] in updated_slot["assigned_members"]
+    assert "assigned_members" not in updated_slot
+    assert updated_slot["is_mine"] is True
+    assert updated_slot["filled_count"] == 1
 
     potluck_response = api_client.post(
         f"{BASE_URL}/api/events/{event_data['id']}/potluck-items",
@@ -235,7 +241,9 @@ def test_events_hub_end_to_end(api_client, test_context):
     assert claim_response.status_code == 200
     claim_data = claim_response.json()
     claimed_item = next(item for item in claim_data["potluck_items"] if item["id"] == created_item["id"])
-    assert claimed_item["assigned_to"] == test_context["member_user"]["full_name"]
+    assert "assigned_to" not in claimed_item
+    assert claimed_item["claimed"] is True
+    assert claimed_item["is_mine"] is True
 
 
 def test_courtyard_home_structure_subyards_and_kinship(api_client, test_context):
@@ -264,9 +272,10 @@ def test_courtyard_home_structure_subyards_and_kinship(api_client, test_context)
         json=subyard_payload,
         timeout=20,
     )
-    assert subyard_response.status_code == 200
-    subyard_data = subyard_response.json()
-    assert subyard_data["name"] == subyard_payload["name"]
+    # Bootstrap already creates the free tier's allowed default subyard set;
+    # another subyard must remain fail-closed until the plan grants capacity.
+    assert subyard_response.status_code == 403
+    assert "plan" in subyard_response.json()["detail"].lower()
 
     kinship_payload = {
         "person_name": "TEST Person A",
@@ -293,7 +302,7 @@ def test_courtyard_home_structure_subyards_and_kinship(api_client, test_context)
     )
     assert structure_response.status_code == 200
     structure_data = structure_response.json()
-    assert any(item["id"] == subyard_data["id"] for item in structure_data["subyards"])
+    assert all(item["name"] != subyard_payload["name"] for item in structure_data["subyards"])
     assert any(item["id"] == kinship_data["id"] for item in structure_data["kinships"])
 
 
@@ -345,18 +354,8 @@ def test_gatherings_templates_checklist_toggle_and_travel(api_client, test_conte
         json=travel_payload,
         timeout=20,
     )
-    assert travel_create_response.status_code == 200
-    travel_data = travel_create_response.json()
-    assert travel_data["event_id"] == event_id
-
-    assign_response = api_client.post(
-        f"{BASE_URL}/api/travel-plans/{travel_data['id']}/assign-self",
-        headers=_auth_headers(test_context["member_token"]),
-        timeout=20,
-    )
-    assert assign_response.status_code == 200
-    assigned_data = assign_response.json()
-    assert test_context["member_user"]["full_name"] in assigned_data["assigned_members"]
+    assert travel_create_response.status_code == 403
+    assert "plan" in travel_create_response.json()["detail"].lower()
 
     list_response = api_client.get(
         f"{BASE_URL}/api/travel-plans",
@@ -365,11 +364,11 @@ def test_gatherings_templates_checklist_toggle_and_travel(api_client, test_conte
         timeout=20,
     )
     assert list_response.status_code == 200
-    assert any(plan["id"] == travel_data["id"] for plan in list_response.json()["travel_plans"])
+    assert all(plan["title"] != travel_payload["title"] for plan in list_response.json()["travel_plans"])
 
 
-def test_timeline_archive_funds_overview_and_settings(api_client, test_context):
-    # Timeline + funds/travel + Legacy Table settings/sync-preview
+def test_timeline_archive_funds_overview_and_retired_legacy_bulk_export(api_client, test_context):
+    # Timeline + funds/travel + the fail-closed Legacy Table boundary.
     timeline_response = api_client.get(
         f"{BASE_URL}/api/timeline/archive",
         headers=_auth_headers(test_context["host_token"]),
@@ -394,9 +393,8 @@ def test_timeline_archive_funds_overview_and_settings(api_client, test_context):
         json=budget_payload,
         timeout=20,
     )
-    assert budget_create_response.status_code == 200
-    budget_data = budget_create_response.json()
-    assert budget_data["title"] == budget_payload["title"]
+    assert budget_create_response.status_code == 403
+    assert "plan" in budget_create_response.json()["detail"].lower()
 
     funds_overview_response = api_client.get(
         f"{BASE_URL}/api/funds-travel/overview",
@@ -407,7 +405,7 @@ def test_timeline_archive_funds_overview_and_settings(api_client, test_context):
     funds_data = funds_overview_response.json()
     assert "budgets" in funds_data
     assert "travel_plans" in funds_data
-    assert any(item["id"] == budget_data["id"] for item in funds_data["budgets"])
+    assert all(item["title"] != budget_payload["title"] for item in funds_data["budgets"])
 
     legacy_status_response = api_client.get(
         f"{BASE_URL}/api/legacy-table/status",
@@ -418,33 +416,23 @@ def test_timeline_archive_funds_overview_and_settings(api_client, test_context):
     legacy_status_data = legacy_status_response.json()
     assert "connection_status" in legacy_status_data
 
-    legacy_config_payload = {
-        "base_url": "https://legacy-table.example.test",
-        "auth_type": "api-key",
-        "sync_members": True,
-        "sync_stories": True,
-        "sync_events": True,
-        "sync_relationships": True,
-    }
+    # Arbitrary connection profiles are retired. The frontend offers only the
+    # configured, recipe-scoped consent flow.
     legacy_save_response = api_client.post(
         f"{BASE_URL}/api/legacy-table/config",
         headers=_auth_headers(test_context["host_token"]),
-        json=legacy_config_payload,
+        json={"base_url": "https://legacy-table.example.test"},
         timeout=20,
     )
-    assert legacy_save_response.status_code == 200
-    legacy_save_data = legacy_save_response.json()
-    assert legacy_save_data["base_url"] == legacy_config_payload["base_url"]
+    assert legacy_save_response.status_code == 404
 
     legacy_preview_response = api_client.post(
         f"{BASE_URL}/api/legacy-table/sync-preview",
         headers=_auth_headers(test_context["host_token"]),
         timeout=20,
     )
-    assert legacy_preview_response.status_code == 200
-    preview_data = legacy_preview_response.json()
-    assert "preview_counts" in preview_data
-    assert all(key in preview_data["preview_counts"] for key in ["members", "kinships", "events", "memories", "threads"])
+    assert legacy_preview_response.status_code == 410
+    assert legacy_preview_response.json()["detail"]["code"] == "bulk_export_retired"
 
 
 def test_memory_vault_create_ai_tags_and_comment(api_client, test_context):
@@ -543,10 +531,11 @@ def test_contributions_summary_and_checkout_init(api_client, test_context):
         json={"package_id": summary_data["packages"][0]["id"], "origin_url": BASE_URL},
         timeout=30,
     )
-    assert checkout_response.status_code == 200
-    checkout_data = checkout_response.json()
-    assert isinstance(checkout_data["session_id"], str)
-    assert checkout_data["url"].startswith("http")
+    # Provider-free local verification must fail before a Stripe request or
+    # transaction write. This contribution route is distinct from the web
+    # subscription checkout kill switch, which remains HTTP 410.
+    assert checkout_response.status_code == 503
+    assert "credentials" in checkout_response.json()["detail"].lower()
 
     summary_after_response = api_client.get(
         f"{BASE_URL}/api/payments/summary",
@@ -555,4 +544,4 @@ def test_contributions_summary_and_checkout_init(api_client, test_context):
     )
     assert summary_after_response.status_code == 200
     transactions = summary_after_response.json()["transactions"]
-    assert any(txn["session_id"] == checkout_data["session_id"] for txn in transactions)
+    assert transactions == []

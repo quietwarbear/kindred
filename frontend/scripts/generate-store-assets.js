@@ -64,29 +64,22 @@ const frames = [
     alt: 'Kindred multiday reunion itinerary with synthetic welcome, workshop, outing, dinner, and brunch activities.',
   },
   {
-    id: 'private-invitation',
-    filename: '03-private-invitation.png',
-    title: 'Share one private invitation',
-    subtitle: 'Invite family without posting details publicly.',
-    alt: 'Kindred private invitation preview for a synthetic family reunion.',
-  },
-  {
     id: 'no-account-rsvp',
-    filename: '04-no-account-rsvp.png',
-    title: 'RSVP without an account',
-    subtitle: 'Relatives can answer from a private web link.',
+    filename: '03-private-rsvp.png',
+    title: 'Share one private RSVP',
+    subtitle: 'Relatives can answer without creating an account.',
     alt: 'Kindred no-account RSVP choices for a synthetic multiday family reunion.',
   },
   {
     id: 'planning-progress',
-    filename: '05-planning-progress.png',
-    title: 'See what still needs attention',
+    filename: '04-planning-progress.png',
+    title: 'See what needs attention',
     subtitle: 'Track responses, gaps, and planning progress.',
     alt: 'Kindred organizer progress view with synthetic RSVP totals and unanswered invitations.',
   },
   {
     id: 'stories-memories',
-    filename: '06-stories-memories.png',
+    filename: '05-stories-memories.png',
     title: 'Keep the stories',
     subtitle: 'Preserve photos, voices, and memories after the reunion.',
     alt: 'Kindred family story prompt containing a clearly synthetic reunion memory.',
@@ -671,11 +664,15 @@ async function captureDevice(browser, device) {
     manifest.push(await screenshot(page, device, frames[0], '[data-testid="reunion-draft-form-card"]'));
 
     await prepareActivationFrame(page);
-    manifest.push(await screenshot(page, device, frames[1], '[data-testid="reunion-itinerary"]'));
-
-    await prepareActivationFrame(page);
-    await page.click('[data-testid="reunion-activation-preview-button"]');
-    manifest.push(await screenshot(page, device, frames[2], '[data-testid="reunion-invitation-preview"]'));
+    manifest.push(await screenshot(
+      page,
+      device,
+      frames[1],
+      device.id === 'google-phone'
+        ? '[data-testid="itinerary-activity-arrival"]'
+        : '[data-testid="reunion-itinerary"]',
+      '[data-testid="itinerary-activity-arrival"]',
+    ));
 
     await setSession(page, false);
     await page.goto(`http://${SENSITIVE_HOST}:${PORT}/rsvp#${CAMPAIGN_INVITATION}`, { waitUntil: 'networkidle0' });
@@ -683,7 +680,7 @@ async function captureDevice(browser, device) {
     manifest.push(await screenshot(
       page,
       device,
-      frames[3],
+      frames[2],
       device.id === 'apple-ipad-13' ? 'main' : '[data-testid="public-rsvp-options"]',
       '[data-testid="public-rsvp-options"]',
     ));
@@ -692,7 +689,7 @@ async function captureDevice(browser, device) {
     manifest.push(await screenshot(
       page,
       device,
-      frames[4],
+      frames[3],
       device.id === 'apple-ipad-13'
         ? '[data-testid="reunion-summary-cards"]'
         : '[data-testid="reunion-summary-unanswered"]',
@@ -704,7 +701,7 @@ async function captureDevice(browser, device) {
       '[data-testid="reunion-memory-answer"]',
       'Every summer, our family table made room for one more story.',
     );
-    manifest.push(await screenshot(page, device, frames[5], '[data-testid="reunion-memory-prompt"]'));
+    manifest.push(await screenshot(page, device, frames[4], '[data-testid="reunion-memory-prompt"]'));
   } finally {
     await page.close();
   }

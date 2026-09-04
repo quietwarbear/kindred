@@ -43,9 +43,9 @@ export const GatheringPotluck = ({ event, token, canCreate, onUpdate }) => {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">{potluck.item_name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{potluck.assigned_to || "Unclaimed"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{potluck.assigned_to || (potluck.is_mine ? "Claimed by you" : potluck.claimed ? "Claimed" : "Unclaimed")}</p>
               </div>
-              {!potluck.assigned_to && (
+              {!potluck.assigned_to && !potluck.claimed && (
                 <Button className="rounded-full" data-testid={`gatherings-potluck-claim-${potluck.id}`} onClick={() => handleClaim(potluck.id)} size="sm" type="button" variant="secondary">
                   Claim
                 </Button>

@@ -83,10 +83,11 @@ def test_auth_me_accepts_bearer_token(api_client, host_context):
 
 
 def test_google_session_invalid_id_returns_error_without_crashing(api_client):
-    # Google callback/session exchange error-path coverage.
+    # The browser sends a credential, not the retired Emergent session_id
+    # shape. Any invalid credential must fail safely without authenticating.
     response = api_client.post(
         f"{BASE_URL}/api/auth/google/session",
-        json={"session_id": "invalid-session-id-for-test"},
+        json={"credential": "invalid-google-credential-for-test"},
         timeout=30,
     )
     assert response.status_code in [400, 401]

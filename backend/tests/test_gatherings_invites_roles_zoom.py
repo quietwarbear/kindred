@@ -149,7 +149,7 @@ def test_event_invites_include_member_guest_zoom_and_share_message(api_client, h
     assert sorted([item["invite_source"] for item in invites]) == ["guest", "member"]
     assert all(item["delivery_status"] == "ready-for-email" for item in invites)
     assert all(item["zoom_link"] == event["zoom_link"] for item in invites)
-    assert all("Join via Zoom:" in item["share_message"] for item in invites)
+    assert all("Join online:" in item["share_message"] for item in invites)
     assert all(event["zoom_link"] in item["share_message"] for item in invites)
 
     list_response = api_client.get(

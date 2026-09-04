@@ -70,7 +70,7 @@ def test_store_metadata_is_reunion_first_and_unpublished():
     store = read("frontend/STORE_LISTINGS.md")
     assert "heyKindred: Reunion Planner" in store
     assert "Family Reunion Planner" in store
-    assert "RSVP without an account" in store
+    assert "without creating an account" in store
     assert "https://www.heykindred.org/support" in store
     assert "https://www.heykindred.org/privacy" in store
     assert "https://www.heykindred.org" in store
@@ -120,7 +120,15 @@ def test_generated_manifest_is_synthetic_and_contains_exact_campaign():
     manifest = json.loads(manifest_path.read_text())
     assert manifest["synthetic_data"] is True
     assert manifest["published"] is False
-    assert len(manifest["files"]) == 18
+    assert len(manifest["files"]) == 15
+    assert {
+        platform: sum(item["platform"] == platform for item in manifest["files"])
+        for platform in {item["platform"] for item in manifest["files"]}
+    } == {
+        "apple-iphone-6.9": 5,
+        "apple-ipad-13": 5,
+        "google-phone": 5,
+    }
     assert {
         (item["platform"], item["width"], item["height"])
         for item in manifest["files"]

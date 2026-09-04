@@ -293,7 +293,13 @@ async def get_current_user(request: Request) -> dict[str, Any]:
     # Try bearer token first
     credentials: HTTPAuthorizationCredentials | None = await bearer_scheme(request)
     if credentials:
-        payload = decode_token(credentials.credentials)
+        try:
+            payload = decode_token(credentials.credentials)
+        except ValueError:
+            # Token parsing failures are an authentication outcome, not an
+            # application error. Never leak decoder details or let malformed
+            # bearer input become an HTTP 500 response.
+            payload = None
         if payload:
             user = await users_collection.find_one({"id": payload["sub"]}, {"_id": 0})
             if user:

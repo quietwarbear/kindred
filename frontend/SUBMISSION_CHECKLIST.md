@@ -72,7 +72,7 @@
    - [ ] Obtain the production and legal confirmations listed in the matrix before submitting
 
 4. **Store creative**
-   - [ ] Use the six ordered Google phone exports from `store-assets/google/phone`
+   - [ ] Use the five ordered Google phone exports from `store-assets/google/phone`
    - [ ] Confirm dimensions, no alpha channel, synthetic-only source data, and sensitive-marker scan
    - [ ] Confirm no desktop framing, watermarks, reviewer/demo labels, credentials, or production data
 
@@ -91,7 +91,7 @@
 
 - [ ] Do not publish Apple metadata, privacy answers, screenshots, or listing changes without separate approval.
 - [ ] Do not publish Google metadata, Data Safety answers, screenshots, or listing changes without separate approval.
-- [ ] Do not invent a branded support mailbox. Continue using the verified repository fallback until the owner confirms a working `heykindred.org` address.
+- [ ] Use the verified `support@heykindred.org` mailbox, but do not publish the console identity change without separate approval.
 - [ ] Keep web subscription checkout disabled with `subscription_checkout_migrating`.
 
 ---

@@ -458,10 +458,8 @@ class TestFinanceRoutes:
             "estimated_cost": 100.0
         }
         response = authenticated_client.post(f"{BASE_URL}/api/travel-plans", json=plan_data)
-        assert response.status_code == 200, f"Create travel plan failed: {response.text}"
-        data = response.json()
-        assert "id" in data
-        print(f"✓ Travel plan created: {data['id']}")
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
 
     def test_budget_plans_list(self, authenticated_client):
         """GET /budget-plans returns list"""
@@ -484,11 +482,8 @@ class TestFinanceRoutes:
             "line_items": []
         }
         response = authenticated_client.post(f"{BASE_URL}/api/budget-plans", json=budget_data)
-        assert response.status_code == 200, f"Create budget failed: {response.text}"
-        data = response.json()
-        assert "id" in data
-        assert data["title"] == budget_data["title"]
-        print(f"✓ Budget plan created: {data['id']}")
+        assert response.status_code == 403
+        assert "Seedling plan" in response.json()["detail"]
 
     def test_funds_travel_overview(self, authenticated_client):
         """GET /funds-travel/overview returns combined data"""

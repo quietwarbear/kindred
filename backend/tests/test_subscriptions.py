@@ -162,8 +162,8 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 401
 
     # ── POST /api/subscriptions/checkout ──
-    def test_checkout_creates_session_and_returns_url(self, auth_token):
-        """Verify POST /api/subscriptions/checkout creates Stripe checkout session."""
+    def test_checkout_is_disabled_during_billing_migration(self, auth_token):
+        """Checkout remains fail-closed while the billing migration is active."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "sapling",
@@ -171,14 +171,11 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert "session_id" in data
-        assert data["url"].startswith("http")
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "subscription_checkout_migrating"
 
     def test_checkout_blocks_non_host_users(self, member_token):
-        """Verify POST /api/subscriptions/checkout blocks non-host users with 403."""
+        """The global checkout kill switch runs before role-specific handling."""
         if not member_token:
             pytest.skip("Member token not available")
             
@@ -189,10 +186,11 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 403
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "subscription_checkout_migrating"
 
     def test_checkout_returns_400_for_invalid_plan(self, auth_token):
-        """Verify POST /api/subscriptions/checkout returns 400 for invalid plan_id."""
+        """The global checkout kill switch does not parse plan details."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "invalid-tier-xyz",
@@ -200,11 +198,11 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 400
-        assert "Invalid subscription plan" in response.json().get("detail", "")
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "subscription_checkout_migrating"
 
     def test_checkout_returns_400_for_elder_grove(self, auth_token):
-        """Verify POST /api/subscriptions/checkout returns 400 for elder-grove (contact sales)."""
+        """The global checkout kill switch also covers custom plans."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "elder-grove",
@@ -212,11 +210,11 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 400
-        assert "Contact sales" in response.json().get("detail", "") or "Elder Grove" in response.json().get("detail", "")
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "subscription_checkout_migrating"
 
     def test_checkout_works_with_annual_billing(self, auth_token):
-        """Verify checkout works with annual billing cycle."""
+        """Annual checkout remains disabled with every other billing interval."""
         headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
         response = requests.post(f"{BASE_URL}/api/subscriptions/checkout", json={
             "plan_id": "oak",
@@ -224,10 +222,8 @@ class TestSubscriptionEndpoints:
             "origin_url": "https://kindred-gather.preview.emergentagent.com"
         }, headers=headers)
         
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert "session_id" in data
+        assert response.status_code == 410
+        assert response.json()["detail"]["code"] == "subscription_checkout_migrating"
 
     # ── GET /api/subscriptions/checkout/status/{session_id} ──
     def test_checkout_status_returns_404_for_invalid_session(self, auth_token):

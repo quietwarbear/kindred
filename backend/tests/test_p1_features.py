@@ -86,12 +86,8 @@ class TestAddOnsCheckout:
                 "origin_url": "https://kindred-gather.preview.emergentagent.com/subscription"
             }
         )
-        assert response.status_code == 200, f"Checkout failed: {response.text}"
-        
-        data = response.json()
-        assert "checkout_url" in data, "No checkout_url in response"
-        assert "session_id" in data, "No session_id in response"
-        assert data["checkout_url"].startswith("https://checkout.stripe.com"), "Invalid checkout URL"
+        assert response.status_code == 503
+        assert "billing credentials" in response.json()["detail"]
 
     def test_checkout_invalid_addon(self, auth_headers):
         """Verify checkout fails for invalid addon ID."""
@@ -117,9 +113,8 @@ class TestAddOnsCheckout:
                     "origin_url": "https://kindred-gather.preview.emergentagent.com/subscription"
                 }
             )
-            assert response.status_code == 200, f"Checkout failed for {addon_id}: {response.text}"
-            data = response.json()
-            assert "checkout_url" in data, f"No checkout_url for {addon_id}"
+            assert response.status_code == 503
+            assert "billing credentials" in response.json()["detail"]
 
 
 class TestAddOnsPurchased:

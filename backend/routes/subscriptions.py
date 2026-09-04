@@ -1,5 +1,6 @@
 """Subscription routes — Stripe recurring billing."""
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -29,6 +30,8 @@ from pricing import (
 from subscription_lifecycle import PAID_ACCESS_STATUSES
 
 router = APIRouter(prefix="/api")
+
+logger = logging.getLogger(__name__)
 
 # Owner/admin emails that always receive top-tier ("redwood") access
 ADMIN_EMAILS = {
@@ -81,6 +84,32 @@ def _configure_stripe() -> None:
 # ---------------------------------------------------------------------------
 # Stripe Customer management
 # ---------------------------------------------------------------------------
+
+def _is_missing_customer_error(exc: Exception) -> bool:
+    """True when Stripe rejected the customer ID itself — the symptom of a
+    customer created against a different Stripe account, or since deleted.
+    Matched without relying on Stripe's error classes, which move between
+    major versions of the library."""
+    if getattr(exc, "param", None) == "customer":
+        return True
+    return "no such customer" in str(exc).lower()
+
+
+async def _clear_stale_stripe_customer(user: dict[str, Any], customer_id: str) -> None:
+    """Drop a customer ID that does not exist on the current Stripe account,
+    so the next billing action starts clean instead of failing forever."""
+    logger.warning(
+        "Stale Stripe customer %s for user %s — clearing", customer_id, user.get("id")
+    )
+    await users_collection.update_one(
+        {"id": user["id"]},
+        {"$unset": {"stripe_customer_id": ""}},
+    )
+    await subscriptions_collection.update_many(
+        {"community_id": user["community_id"], "stripe_customer_id": customer_id},
+        {"$unset": {"stripe_customer_id": ""}},
+    )
+
 
 async def _get_or_create_stripe_customer(user: dict[str, Any]) -> str:
     """Retrieve existing Stripe Customer ID or create a new one."""
@@ -368,6 +397,15 @@ async def create_customer_portal(
             return_url=f"{origin_url}/subscription",
         )
     except stripe.error.StripeError as e:
+        if _is_missing_customer_error(e):
+            # Customer lives on a different Stripe account, so there is no
+            # subscription here to manage. Clear it and answer honestly rather
+            # than surfacing the raw Stripe error.
+            await _clear_stale_stripe_customer(current_user, customer_id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active subscription to manage.",
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Portal error: {str(e)}")
 
     return {"url": portal_session.url}

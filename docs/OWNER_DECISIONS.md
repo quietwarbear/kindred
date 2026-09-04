@@ -35,13 +35,9 @@ it as the one spot the new code persists the credential in cleartext.
       for an opaque-mapping redesign (more work, matches the rotation module's
       pattern). **Recommendation:** accept as-designed; it never leaves the server.
 
-## 4. Support identity
+## 4. Support identity — resolved
 
-Policy/terms/support currently use `support@ubuntu-village.org`.
-
-- [ ] Create and migrate to a branded `support@heykindred.org`? **Recommendation:**
-      yes, before store submission (a branded support address reads as legitimate).
-      No unverified mailbox has been published.
+- [x] `support@heykindred.org` was created, verified as monitored, and centralized in the public application configuration. Store-console publication remains a separate approval-gated action.
 
 ## 5. Elder Grove tier wording & eligibility
 
@@ -53,10 +49,11 @@ Code treats it as custom/contact pricing (technical cap 9,999, public wording
 ## 6. Privacy declarations & data map
 
 - [ ] Complete the confirmations in `docs/APP_STORE_PRIVACY_DECLARATIONS.md` and
-      `docs/PRIVACY_DATA_MAP.md` before submitting the store listing. The app
-      currently declares "no data collected" on iOS — confirm that still holds
-      once delivery/push are enabled (device tokens, email delivery), and update
-      the declaration if it doesn't.
+      `docs/PRIVACY_DATA_MAP.md` before submitting either store listing. Apple
+      currently discloses several categories as Data Not Linked to You, while
+      the engineering map identifies account, content, purchase, device, and
+      usage categories that are linked to identity. Reconcile that linkage and
+      the pending Google Data Safety declaration before submission.
 
 ## 7. Subscription recovery — stays paused (no action unless you choose)
 

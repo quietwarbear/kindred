@@ -207,13 +207,8 @@ class TestRevenueCat:
         
         response = requests.post(f"{BASE_URL}/api/revenuecat/webhook", json=webhook_payload)
         
-        assert response.status_code == 200, f"Webhook failed: {response.text}"
-        data = response.json()
-        
-        # User won't exist, but endpoint should handle gracefully
-        assert "status" in data, "Response missing status field"
-        # Expected to return "ignored" since user doesn't exist
-        print(f"Webhook response: {data}")
+        assert response.status_code == 503
+        assert "verification is not configured" in response.json()["detail"]
     
     def test_revenuecat_webhook_cancellation(self):
         """POST /api/revenuecat/webhook handles CANCELLATION event"""
@@ -229,10 +224,8 @@ class TestRevenueCat:
         
         response = requests.post(f"{BASE_URL}/api/revenuecat/webhook", json=webhook_payload)
         
-        assert response.status_code == 200, f"Webhook cancellation failed: {response.text}"
-        data = response.json()
-        assert "status" in data
-        print(f"Cancellation webhook response: {data}")
+        assert response.status_code == 503
+        assert "verification is not configured" in response.json()["detail"]
     
     def test_revenuecat_webhook_no_user_id(self):
         """POST /api/revenuecat/webhook handles missing app_user_id gracefully"""
@@ -247,10 +240,8 @@ class TestRevenueCat:
         
         response = requests.post(f"{BASE_URL}/api/revenuecat/webhook", json=webhook_payload)
         
-        assert response.status_code == 200, f"Webhook should handle missing user_id: {response.text}"
-        data = response.json()
-        assert data.get("status") == "ignored", "Should ignore events without app_user_id"
-        print(f"No app_user_id response: {data}")
+        assert response.status_code == 503
+        assert "verification is not configured" in response.json()["detail"]
 
 
 class TestRegressionEndpoints:

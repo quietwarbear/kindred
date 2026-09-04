@@ -1,22 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, FileText, LockKeyhole, RefreshCcw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, FileText, LockKeyhole, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { requiresPasswordForAccountDeletion } from "@/lib/accountDeletion";
 import { apiRequest, convertFileToDataUrl } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 
-const initialConfig = {
-  base_url: "",
-  auth_type: "api-key",
-  sync_members: true,
-  sync_stories: true,
-  sync_events: true,
-  sync_relationships: true,
-};
-
 export const SettingsPage = ({ token, user, onSessionRefresh }) => {
+  const deleteRequiresPassword = requiresPasswordForAccountDeletion(user?.auth_provider);
   const [statusData, setStatusData] = useState(null);
   const [notificationHistory, setNotificationHistory] = useState([]);
   const [notificationPreferences, setNotificationPreferences] = useState({
@@ -36,9 +29,6 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
     profile_image_url: user?.profile_image_url || "",
   });
   const [profileUpload, setProfileUpload] = useState(null);
-  const [configForm, setConfigForm] = useState(initialConfig);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -71,14 +61,6 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
         muted_announcement_scopes: preferencePayload.muted_announcement_scopes || [],
       });
       setChatRooms(chatPayload.rooms || []);
-      setConfigForm({
-        base_url: legacyPayload.base_url || "",
-        auth_type: legacyPayload.auth_type || "api-key",
-        sync_members: legacyPayload.sync_preferences?.members ?? true,
-        sync_stories: legacyPayload.sync_preferences?.stories ?? true,
-        sync_events: legacyPayload.sync_preferences?.events ?? true,
-        sync_relationships: legacyPayload.sync_preferences?.relationships ?? true,
-      });
       setProfileForm({
         full_name: profileUser.full_name || "",
         nickname: profileUser.nickname || "",
@@ -112,20 +94,6 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
     loadStatus();
   }, [loadStatus]);
 
-  const handleSave = async (event) => {
-    event.preventDefault();
-    setIsSaving(true);
-    try {
-      const payload = await apiRequest("/legacy-table/config", { method: "POST", token, data: configForm });
-      setStatusData(payload);
-      toast.success("Legacy Table configuration saved.");
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to save Legacy Table settings.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleProfileSave = async (event) => {
     event.preventDefault();
     setIsSavingProfile(true);
@@ -144,19 +112,6 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
       toast.error(error.response?.data?.detail || "Unable to update profile.");
     } finally {
       setIsSavingProfile(false);
-    }
-  };
-
-  const handlePreview = async () => {
-    setIsPreviewing(true);
-    try {
-      const payload = await apiRequest("/legacy-table/sync-preview", { method: "POST", token });
-      setStatusData(payload);
-      toast.success("Sync preview generated.");
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to generate sync preview.");
-    } finally {
-      setIsPreviewing(false);
     }
   };
 
@@ -301,69 +256,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
                 ))}
               </ul>
             </div>
-            {statusData?.preview_counts ? (
-              <div className="soft-panel" data-testid="settings-legacy-preview-panel">
-                <p className="text-sm text-muted-foreground">Preview counts</p>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-muted-foreground">
-                  {Object.entries(statusData.preview_counts).map(([key, value]) => (
-                    <div key={key}>
-                      <p className="capitalize">{key}</p>
-                      <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
-        </article>
-
-        <article className="archival-card" data-testid="settings-legacy-config-card">
-          <div className="flex items-center gap-3">
-            <Settings2 className="h-5 w-5 text-primary" />
-            <h3 className="font-display text-3xl text-foreground">Connection profile</h3>
-          </div>
-          <form className="mt-6 grid gap-4" onSubmit={handleSave}>
-            <label>
-              <span className="field-label">Legacy Table base URL</span>
-              <Input className="field-input" data-testid="settings-legacy-base-url-input" onChange={(e) => setConfigForm((current) => ({ ...current, base_url: e.target.value }))} placeholder="https://api.legacytable.example" value={configForm.base_url} />
-            </label>
-            <label>
-              <span className="field-label">Auth type</span>
-              <select className="field-input w-full" data-testid="settings-legacy-auth-type-select" onChange={(e) => setConfigForm((current) => ({ ...current, auth_type: e.target.value }))} value={configForm.auth_type}>
-                <option value="api-key">API key</option>
-                <option value="oauth">OAuth</option>
-                <option value="bearer">Bearer token</option>
-                <option value="none">None</option>
-              </select>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                ["sync_members", "Sync members"],
-                ["sync_stories", "Sync stories"],
-                ["sync_events", "Sync gatherings"],
-                ["sync_relationships", "Sync kinship graph"],
-              ].map(([key, label]) => (
-                <label className="soft-panel flex items-center justify-between gap-3" data-testid={`settings-toggle-${key}`} key={key}>
-                  <span className="text-sm font-semibold text-foreground">{label}</span>
-                  <input
-                    checked={Boolean(configForm[key])}
-                    data-testid={`settings-checkbox-${key}`}
-                    onChange={(e) => setConfigForm((current) => ({ ...current, [key]: e.target.checked }))}
-                    type="checkbox"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button className="rounded-full" data-testid="settings-legacy-save-button" disabled={isSaving} type="submit">
-                {isSaving ? "Saving..." : "Save connection profile"}
-              </Button>
-              <Button className="rounded-full" data-testid="settings-legacy-preview-button" disabled={isPreviewing} onClick={handlePreview} type="button" variant="secondary">
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                {isPreviewing ? "Generating..." : "Run sync preview"}
-              </Button>
-            </div>
-          </form>
         </article>
       </section>
 
@@ -376,7 +269,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           </div>
         </div>
         <p className="mt-4 text-sm leading-7 text-muted-foreground" data-testid="settings-privacy-copy">
-          Live external syncing stays optional. Your courtyard data, timelines, relationship graph, and financial coordination remain first-class inside this platform whether or not Legacy Table is connected.
+          Bulk external syncing is retired. A Legacy Table transfer begins only from an eligible recipe, requires explicit consent, and is limited to that selected content.
         </p>
         <p className="mt-3 text-sm text-muted-foreground" data-testid="settings-current-user-role">
           Current role: {user?.role}
@@ -636,7 +529,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
               </div>
             </div>
 
-            {user?.auth_provider !== "google" && (
+            {deleteRequiresPassword && (
               <label>
                 <span className="field-label">Enter your password to confirm</span>
                 <Input
@@ -654,7 +547,7 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
               <Button
                 className="rounded-full"
                 data-testid="settings-delete-confirm-button"
-                disabled={isDeleting || (user?.auth_provider !== "google" && !deletePassword)}
+                disabled={isDeleting || (deleteRequiresPassword && !deletePassword)}
                 onClick={handleDeleteAccount}
                 variant="destructive"
               >
