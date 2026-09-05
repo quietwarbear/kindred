@@ -8,13 +8,32 @@ import { Purchases } from "@revenuecat/purchases-capacitor";
 import { apiRequest } from "@/lib/api";
 import { calculateSavings } from "@/lib/pricing";
 
-const REVENUECAT_API_KEY = process.env.REACT_APP_REVENUECAT_IOS_KEY;
+// One RevenueCat app per store, so one public key per platform. Android was
+// previously unreachable: the iOS key was the only one wired, so an Android
+// build had no native purchase path and fell through to the web branch, which
+// is both disabled in a native build and disallowed by Play billing policy.
+const REVENUECAT_KEYS = {
+    ios: process.env.REACT_APP_REVENUECAT_IOS_KEY,
+    android: process.env.REACT_APP_REVENUECAT_ANDROID_KEY,
+};
+
+const nativePlatform = () =>
+    (Capacitor.isNativePlatform() ? Capacitor.getPlatform() : null);
+
+/** The RevenueCat public key for the platform we are running on, if any. */
+const platformApiKey = () => {
+    const platform = nativePlatform();
+    return platform ? REVENUECAT_KEYS[platform] : undefined;
+};
 
 let productMappingPromise = null;
 
 export const getRevenueCatProductMapping = async () => {
     if (!productMappingPromise) {
-          productMappingPromise = apiRequest("/revenuecat/config")
+          // Platform matters: an Android build handed App Store identifiers
+          // finds nothing in its offering and every purchase fails.
+          const platform = nativePlatform() || "web";
+          productMappingPromise = apiRequest(`/revenuecat/config?platform=${platform}`)
             .then((config) => config?.product_mapping || {})
             .catch((error) => {
               productMappingPromise = null;
@@ -45,22 +64,26 @@ export const initializeRevenueCat = async () => {
     const isNative = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    // Only initialize on iOS
-    if (!isNative || platform !== "ios") {
-          console.log("[Kindred] RevenueCat: skipping init (not iOS native)");
+    // Native store purchases: iOS and Android both go through RevenueCat.
+    if (!isNative || (platform !== "ios" && platform !== "android")) {
+          console.log("[Kindred] RevenueCat: skipping init (not a native store platform)");
           return false;
     }
 
-    if (!REVENUECAT_API_KEY) {
-          console.warn("[Kindred] RevenueCat: REACT_APP_REVENUECAT_IOS_KEY not configured");
+    const apiKey = platformApiKey();
+    if (!apiKey) {
+          console.warn(
+            `[Kindred] RevenueCat: no public key configured for ${platform} ` +
+            "(REACT_APP_REVENUECAT_IOS_KEY / REACT_APP_REVENUECAT_ANDROID_KEY)"
+          );
           return false;
     }
 
     const initCore = (async () => {
           try {
-                  console.log("[Kindred] RevenueCat: configuring iOS purchases");
+                  console.log(`[Kindred] RevenueCat: configuring ${platform} purchases`);
                   await Purchases.configure({
-                            apiKey: REVENUECAT_API_KEY,
+                            apiKey,
                             appUserID: null,
                   });
                   revenueCatInitialized = true;
@@ -366,3 +389,11 @@ export const restorePurchases = async () => {
 export const isIOS = () => {
     return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 };
+
+/**
+ * True when this build can take a native store purchase — iOS or Android, with
+ * a key configured for it. This, not isIOS(), is what purchase UI should gate
+ * on: selling digital goods through anything other than the platform's own
+ * billing is against both stores' rules.
+ */
+export const isNativeBilling = () => Boolean(platformApiKey());

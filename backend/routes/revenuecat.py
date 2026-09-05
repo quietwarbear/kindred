@@ -10,9 +10,9 @@ from db import subscriptions_collection, users_collection
 from dependencies import get_current_user, now_iso
 from pricing import (
     REVENUECAT_ENTITLEMENT_TO_TIER,
-    REVENUECAT_PRODUCT_IDS,
     SUBSCRIPTION_TIERS,
     revenuecat_billing_mapping,
+    revenuecat_product_mapping,
 )
 from subscription_lifecycle import (
     resolve_revenuecat_subscriber,
@@ -440,15 +440,31 @@ async def restore_purchases(current_user: dict[str, Any] = Depends(get_current_u
     }
 
 
+# The SDK asks by client platform; the catalog is keyed by store.
+_PLATFORM_STORE = {"ios": "app_store", "android": "play_store", "web": "web"}
+
+
 @router.get("/revenuecat/config")
-async def revenuecat_config():
-    """Return mobile SDK configuration for the Kindred app."""
+async def revenuecat_config(platform: str = "ios"):
+    """Return SDK configuration for the Kindred app.
+
+    The platform decides which store's product identifiers come back. This used
+    to be hardcoded to iOS, which left an Android client holding App Store
+    identifiers — they match nothing in the Play offering, so every purchase
+    fails to resolve. Defaults to ios so older clients are unaffected.
+    """
+    store = _PLATFORM_STORE.get((platform or "").strip().lower())
+    if not store:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown platform '{platform}' — expected ios, android or web",
+        )
     return {
         "bundle_id": BUNDLE_ID,
-        "platform": "ios",
+        "platform": platform,
         "entitlement_ids": list(ENTITLEMENT_TO_TIER.keys()),
         "tier_mapping": ENTITLEMENT_TO_TIER,
-        "product_mapping": REVENUECAT_PRODUCT_IDS,
+        "product_mapping": revenuecat_product_mapping(store),
         "webhook_url": "/api/revenuecat/webhook",
     }
 

@@ -19,7 +19,7 @@ import {
   ensureInitialized,
   getLocalizedRevenueCatPricing,
   getRevenueCatProductMapping,
-  isIOS,
+  isNativeBilling,
   makePurchase,
   openRevenueCatSubscriptionManagement,
   restorePurchases,
@@ -318,7 +318,7 @@ export const SubscriptionPage = ({ token, user }) => {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [localizedPricing, setLocalizedPricing] = useState({});
-  const [nativePricingLoading, setNativePricingLoading] = useState(isIOS());
+  const [nativePricingLoading, setNativePricingLoading] = useState(isNativeBilling());
 
   const isHost = user?.role === "host";
 
@@ -347,7 +347,7 @@ export const SubscriptionPage = ({ token, user }) => {
     loadCurrentSub();
 
     // Initialize and sync user with RevenueCat on iOS
-    if (isIOS() && user?.id) {
+    if (isNativeBilling() && user?.id) {
       const initRC = async () => {
         // Try up to 3 times with increasing delays
         for (let attempt = 1; attempt <= 3; attempt++) {
@@ -440,7 +440,7 @@ export const SubscriptionPage = ({ token, user }) => {
     setCheckoutLoading(planId);
     try {
       // Determine if we're on iOS and should use RevenueCat
-      const useRevenueCat = isIOS();
+      const useRevenueCat = isNativeBilling();
 
       if (useRevenueCat) {
         // iOS: Use RevenueCat for native IAP
@@ -531,7 +531,7 @@ export const SubscriptionPage = ({ token, user }) => {
     if (!window.confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.")) return;
     setCancelLoading(true);
     try {
-      if (isIOS() && currentSub?.provider === "revenuecat") {
+      if (isNativeBilling() && currentSub?.provider === "revenuecat") {
         await openRevenueCatSubscriptionManagement();
         toast.info("Use the App Store subscription screen to turn off renewal.");
         return;
@@ -612,7 +612,7 @@ export const SubscriptionPage = ({ token, user }) => {
         </div>
 
         {/* Restore Purchases — iOS only (Apple guideline 3.1.1) */}
-        {isIOS() && (
+        {isNativeBilling() && (
           <div className="mt-4">
             <button
               className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
@@ -633,7 +633,7 @@ export const SubscriptionPage = ({ token, user }) => {
         )}
       </div>
 
-      {!isIOS() && !WEB_PURCHASES_ENABLED && (
+      {!isNativeBilling() && !WEB_PURCHASES_ENABLED && (
         <div
           className="archival-card border-amber-500/40 bg-amber-500/10 text-center"
           data-testid="web-subscription-unavailable"
@@ -699,17 +699,17 @@ export const SubscriptionPage = ({ token, user }) => {
             isLoading={checkoutLoading === plan.id}
             key={plan.id}
             localizedBillingOption={localizedPricing[plan.id]?.[billingCycle]}
-            nativePricing={isIOS()}
+            nativePricing={isNativeBilling()}
             nativePricingLoading={nativePricingLoading}
             onSelect={handleSelectPlan}
             plan={plan}
-            webPurchaseDisabled={!isIOS() && !WEB_PURCHASES_ENABLED}
+            webPurchaseDisabled={!isNativeBilling() && !WEB_PURCHASES_ENABLED}
           />
         ))}
       </div>
 
       {/* Add-Ons Section — hidden on iOS per App Store guideline 3.1.1 */}
-      {!isIOS() && <AddOnsSection token={token} />}
+      {!isNativeBilling() && <AddOnsSection token={token} />}
 
       {/* FAQ / Notes */}
       <div className="archival-card" data-testid="subscription-faq">
