@@ -5,6 +5,10 @@ import { PublicPlanCards } from "@/components/PublicPlanCards";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 
+// Mirrors SubscriptionPage: web purchases are live only once the deployment
+// sets the RevenueCat Billing web key.
+const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);
+
 export const PricingPage = () => {
   const { plans, loading, error } = usePublicPlans();
 
@@ -21,15 +25,17 @@ export const PricingPage = () => {
             Plan names, member limits, and billing amounts below come directly from Kindred's subscription service.
             Subscription management remains available inside the signed-in application.
           </p>
-          <div
-            className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
-            data-testid="web-subscription-unavailable"
-            role="status"
-          >
-            <p className="text-sm font-semibold text-foreground">
-              Web subscriptions are temporarily unavailable while billing is being updated.
-            </p>
-          </div>
+          {!WEB_PURCHASES_ENABLED && (
+            <div
+              className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+              data-testid="web-subscription-unavailable"
+              role="status"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                Web subscriptions are temporarily unavailable while billing is being updated.
+              </p>
+            </div>
+          )}
           <div className="mt-8" aria-live="polite">
             {loading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
             {error && <p className="text-sm text-destructive" role="alert">{error}</p>}

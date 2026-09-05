@@ -703,7 +703,7 @@ export const SubscriptionPage = ({ token, user }) => {
             nativePricingLoading={nativePricingLoading}
             onSelect={handleSelectPlan}
             plan={plan}
-            webPurchaseDisabled={!isIOS()}
+            webPurchaseDisabled={!isIOS() && !WEB_PURCHASES_ENABLED}
           />
         ))}
       </div>
