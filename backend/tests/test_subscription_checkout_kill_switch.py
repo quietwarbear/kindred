@@ -135,7 +135,11 @@ def test_web_ui_disables_subscription_purchase_without_disabling_addons():
     # Web purchase is disabled until the deployment sets the RevenueCat Billing
     # web key. Both surfaces must read the same flag, or the buttons and the
     # "unavailable" notice disagree with each other.
-    assert "webPurchaseDisabled={!isIOS() && !WEB_PURCHASES_ENABLED}" in subscription_page
+    # Native store platforms (iOS and Android) buy through RevenueCat, so the
+    # web gate must not disable their buttons — hence isNativeBilling, not
+    # isIOS. Gating on iOS alone left Android with no purchase path at all.
+    assert "webPurchaseDisabled={!isNativeBilling() && !WEB_PURCHASES_ENABLED}" in subscription_page
+    assert "isIOS" not in subscription_page, "purchase UI must gate on native billing, not iOS"
     assert "!displayedBillingOption || webPurchaseDisabled" in subscription_page
     for page in (subscription_page, pricing_page):
         assert (
