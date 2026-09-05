@@ -132,8 +132,17 @@ def test_web_ui_disables_subscription_purchase_without_disabling_addons():
 
     assert expected_ui_message in subscription_page
     assert expected_ui_message in pricing_page
-    assert "webPurchaseDisabled={!isIOS()}" in subscription_page
+    # Web purchase is disabled until the deployment sets the RevenueCat Billing
+    # web key. Both surfaces must read the same flag, or the buttons and the
+    # "unavailable" notice disagree with each other.
+    assert "webPurchaseDisabled={!isIOS() && !WEB_PURCHASES_ENABLED}" in subscription_page
     assert "!displayedBillingOption || webPurchaseDisabled" in subscription_page
+    for page in (subscription_page, pricing_page):
+        assert (
+            "const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);"
+            in page
+        )
+    assert "{!WEB_PURCHASES_ENABLED && (" in pricing_page
     assert 'apiRequest("/subscriptions/checkout"' not in subscription_page
     assert 'apiRequest("/addons/checkout"' in subscription_page
     assert 'data-testid={`addon-buy-${addon.id}`}' in subscription_page
