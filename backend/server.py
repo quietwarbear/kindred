@@ -58,6 +58,43 @@ from routes.today import router as today_router
 
 load_dotenv()
 
+
+# --- Error monitoring (Sentry) ------------------------------------------------
+# Content-free by design: Kindred must never emit names, emails, message bodies,
+# or invite codes to any third party. We strip request bodies, query strings,
+# cookies and auth headers from every event, and drop breadcrumbs/extra that
+# could carry content. No-op unless SENTRY_DSN is set.
+def _privacy_safe_sentry_event(event, _hint):
+    request_data = event.get("request")
+    if request_data:
+        url = str(request_data.get("url") or "")
+        request_data["url"] = url.split("?", 1)[0]
+        request_data["query_string"] = ""
+        request_data["data"] = "[Filtered]"
+        request_data["cookies"] = "[Filtered]"
+        request_data["headers"] = {
+            key: ("[Filtered]" if key.lower() in {"authorization", "cookie"} else value)
+            for key, value in (request_data.get("headers") or {}).items()
+        }
+        event["request"] = request_data
+    event.pop("extra", None)
+    event.pop("breadcrumbs", None)
+    return event
+
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+if _sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        send_default_pii=False,
+        include_local_variables=False,
+        before_send=_privacy_safe_sentry_event,
+    )
+
 app = FastAPI(title="Kindred API")
 
 # Health check
