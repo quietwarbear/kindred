@@ -82,18 +82,27 @@ def _privacy_safe_sentry_event(event, _hint):
     return event
 
 
-_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+_sentry_dsn = os.environ.get("SENTRY_DSN", "").strip().strip('"').strip("'")
 if _sentry_dsn:
     import sentry_sdk
 
-    sentry_sdk.init(
-        dsn=_sentry_dsn,
-        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
-        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
-        send_default_pii=False,
-        include_local_variables=False,
-        before_send=_privacy_safe_sentry_event,
-    )
+    # A malformed DSN (paste artifact, bad scheme) must NEVER crash the app —
+    # error monitoring is optional infrastructure, not a startup dependency.
+    try:
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+            send_default_pii=False,
+            include_local_variables=False,
+            before_send=_privacy_safe_sentry_event,
+        )
+    except Exception as _sentry_err:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "Sentry init skipped (%s) — check SENTRY_DSN", type(_sentry_err).__name__
+        )
 
 app = FastAPI(title="Kindred API")
 

@@ -7,16 +7,22 @@ import * as Sentry from "@sentry/capacitor";
 import * as SentryReact from "@sentry/react";
 
 export function initSentry() {
-  const dsn = process.env.REACT_APP_SENTRY_DSN;
+  const dsn = (process.env.REACT_APP_SENTRY_DSN || "").trim();
   if (!dsn) return;
-  Sentry.init(
-    {
-      dsn,
-      environment: process.env.REACT_APP_SENTRY_ENVIRONMENT || "production",
-      release: process.env.REACT_APP_SENTRY_RELEASE || undefined,
-      tracesSampleRate: 0.1,
-      sendDefaultPii: false,
-    },
-    SentryReact.init,
-  );
+  // A malformed DSN must never take down the app; monitoring is optional.
+  try {
+    Sentry.init(
+      {
+        dsn,
+        environment: process.env.REACT_APP_SENTRY_ENVIRONMENT || "production",
+        release: process.env.REACT_APP_SENTRY_RELEASE || undefined,
+        tracesSampleRate: 0.1,
+        sendDefaultPii: false,
+      },
+      SentryReact.init,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[Kindred] Sentry init skipped:", err?.message || err);
+  }
 }
