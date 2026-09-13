@@ -5,7 +5,9 @@ import App from "@/App";
 import { registerServiceWorker } from "@/lib/sw-register";
 import { initializeRevenueCat } from "@/lib/revenuecat";
 import { initAnalytics } from "@/lib/analytics";
+import { initSentry } from "@/lib/sentry";
 
+initSentry();
 registerServiceWorker();
 initAnalytics();
 

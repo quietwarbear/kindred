@@ -45,6 +45,8 @@
     "@radix-ui/react-tooltip": "^1.2.4",
     "@revenuecat/purchases-capacitor": "^11.3.2",
     "@revenuecat/purchases-js": "1.48.1",
+    "@sentry/capacitor": "^4.3.0",
+    "@sentry/react": "10.69.0",
     "ajv": "^8.18.0",
     "axios": "^1.8.4",
     "class-variance-authority": "^0.7.1",
