@@ -14,6 +14,9 @@ class CommunityBootstrapRequest(BaseModel):
     description: str = ""
     motto: str = ""
     creation_mode: Literal["standard", "reunion_first"] = "standard"
+    # Browser `_ga` cookie, forwarded so this event joins the GA4 session
+    # (and campaign) that produced it.
+    ga_client_id: str = ""
 
 
 class InviteRegistrationRequest(BaseModel):
@@ -21,6 +24,9 @@ class InviteRegistrationRequest(BaseModel):
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=1)
     invite_code: str
+    # Browser `_ga` cookie, forwarded so this event joins the GA4 session
+    # (and campaign) that produced it.
+    ga_client_id: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -463,6 +469,9 @@ class ThreadPublic(BaseModel):
 class PaymentCheckoutRequest(BaseModel):
     package_id: str
     origin_url: str
+    # Browser `_ga` cookie, forwarded so this event joins the GA4 session
+    # (and campaign) that produced it.
+    ga_client_id: str = ""
 
 
 class DashboardOverview(BaseModel):
@@ -702,3 +711,6 @@ class GuestAccountRegistrationRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=80)
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=8, max_length=200)
+    # Browser `_ga` cookie, forwarded so this event joins the GA4 session
+    # (and campaign) that produced it.
+    ga_client_id: str = ""

@@ -29,6 +29,8 @@ from pricing import (
 )
 from subscription_lifecycle import PAID_ACCESS_STATUSES
 
+import ga4
+
 router = APIRouter(prefix="/api")
 
 logger = logging.getLogger(__name__)
@@ -571,6 +573,7 @@ async def addon_checkout(
         "community_id": current_user["community_id"],
         "addon_id": addon_id,
         "addon_name": addon["name"],
+        "ga_client_id": body.get("ga_client_id") or current_user.get("ga_client_id") or "",
     }
 
     try:
@@ -596,6 +599,15 @@ async def addon_checkout(
         )
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
+
+    ga4.track_begin_checkout(
+        current_user["id"],
+        item_id=addon_id,
+        item_name=addon["name"],
+        item_category="addon",
+        value_cents=int(addon["price_cents"]),
+        ga_client_id=metadata["ga_client_id"],
+    )
 
     return {"checkout_url": session.url, "session_id": session.id}
 

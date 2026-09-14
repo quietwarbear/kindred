@@ -23,6 +23,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+import ga4
+
 
 def _mobile_scheme_redirect(url: str) -> Response:
     """Return a response that redirects to ``url``.
@@ -557,6 +559,7 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         "community_ids": [community_id],
         "auth_provider": "password",
         "onboarding_completed": True,
+        "ga_client_id": payload.ga_client_id or "",
         "created_at": created_at,
     }
 
@@ -594,6 +597,9 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         )
     else:
         await ensure_chat_rooms_for_community(community_id, community_doc["name"], [])
+
+    # A host creating a community is Kindred's headline acquisition event.
+    ga4.track_sign_up(user_id, method="bootstrap", ga_client_id=payload.ga_client_id or "")
 
     return build_auth_response(user_doc, community_doc)
 
@@ -639,6 +645,7 @@ async def register_with_invite(payload: InviteRegistrationRequest):
         "community_ids": [invite_doc["community_id"]],
         "auth_provider": "password",
         "onboarding_completed": True,
+        "ga_client_id": payload.ga_client_id or "",
         "created_at": created_at,
     }
     await users_collection.insert_one(user_doc.copy())
@@ -650,6 +657,11 @@ async def register_with_invite(payload: InviteRegistrationRequest):
     community_doc = await communities_collection.find_one(
         {"id": invite_doc["community_id"]}, {"_id": 0}
     )
+
+    # Invited relatives are organic growth, not paid — tracking them separately
+    # from `bootstrap` keeps paid CAC honest.
+    ga4.track_sign_up(user_doc["id"], method="invite", ga_client_id=payload.ga_client_id or "")
+
     return build_auth_response(user_doc, community_doc)
 
 
@@ -699,6 +711,7 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
         "community_ids": [],
         "auth_provider": "password",
         "onboarding_completed": False,
+        "ga_client_id": payload.ga_client_id or "",
         "created_at": now_iso(),
     }
     try:
@@ -708,6 +721,9 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         ) from exc
+
+    ga4.track_sign_up(user_doc["id"], method="guest", ga_client_id=payload.ga_client_id or "")
+
     return build_auth_response(user_doc, None)
 
 
