@@ -256,6 +256,7 @@ async def _build_google_auth_response(
                 "created_at": created_at,
             }
             await users_collection.insert_one(user_doc.copy())
+            ga4.track_sign_up(user_id, method="%s_invite" % provider)
             await invites_collection.update_one(
                 {"id": invite_doc["id"]},
                 {"$set": {"status": "accepted", "accepted_at": created_at}},
@@ -281,6 +282,7 @@ async def _build_google_auth_response(
                 "created_at": created_at,
             }
             await users_collection.insert_one(user_doc.copy())
+            ga4.track_sign_up(user_id, method=provider)
 
     session_token = secrets.token_urlsafe(32)
     await user_sessions_collection.update_one(
@@ -757,6 +759,9 @@ async def _find_or_create_sso_user(email: str, name: str) -> dict[str, Any]:
         "created_at": now_iso(),
     }
     await users_collection.insert_one(user_doc.copy())
+    # Arrived from a sibling product, not a campaign — its own bucket so
+    # cross-app handoffs never get counted as acquisition.
+    ga4.track_sign_up(user_doc["id"], method="ubuntu_sso")
     return user_doc
 
 
