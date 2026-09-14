@@ -25,10 +25,13 @@ from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreate
 from pricing import (
     BILLING_ENVIRONMENT,
     billing_amount,
+    price_cents,
     resolve_stripe_price,
     stripe_api_key_matches_environment,
 )
 from subscription_lifecycle import PAID_ACCESS_STATUSES, should_apply_provider_event
+
+import ga4
 
 router = APIRouter(prefix="/api")
 
@@ -304,6 +307,7 @@ async def create_checkout_session(
         "user_email": current_user["email"],
         "package_id": package["id"],
         "contribution_label": package["label"],
+        "ga_client_id": payload.ga_client_id or current_user.get("ga_client_id") or "",
     }
 
     try:
@@ -329,6 +333,15 @@ async def create_checkout_session(
         )
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stripe error: {str(e)}")
+
+    ga4.track_begin_checkout(
+        current_user["id"],
+        item_id=package["id"],
+        item_name=package["label"],
+        item_category="contribution",
+        value_cents=int(float(package["amount"]) * 100),
+        ga_client_id=metadata["ga_client_id"],
+    )
 
     transaction_doc = {
         "id": str(uuid.uuid4()),
@@ -444,6 +457,24 @@ async def stripe_webhook(request: Request):
                 update_payload["completed_at"] = now_iso()
             await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
 
+            if payment_status == "paid":
+                # amount_total is Stripe's own figure, so promo codes and tax
+                # are already reflected — never re-derive it from the catalog.
+                _is_addon = metadata.get("type") == "addon"
+                ga4.track_purchase(
+                    transaction_id=session_id or "",
+                    value_cents=int(data_object.get("amount_total") or 0),
+                    item_id=metadata.get("addon_id") or metadata.get("package_id") or "one_time",
+                    item_name=(
+                        metadata.get("addon_name")
+                        or metadata.get("contribution_label")
+                        or "One-time payment"
+                    ),
+                    item_category="addon" if _is_addon else "contribution",
+                    user_id=metadata.get("user_id", ""),
+                    ga_client_id=metadata.get("ga_client_id", ""),
+                )
+
         # --- Subscription checkout ---
         elif mode == "subscription":
             stripe_subscription_id = data_object.get("subscription", "")
@@ -536,6 +567,24 @@ async def stripe_webhook(request: Request):
                     )
                 except Exception as exc:
                     logger.warning("Welcome email failed: %s", exc)
+
+                # GA4 purchase, from the webhook rather than the success page,
+                # so a subscriber who closes the tab still counts.
+                _plan = sub_doc.get("plan_id", "")
+                _cycle = sub_doc.get("billing_cycle", "")
+                try:
+                    _fallback_cents = price_cents(_plan, _cycle)
+                except Exception:
+                    _fallback_cents = 0
+                ga4.track_purchase(
+                    transaction_id=data_object.get("subscription") or session_id or "",
+                    value_cents=int(data_object.get("amount_total") or _fallback_cents),
+                    item_id="%s_%s" % (_plan, _cycle),
+                    item_name=sub_doc.get("plan_name") or _plan,
+                    item_category="subscription",
+                    user_id=sub_doc.get("user_id", ""),
+                    ga_client_id=(metadata or {}).get("ga_client_id", ""),
+                )
 
         return {"received": True, "event_type": event_type, "mode": mode}
 
