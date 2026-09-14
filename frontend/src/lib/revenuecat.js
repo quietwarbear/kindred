@@ -1,5 +1,5 @@
 /**
- * RevenueCat integration for iOS in-app purchases via Capacitor
+ * RevenueCat integration for iOS and Android in-app purchases via Capacitor
  * Falls back gracefully on web platforms
  */
 import { Capacitor } from "@capacitor/core";
@@ -19,6 +19,12 @@ const REVENUECAT_KEYS = {
 
 const nativePlatform = () =>
     (Capacitor.isNativePlatform() ? Capacitor.getPlatform() : null);
+
+// Platforms whose store billing runs through RevenueCat. Every entry point in
+// this file gates on this one check — a guard left at iOS-only is exactly how
+// Android shipped with purchase buttons that threw on tap.
+const NATIVE_STORE_PLATFORMS = new Set(["ios", "android"]);
+const isNativeStorePlatform = () => NATIVE_STORE_PLATFORMS.has(nativePlatform());
 
 /** The RevenueCat public key for the platform we are running on, if any. */
 const platformApiKey = () => {
@@ -52,7 +58,7 @@ let initPromise = null;
 const RC_INIT_TIMEOUT_MS = 30000;
 
 /**
- * Initialize RevenueCat SDK (iOS only)
+ * Initialize RevenueCat SDK (iOS and Android)
  * Safe to call on web - will no-op.
  * Re-entrant: returns the same promise if already in progress.
  * Has a timeout so it never hangs forever.
@@ -61,11 +67,10 @@ export const initializeRevenueCat = async () => {
     if (revenueCatInitialized) return true;
     if (initPromise) return initPromise;
 
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
+    const platform = nativePlatform();
 
     // Native store purchases: iOS and Android both go through RevenueCat.
-    if (!isNative || (platform !== "ios" && platform !== "android")) {
+    if (!isNativeStorePlatform()) {
           console.log("[Kindred] RevenueCat: skipping init (not a native store platform)");
           return false;
     }
@@ -136,14 +141,11 @@ export const ensureInitialized = async () => {
 };
 
 /**
- * Fetch offerings from RevenueCat (iOS only)
+ * Fetch offerings from RevenueCat (native store platforms only)
  * Returns structured offerings or null on web/error
  */
 export const fetchOfferings = async () => {
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
-
-    if (!isNative || platform !== "ios") return null;
+    if (!isNativeStorePlatform()) return null;
 
     const ready = await ensureInitialized();
     if (!ready) return null;
@@ -177,7 +179,7 @@ const allOfferingPackages = (offerings) => {
 };
 
 /**
- * Return StoreKit-localized display prices for every mapped package.
+ * Return store-localized display prices for every mapped package.
  * Savings are calculated only when both package amounts use the same currency.
  */
 export const getLocalizedRevenueCatPricing = async (productMapping) => {
@@ -227,13 +229,10 @@ export const getLocalizedRevenueCatPricing = async (productMapping) => {
 
 /**
  * Get package (product) from offerings by product ID
- * iOS only
+ * Native store platforms only
  */
 export const getPackageByProductId = async (productId) => {
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
-
-    if (!isNative || platform !== "ios") return null;
+    if (!isNativeStorePlatform()) return null;
 
     const ready = await ensureInitialized();
     if (!ready) return null;
@@ -265,15 +264,12 @@ export const getPackageByProductId = async (productId) => {
 };
 
 /**
- * Make purchase on iOS
+ * Make a native store purchase (App Store or Google Play)
  * Handles transaction and receipt validation.
  */
 export const makePurchase = async (productId, billingInterval, expectedEntitlementId) => {
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
-
-    if (!isNative || platform !== "ios") {
-          throw new Error("In-app purchases are only available on iOS.");
+    if (!isNativeStorePlatform()) {
+          throw new Error("In-app purchases are only available in the Kindred mobile app.");
     }
 
     const ready = await ensureInitialized();
@@ -293,7 +289,7 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
       const expectedPackageIdentifier =
         billingInterval === "monthly" ? "$rc_monthly" : billingInterval === "annual" ? "$rc_annual" : "";
       if (!expectedPackageIdentifier || pkg.identifier !== expectedPackageIdentifier) {
-        throw new Error("The App Store product does not match the selected billing interval.");
+        throw new Error("The store product does not match the selected billing interval.");
       }
 
       const purchaseResult = await Purchases.purchasePackage({ aPackage: pkg });
@@ -320,13 +316,10 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
 
 /**
  * Sync customer ID with RevenueCat (call this after user login)
- * iOS only
+ * Native store platforms only
  */
 export const syncRevenueCatUser = async (userId) => {
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
-
-    if (!isNative || platform !== "ios") return;
+    if (!isNativeStorePlatform()) return;
 
     const ready = await ensureInitialized();
     if (!ready) return;
@@ -347,21 +340,18 @@ export const openRevenueCatSubscriptionManagement = async () => {
     const result = await Purchases.getCustomerInfo();
     const managementURL = result?.customerInfo?.managementURL;
     if (!managementURL) {
-          throw new Error("The App Store subscription management link is unavailable.");
+          throw new Error("The store subscription management link is unavailable.");
     }
     await Browser.open({ url: managementURL, presentationStyle: "popover" });
 };
 
 /**
- * Restore previously purchased subscriptions (iOS only)
+ * Restore previously purchased subscriptions (iOS and Android)
  * Apple requires a visible "Restore Purchases" button per guideline 3.1.1
  */
 export const restorePurchases = async () => {
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
-
-    if (!isNative || platform !== "ios") {
-          throw new Error("Restore purchases is only available on iOS.");
+    if (!isNativeStorePlatform()) {
+          throw new Error("Restore purchases is only available in the Kindred mobile app.");
     }
 
     const ready = await ensureInitialized();
