@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, formatDateTime, shortCurrency } from "@/lib/api";
+import { gaClientId } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 import { isNative } from "@/lib/native-bridge";
 
@@ -87,7 +88,11 @@ export const FundsTravelPage = ({ token, user }) => {
       const payload = await apiRequest("/payments/checkout/session", {
         method: "POST",
         token,
-        data: { package_id: packageId, origin_url: window.location.origin },
+        data: {
+          package_id: packageId,
+          origin_url: window.location.origin,
+          ga_client_id: gaClientId(),
+        },
       });
       window.location.href = payload.url;
     } catch (error) {

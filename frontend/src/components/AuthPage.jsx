@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api";
-import { trackReunionEvent } from "@/lib/analytics";
+import { trackReunionEvent, gaClientId } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
 import {
   clearReunionDraft,
@@ -259,9 +259,15 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     event.preventDefault();
     setIsSubmitting(true);
     try {
+      const gaId = gaClientId();
       const payload = await apiRequest(hasFamilyAccessIntent ? "/auth/guest-account" : "/auth/bootstrap", {
         data: hasFamilyAccessIntent
-          ? { full_name: launchForm.full_name, email: launchForm.email, password: launchForm.password }
+          ? {
+              full_name: launchForm.full_name,
+              email: launchForm.email,
+              password: launchForm.password,
+              ga_client_id: gaId,
+            }
           : hasReunionIntent
           ? {
               ...launchForm,
@@ -271,8 +277,9 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
               description: "A provisional private planning space created for a family reunion.",
               creation_mode: "reunion_first",
               motto: "",
+              ga_client_id: gaId,
             }
-          : launchForm,
+          : { ...launchForm, ga_client_id: gaId },
         method: "POST",
       });
       await completeAuthentication(payload, hasFamilyAccessIntent ? "Your account is ready. No family access has been granted yet." : hasReunionIntent ? "Your reunion planning account is ready." : "Your private community has been opened.");
@@ -287,7 +294,10 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = await apiRequest("/auth/register-with-invite", { data: joinForm, method: "POST" });
+      const payload = await apiRequest("/auth/register-with-invite", {
+        data: { ...joinForm, ga_client_id: gaClientId() },
+        method: "POST",
+      });
       await completeAuthentication(payload, "Welcome into the community.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to accept that invite.");

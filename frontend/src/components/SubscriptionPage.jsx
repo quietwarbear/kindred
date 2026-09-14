@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
+import { gaClientId } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 import {
   ensureInitialized,
@@ -246,7 +247,11 @@ const AddOnsSection = ({ token }) => {
       const payload = await apiRequest("/addons/checkout", {
         method: "POST",
         token,
-        data: { addon_id: addonId, origin_url: window.location.href.split("?")[0] },
+        data: {
+          addon_id: addonId,
+          origin_url: window.location.href.split("?")[0],
+          ga_client_id: gaClientId(),
+        },
       });
       if (payload.checkout_url) {
         window.location.href = payload.checkout_url;

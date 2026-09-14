@@ -21,6 +21,7 @@ import {
   sanitizeAnalyticsEvent,
   trackEvent,
   trackReunionEvent,
+  gaClientId,
 } from "./analytics";
 
 beforeEach(() => {
@@ -372,4 +373,34 @@ test("explicit local QA mode suppresses every PostHog entry point", () => {
   } else {
     process.env.REACT_APP_DISABLE_ANALYTICS = previous;
   }
+});
+
+describe("gaClientId", () => {
+  const setGaCookie = (value) => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => value,
+    });
+  };
+
+  test("returns the _ga cookie so the backend can join the session", () => {
+    setGaCookie("_ga=GA1.1.1122334455.1699999999; _gid=GA1.1.9.9");
+    expect(gaClientId()).toBe("GA1.1.1122334455.1699999999");
+  });
+
+  test("is not fooled by a cookie whose name merely ends in _ga", () => {
+    setGaCookie("_gali=GA1.1.0.0; _ga=GA1.1.777.888");
+    expect(gaClientId()).toBe("GA1.1.777.888");
+  });
+
+  test("returns empty when the tag never wrote a cookie", () => {
+    setGaCookie("_gid=GA1.1.9.9");
+    expect(gaClientId()).toBe("");
+  });
+
+  test("hands out no identifier on a suppressed route", () => {
+    window.history.replaceState({}, "", "/sso");
+    setGaCookie("_ga=GA1.1.1122334455.1699999999");
+    expect(gaClientId()).toBe("");
+  });
 });
