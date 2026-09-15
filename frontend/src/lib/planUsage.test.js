@@ -1,4 +1,4 @@
-import { describePlanUsage } from "./planUsage";
+import { describePlanUsage, isContestOpen, KEEP_THE_RECORD } from "./planUsage";
 
 const payload = ({ id = "seedling", name = "Seedling", max = 10, members = 4, provider } = {}) => ({
   subscription: provider ? { provider } : null,
@@ -7,7 +7,7 @@ const payload = ({ id = "seedling", name = "Seedling", max = 10, members = 4, pr
 });
 
 describe("describePlanUsage", () => {
-  it("reports room left on a free family without prompting", () => {
+  it("reports room left on a free family", () => {
     expect(describePlanUsage(payload({ members: 4 }))).toMatchObject({
       planName: "Seedling",
       memberCount: 4,
@@ -15,8 +15,14 @@ describe("describePlanUsage", () => {
       remaining: 6,
       atLimit: false,
       nearLimit: false,
+      isPaid: false,
       canUpgrade: true,
     });
+  });
+
+  it("treats every non-Seedling plan as paid", () => {
+    expect(describePlanUsage(payload({ id: "sapling", name: "Sapling", max: 25 })).isPaid).toBe(true);
+    expect(describePlanUsage(payload({ id: "oak", name: "Oak", max: 50 })).isPaid).toBe(true);
   });
 
   it("flags a family within three spots of its limit", () => {
@@ -36,11 +42,23 @@ describe("describePlanUsage", () => {
 
   it("never prompts the admin override to upgrade", () => {
     const admin = describePlanUsage(payload({ id: "redwood", name: "Redwood", max: 100, members: 3, provider: "admin_override" }));
-    expect(admin.canUpgrade).toBe(false);
+    expect(admin).toMatchObject({ canUpgrade: false, isPaid: true });
   });
 
   it("returns null when the plan payload is incomplete", () => {
     expect(describePlanUsage(null)).toBeNull();
     expect(describePlanUsage({ tier: { id: "seedling" }, usage: {} })).toBeNull();
+  });
+});
+
+describe("isContestOpen", () => {
+  it("opens at midnight Pacific on Sep 7", () => {
+    expect(isContestOpen(Date.parse("2026-09-06T23:59:59-07:00"))).toBe(false);
+    expect(isContestOpen(KEEP_THE_RECORD.startsAt)).toBe(true);
+  });
+
+  it("stays open through the whole of Dec 5 Pacific and closes after", () => {
+    expect(isContestOpen(Date.parse("2026-12-05T23:59:59-08:00"))).toBe(true);
+    expect(isContestOpen(Date.parse("2026-12-06T00:00:00-08:00"))).toBe(false);
   });
 });
