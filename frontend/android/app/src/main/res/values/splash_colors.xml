@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same as the adaptive icon background, so the masked icon shows no ring on the splash. -->
+    <color name="kindred_splash_background">#140D2E</color>
+</resources>
