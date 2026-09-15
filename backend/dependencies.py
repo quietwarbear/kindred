@@ -103,7 +103,8 @@ async def enforce_member_limit(community_id: str) -> None:
     if member_count >= max_members:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Your {tier['name']} plan supports up to {max_members} members. Please upgrade to add more.",
+            # The person who hits this is joining, not the host, so point them at the host.
+            detail=f"This family has reached its {tier['name']} plan limit of {max_members} members. The family host can upgrade the plan to make room.",
         )
 
 
