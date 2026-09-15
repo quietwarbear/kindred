@@ -3,6 +3,7 @@ import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, FileText, LockKeyho
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { PlanUpgradeCard } from "@/components/PlanUpgradeCard";
 import { Input } from "@/components/ui/input";
 import { requiresPasswordForAccountDeletion } from "@/lib/accountDeletion";
 import { apiRequest, convertFileToDataUrl } from "@/lib/api";
@@ -394,6 +395,8 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           </div>
         </article>
       </section>
+
+      {user?.role === "host" ? <PlanUpgradeCard token={token} variant="settings" /> : null}
 
       {user?.role === "host" && (
         <section className="archival-card" data-testid="settings-transfer-ownership-card">

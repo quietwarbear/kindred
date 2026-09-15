@@ -3,6 +3,7 @@ import { ArrowRight, BellRing, CheckCheck, CircleAlert, CloudOff, RefreshCw, Shi
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { PlanUpgradeCard } from "@/components/PlanUpgradeCard";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
@@ -203,6 +204,8 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
           </div>
         </div>
       </section>
+
+      {todayData.viewer_role === "host" ? <PlanUpgradeCard token={token} variant="today" /> : null}
 
       {todayData.secondary_actions.length ? (
         <section className="archival-card" aria-labelledby="today-secondary-heading">
