@@ -24,6 +24,12 @@ PODS:
   - RevenuecatPurchasesCapacitor (11.3.2):
     - Capacitor
     - PurchasesHybridCommon (= 17.25.0)
+  - Sentry (9.16.1):
+    - Sentry/Core (= 9.16.1)
+  - Sentry/Core (9.16.1)
+  - SentryCapacitor (4.3.0):
+    - Capacitor
+    - Sentry (= 9.16.1)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -37,11 +43,13 @@ DEPENDENCIES:
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
   - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
   - "RevenuecatPurchasesCapacitor (from `../../node_modules/@revenuecat/purchases-capacitor`)"
+  - "SentryCapacitor (from `../../node_modules/@sentry/capacitor`)"
 
 SPEC REPOS:
   trunk:
     - PurchasesHybridCommon
     - RevenueCat
+    - Sentry
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -66,6 +74,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/status-bar"
   RevenuecatPurchasesCapacitor:
     :path: "../../node_modules/@revenuecat/purchases-capacitor"
+  SentryCapacitor:
+    :path: "../../node_modules/@sentry/capacitor"
 
 SPEC CHECKSUMS:
   Capacitor: c04568d0798e8c9a481d70e8d3df1f7fe1966549
@@ -81,7 +91,9 @@ SPEC CHECKSUMS:
   PurchasesHybridCommon: 6a79a873ab52f777bfa36e9516f3fcd84d3b3428
   RevenueCat: eab035bbab271faccfef5c36eaff2a1ffef14dc0
   RevenuecatPurchasesCapacitor: 17db9f0b99ec5c4055d84af83d38bc5038f50ff2
+  Sentry: e5d82a3c1f2d951f75c04c57215a0abb1facbd51
+  SentryCapacitor: 51a84af1e21f72895220340fe3b4e419dad43b5d
 
-PODFILE CHECKSUM: 3c0af4325af1914f0d3bfdd1960a61292aae4caf
+PODFILE CHECKSUM: fb6917b5fa439ad0d84c088189b479142b217b4b
 
 COCOAPODS: 1.13.0
