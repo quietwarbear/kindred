@@ -1,5 +1,7 @@
 import {
   clearReunionDraft,
+  draftLandingPath,
+  gatheringTypeDetails,
   loadReunionDraft,
   normalizeReunionDraft,
   provisionalCommunityName,
@@ -78,4 +80,44 @@ test("supports a one-day default and an optional multiday range", () => {
 test("uses an explicit provisional planning-space name", () => {
   expect(provisionalCommunityName(completeDraft)).toBe("The Johnson Family Reunion planning space");
   expect(normalizeReunionDraft({ ...completeDraft, location: undefined }).location).toBe("");
+});
+
+test("defaults to a reunion and ignores unknown gathering types", () => {
+  expect(normalizeReunionDraft(completeDraft).gathering_type).toBe("reunion");
+  expect(normalizeReunionDraft({ ...completeDraft, gathering_type: "rave" }).gathering_type).toBe("reunion");
+  expect(normalizeReunionDraft({ ...completeDraft, gathering_type: "toString" }).gathering_type).toBe("reunion");
+  expect(gatheringTypeDetails({ ...completeDraft, gathering_type: "birthday" }).noun).toBe("birthday");
+});
+
+test("keeps the chosen gathering type through save and reload", () => {
+  saveReunionDraft({ ...completeDraft, gathering_type: "wedding" });
+  expect(loadReunionDraft().gathering_type).toBe("wedding");
+});
+
+test("holiday meal uses the holiday template and its starter content", () => {
+  const payload = reunionDraftToEventPayload({ ...completeDraft, gathering_type: "holiday_meal" });
+  expect(payload.event_template).toBe("holiday_meal");
+  expect(payload.recurrence_frequency).toBe("none");
+  expect(payload.client_request_id.length).toBeGreaterThanOrEqual(16);
+  expect(payload.agenda.map((item) => item.title)).toEqual(["Welcome or arrival", "Meal time", "Cleanup"]);
+  expect(payload.potluck_items).toHaveLength(4);
+  expect(payload.volunteer_slots.map((slot) => slot.title)).toEqual(["Setup", "Cleanup"]);
+  expect(payload.description).toBe("A private holiday meal organized by Avery Johnson.");
+});
+
+test.each(["birthday", "wedding", "custom"])("%s starts with its template and no reunion starter content", (type) => {
+  const payload = reunionDraftToEventPayload({ ...completeDraft, gathering_type: type });
+  expect(payload.event_template).toBe(type);
+  expect(payload.agenda).toEqual([]);
+  expect(payload.potluck_items).toEqual([]);
+  expect(payload.volunteer_slots).toEqual([]);
+  expect(payload.assigned_roles).toContain("Organizer");
+  expect(payload.description).not.toContain("reunion");
+});
+
+test("only reunions land on the reunion activation flow", () => {
+  expect(draftLandingPath(completeDraft, "evt-1")).toBe("/reunion/activate/evt-1");
+  for (const type of ["holiday_meal", "birthday", "wedding", "custom"]) {
+    expect(draftLandingPath({ ...completeDraft, gathering_type: type }, "evt-1")).toBe("/gatherings/evt-1");
+  }
 });

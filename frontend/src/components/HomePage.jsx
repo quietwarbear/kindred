@@ -20,7 +20,7 @@ const ACTION_COPY = {
   claim_holiday_contribution: ["Claim a dish or volunteer need", "Choose an open contribution or help slot.", "View contributions"],
   add_holiday_recipe: ["Add an optional recipe or tradition", "Preserve your own food story in Kindred.", "Add a recipe"],
   view_holiday_recap: ["View the holiday meal recap", "Return to the published memories and next-gathering flow.", "View recap"],
-  activate_family_space: ["Name and open your family space", "Your reunion has enough verified participation to become an enduring private family space.", "Complete family setup"],
+  activate_family_space: ["Name and open your family space", "Your gathering has enough verified participation to become an enduring private family space.", "Complete family setup"],
   finish_reunion_draft: ["Finish the reunion draft", "Complete the remaining reunion details before inviting family.", "Continue the draft"],
   prepare_first_invitation: ["Bring the first person in", "Prepare or safely share the reunion’s first private invitation.", "Open invitation controls"],
   review_family_access_requests: ["Review a family access request", "A reunion guest is waiting for an organizer decision.", "Review privately"],

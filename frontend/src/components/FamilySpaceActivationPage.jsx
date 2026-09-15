@@ -31,11 +31,11 @@ const stableOperationKey = () => {
 const ACTION_COPY = {
   activate_family_space: [
     "Choose the name your family will keep",
-    "Your reunion has enough verified participation to open the enduring family space.",
+    "Your gathering has enough verified participation to open the enduring family space.",
   ],
   create_reunion: [
-    "Save the first reunion",
-    "A persisted reunion is the foundation for this family space.",
+    "Save the first gathering",
+    "A saved gathering is the foundation for this family space.",
   ],
   collect_verified_invitation_evidence: [
     "Let private invitations reach family",
@@ -43,7 +43,7 @@ const ACTION_COPY = {
   ],
   receive_more_accepted_responses: [
     "Welcome a few more responses",
-    "The family space becomes ready after the reunion has meaningful accepted participation.",
+    "The family space becomes ready after a gathering has meaningful accepted participation.",
   ],
   invite_non_host_participation: [
     "Invite one family contribution",
@@ -51,7 +51,7 @@ const ACTION_COPY = {
   ],
   open_family_home: [
     "Open the family home",
-    "This family space is already active and the reunion remains available.",
+    "This family space is already active and your gatherings remain available.",
   ],
   continue_current_family_space: [
     "Continue to the family home",
@@ -244,7 +244,7 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
           <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
           <p className="eyebrow-text mt-5">Family space activated</p>
           <h1 className="mt-3 font-display text-4xl">Your family home is ready.</h1>
-          <p className="mt-4 text-sm leading-7 text-muted-foreground">Your reunion, invitations, members, responses, memories, and history are right where you left them.</p>
+          <p className="mt-4 text-sm leading-7 text-muted-foreground">Your gatherings, invitations, members, responses, memories, and history are right where you left them.</p>
         </section>
       </div>
     );
@@ -260,8 +260,8 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
         <header className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
             <div className="p-6 sm:p-9">
-              <p className="eyebrow-text">From reunion plan to family home</p>
-              <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">Keep gathering after the reunion.</h1>
+              <p className="eyebrow-text">From first gathering to family home</p>
+              <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">Keep gathering after the first one.</h1>
               <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Activation changes only the enduring display name and lifecycle state. It does not move, recreate, or rewrite family content.</p>
             </div>
             <div className="bg-stone-950 p-6 text-white sm:p-9">
@@ -283,7 +283,7 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
             </div>
             <div className="mt-6 space-y-3">
               <ProgressRow complete={(counts.verified_invitations || 0) >= 3} current={counts.verified_invitations || 0} label="Invitations opened, answered, or delivery-verified" target={3} />
-              <ProgressRow complete={(counts.accepted_responses || 0) >= 2} current={counts.accepted_responses || 0} label="Accepted reunion responses" target={2} />
+              <ProgressRow complete={(counts.accepted_responses || 0) >= 2} current={counts.accepted_responses || 0} label="Accepted responses" target={2} />
               <ProgressRow complete={(counts.non_host_participants || 0) >= 1} current={counts.non_host_participants || 0} label="Non-host participants" target={1} />
             </div>
             <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-muted-foreground"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /> Queued email and copied links never count as delivery evidence.</p>

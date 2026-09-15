@@ -1,7 +1,45 @@
 const REUNION_DRAFT_KEY = "kindred-reunion-draft-v1";
 
+// The first gathering a new family plans. Ids match the backend
+// GATHERING_TEMPLATES; roles mirror each template's defaults.
+export const GATHERING_TYPES = Object.freeze({
+  reunion: {
+    label: "Reunion",
+    noun: "reunion",
+    placeholder: "The Johnson Family Reunion",
+    roles: ["Organizer", "Historian", "Hospitality Lead"],
+  },
+  holiday_meal: {
+    label: "Holiday meal",
+    noun: "holiday meal",
+    placeholder: "Thanksgiving at Grandma's",
+    roles: ["Organizer", "Contributor", "Historian"],
+  },
+  birthday: {
+    label: "Birthday",
+    noun: "birthday",
+    placeholder: "Aunt Ruth's 80th Birthday",
+    roles: ["Organizer", "Historian", "Contributor"],
+  },
+  wedding: {
+    label: "Wedding",
+    noun: "wedding",
+    placeholder: "Amara and Kofi's Wedding",
+    roles: ["Organizer", "Treasurer", "Communications Lead"],
+  },
+  custom: {
+    label: "Other",
+    noun: "gathering",
+    placeholder: "Sunday family dinner",
+    roles: ["Organizer", "Historian", "Contributor"],
+  },
+});
+
+const DEFAULT_GATHERING_TYPE = "reunion";
+
 export const emptyReunionDraft = Object.freeze({
   client_request_id: "",
+  gathering_type: DEFAULT_GATHERING_TYPE,
   gathering_name: "",
   approximate_date: "",
   end_date: "",
@@ -39,8 +77,12 @@ export function normalizeReunionDraft(value = {}) {
   const startDate = clean(value.approximate_date, 10);
   const endDate = clean(value.end_date, 10);
   const multidayEnabled = Boolean(value.multiday_enabled || (endDate && endDate !== startDate));
+  const gatheringType = Object.prototype.hasOwnProperty.call(GATHERING_TYPES, value.gathering_type)
+    ? value.gathering_type
+    : DEFAULT_GATHERING_TYPE;
   return {
     client_request_id: clean(value.client_request_id, 100) || createClientRequestId(),
+    gathering_type: gatheringType,
     gathering_name: clean(value.gathering_name, 120),
     approximate_date: startDate,
     end_date: multidayEnabled ? endDate : "",
@@ -83,24 +125,28 @@ export function reunionDraftIsComplete(draft) {
   return !draft.end_date || draft.end_date >= draft.approximate_date;
 }
 
-export function reunionDraftToEventPayload(draft) {
-  const normalized = normalizeReunionDraft(draft);
-  const endDate = normalized.end_date || normalized.approximate_date;
-  const startAt = `${normalized.approximate_date}T09:00:00`;
-  const endAt = `${endDate}T18:00:00`;
+export function gatheringTypeDetails(draft) {
+  return GATHERING_TYPES[normalizeReunionDraft(draft).gathering_type];
+}
+
+// Starter content per type. Reunion keeps its itinerary starter; holiday meal
+// mirrors the backend template defaults; the rest start empty, exactly as when
+// the template is picked on the Gatherings page.
+function starterContent(normalized) {
+  if (normalized.gathering_type === "holiday_meal") {
+    return {
+      agenda: ["Welcome or arrival", "Meal time", "Cleanup"].map((title) => ({ title, visibility: "draft" })),
+      volunteer_slots: [
+        { title: "Setup", needed_count: 1 },
+        { title: "Cleanup", needed_count: 1 },
+      ],
+      potluck_items: ["Main dish", "Side dish", "Dessert", "Drinks or supplies"],
+    };
+  }
+  if (normalized.gathering_type !== "reunion") {
+    return { agenda: [], volunteer_slots: [], potluck_items: [] };
+  }
   return {
-    client_request_id: normalized.client_request_id,
-    title: normalized.gathering_name,
-    description: `A private reunion gathering organized by ${normalized.organizer_name}.`,
-    start_at: startAt,
-    end_at: endAt,
-    timezone: normalized.timezone,
-    location: normalized.location,
-    event_template: "reunion",
-    gathering_format: "in-person",
-    max_attendees: 50,
-    recurrence_frequency: "none",
-    assigned_roles: ["Organizer", "Historian", "Hospitality Lead"],
     agenda: [
       {
         time_label: "Arrival",
@@ -126,9 +172,43 @@ export function reunionDraftToEventPayload(draft) {
       { title: "Photo and story team", needed_count: 2 },
     ],
     potluck_items: ["Main dish", "Side dish", "Dessert or drinks"],
+  };
+}
+
+export function reunionDraftToEventPayload(draft) {
+  const normalized = normalizeReunionDraft(draft);
+  const type = GATHERING_TYPES[normalized.gathering_type];
+  const endDate = normalized.end_date || normalized.approximate_date;
+  const startAt = `${normalized.approximate_date}T09:00:00`;
+  const endAt = `${endDate}T18:00:00`;
+  const description = normalized.gathering_type === "reunion"
+    ? `A private reunion gathering organized by ${normalized.organizer_name}.`
+    : `A private ${type.noun} organized by ${normalized.organizer_name}.`;
+  return {
+    client_request_id: normalized.client_request_id,
+    title: normalized.gathering_name,
+    description,
+    start_at: startAt,
+    end_at: endAt,
+    timezone: normalized.timezone,
+    location: normalized.location,
+    event_template: normalized.gathering_type,
+    gathering_format: "in-person",
+    max_attendees: 50,
+    recurrence_frequency: "none",
+    assigned_roles: [...type.roles],
+    ...starterContent(normalized),
     travel_coordination_notes: "",
     suggested_contribution: 0,
   };
+}
+
+// Reunions open their dedicated activation flow; every other type opens the
+// general gathering page, which supports invites, RSVPs, potluck and roles.
+export function draftLandingPath(draft, eventId) {
+  return normalizeReunionDraft(draft).gathering_type === "reunion"
+    ? `/reunion/activate/${eventId}`
+    : `/gatherings/${eventId}`;
 }
 
 export function reunionDayCount(draft) {
