@@ -130,7 +130,7 @@ export const FundsTravelPage = ({ token, user }) => {
     try {
       await apiRequest(`/budget-plans/${budgetId}`, { method: "DELETE", token });
       toast.success("Budget plan deleted.");
-      loadSummary();
+      loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to delete budget.");
     }
@@ -140,7 +140,7 @@ export const FundsTravelPage = ({ token, user }) => {
     try {
       await apiRequest(`/travel-plans/${planId}`, { method: "DELETE", token });
       toast.success("Travel plan deleted.");
-      loadSummary();
+      loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to delete travel plan.");
     }
