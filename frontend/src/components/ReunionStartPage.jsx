@@ -20,7 +20,10 @@ import { Input } from "@/components/ui/input";
 import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import {
+  GATHERING_TYPES,
   clearReunionDraft,
+  draftLandingPath,
+  gatheringTypeDetails,
   loadReunionDraft,
   provisionalCommunityName,
   reunionDayCount,
@@ -56,7 +59,7 @@ export const ReunionInvitePreview = ({ draft, activities = [], compact = false }
     >
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-700">Private family invitation</p>
       <p className="mt-3 text-sm text-slate-600">You’re invited by {draft.organizer_name || "your family organizer"}</p>
-      <h2 className="mt-2 font-display text-3xl leading-tight text-slate-950">{draft.gathering_name || "Your family reunion"}</h2>
+      <h2 className="mt-2 font-display text-3xl leading-tight text-slate-950">{draft.gathering_name || `Your family ${gatheringTypeDetails(draft).noun}`}</h2>
       <div className="mt-5 space-y-2 text-sm text-slate-700">
         <p className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-rose-700" />
@@ -94,6 +97,8 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const [saving, setSaving] = useState(false);
   const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
   const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
+  const gatheringType = gatheringTypeDetails(draft);
+  const starter = useMemo(() => reunionDraftToEventPayload(draft), [draft]);
 
   const dateLabel = useMemo(() => {
     if (!draft.approximate_date) return "Choose an approximate date";
@@ -121,7 +126,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const createDraft = (event) => {
     event.preventDefault();
     if (!reunionDraftIsComplete(draft)) {
-      toast.error("Check the reunion date range and enter a valid IANA timezone.");
+      toast.error("Check the date range and enter a valid IANA timezone.");
       return;
     }
     const saved = saveReunionDraft(draft);
@@ -164,9 +169,9 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
       clearReunionDraft();
       trackReunionEvent("reunion_saved", { source: "authenticated_reunion_start" });
       trackReunionEvent("reunion_draft_saved", { source: "reunion_start" });
-      navigate(`/reunion/activate/${event.id}`);
+      navigate(draftLandingPath(draft, event.id));
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to save this reunion draft.");
+      toast.error(error.response?.data?.detail || "Unable to save this draft.");
     } finally {
       setSaving(false);
     }
@@ -183,7 +188,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
           <section className="archival-card h-fit" data-testid="reunion-draft-form-card">
             <p className="eyebrow-text">{memoryFocus ? "Start with the story" : "Start with the gathering"}</p>
             <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">
-              {memoryFocus ? "Give your family's stories a home." : "Make the reunion real in a few minutes."}
+              {memoryFocus ? "Give your family's stories a home." : `Make the ${gatheringType.noun} real in a few minutes.`}
             </h1>
             <p className="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
               {memoryFocus
@@ -192,15 +197,35 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
             </p>
 
             <form className="mt-7 grid gap-4" onSubmit={createDraft}>
+              {!memoryFocus ? (
+                <fieldset>
+                  <legend className="field-label">What are you planning?</legend>
+                  <div aria-label="What are you planning?" className="mt-2 flex flex-wrap gap-2" role="radiogroup">
+                    {Object.entries(GATHERING_TYPES).map(([id, option]) => (
+                      <button
+                        aria-checked={draft.gathering_type === id}
+                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${draft.gathering_type === id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:bg-accent/60"}`}
+                        data-testid={`gathering-type-${id}`}
+                        key={id}
+                        onClick={() => update("gathering_type", id)}
+                        role="radio"
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
               <label>
-                <span className="field-label">Reunion or gathering name</span>
+                <span className="field-label">{memoryFocus ? "Gathering name" : `Name your ${gatheringType.noun}`}</span>
                 <Input
                   autoComplete="off"
                   className="field-input"
                   data-testid="reunion-name-input"
                   maxLength={120}
                   onChange={(event) => update("gathering_name", event.target.value)}
-                  placeholder="The Johnson Family Reunion"
+                  placeholder={gatheringType.placeholder}
                   required
                   value={draft.gathering_name}
                 />
@@ -289,7 +314,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 />
               </label>
               <Button className="rounded-full py-6 text-base" data-testid="reunion-create-draft-button" type="submit">
-                Build my reunion draft <ArrowRight className="ml-2 h-4 w-4" />
+                Build my {gatheringType.noun} draft <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>
 
@@ -308,7 +333,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 <h2 className="mt-3 font-display text-3xl text-foreground">A useful planning space—not another setup questionnaire.</h2>
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   {[
-                    [ClipboardList, "A reunion checklist"],
+                    [ClipboardList, `A ${gatheringType.noun} checklist`],
                     [Users, "A clear RSVP area"],
                     [Soup, "Potluck coordination"],
                     [HandHelping, "Volunteer roles"],
@@ -358,11 +383,11 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                     </div>
                     <div className="soft-panel">
                       <p className="flex items-center gap-2 font-semibold"><Soup className="h-4 w-4 text-primary" /> Shared table</p>
-                      <p className="mt-3 text-sm text-muted-foreground">Main dish · Side dish · Dessert or drinks</p>
+                      <p className="mt-3 text-sm text-muted-foreground">{starter.potluck_items.length ? starter.potluck_items.join(" · ") : "Add dishes and supplies after you save"}</p>
                     </div>
                     <div className="soft-panel">
                       <p className="flex items-center gap-2 font-semibold"><HandHelping className="h-4 w-4 text-primary" /> Volunteers</p>
-                      <p className="mt-3 text-sm text-muted-foreground">Welcome team · Photo and story team</p>
+                      <p className="mt-3 text-sm text-muted-foreground">{starter.volunteer_slots.length ? starter.volunteer_slots.map((slot) => slot.title).join(" · ") : "Add volunteer roles after you save"}</p>
                     </div>
                   </div>
 

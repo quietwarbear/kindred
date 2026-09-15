@@ -10,6 +10,8 @@ import { trackReunionEvent, gaClientId } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
 import {
   clearReunionDraft,
+  draftLandingPath,
+  gatheringTypeDetails,
   loadReunionDraft,
   provisionalCommunityName,
   reunionDraftIsComplete,
@@ -103,9 +105,9 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
         });
         clearReunionDraft();
         trackReunionEvent("reunion_saved", { source: "account_boundary" });
-        navigate(`/reunion/activate/${event.id}`);
+        navigate(draftLandingPath(reunionDraft, event.id));
       } catch (error) {
-        toast.error(error.response?.data?.detail || "Your account is ready, but the reunion draft could not be saved.");
+        toast.error(error.response?.data?.detail || "Your account is ready, but the draft could not be saved.");
         navigate("/reunion/start");
       }
       return;
@@ -277,7 +279,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
             },
         method: "POST",
       });
-      await completeAuthentication(payload, hasFamilyAccessIntent ? "Your account is ready. No family access has been granted yet." : "Your reunion planning account is ready.");
+      await completeAuthentication(payload, hasFamilyAccessIntent ? "Your account is ready. No family access has been granted yet." : "Your planning account is ready.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to create your account.");
     } finally {
@@ -359,7 +361,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div>
             <p className="eyebrow-text text-orange-200">Private family reunion planning</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? "Save the reunion. Keep setup light." : "Plan the reunion. Bring everyone in. Keep the stories."}
+              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? `Save the ${gatheringTypeDetails(reunionDraft).noun}. Keep setup light.` : "Plan the reunion. Bring everyone in. Keep the stories."}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
               {hasFamilyAccessIntent
@@ -403,7 +405,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
               {hasFamilyAccessIntent
                 ? "Use an account you control. Your email address is not used as proof that you belong to this family."
                 : hasReunionIntent
-                ? "Use Apple or Google to save the reunion with the organizer identity you already chose."
+                ? `Use Apple or Google to save the ${gatheringTypeDetails(reunionDraft).noun} with the organizer identity you already chose.`
                 : "For new and returning families. New here? You’ll plan your reunion next."}
             </p>
             <button

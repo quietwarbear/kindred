@@ -56,7 +56,8 @@ async def _activation_context(
     events = await events_collection.find(
         {
             "community_id": community_id,
-            "event_template": "reunion",
+            # Any gathering type counts: a family that starts with a holiday meal,
+            # birthday or wedding meets the same participation bar as a reunion.
             "hidden_from_user_ids": {"$ne": current_user["id"]},
             "publication_state": {"$ne": "organizer_draft"},
         },
