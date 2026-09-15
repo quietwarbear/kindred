@@ -78,6 +78,7 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
+    "check:undefined-names": "node scripts/check-undefined-names.cjs",
     "postbuild": "node scripts/prerender.js",
     "store-assets:generate": "node scripts/generate-store-assets.js"
   },

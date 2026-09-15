@@ -127,7 +127,7 @@ export const MemoryVaultPage = ({ token, user }) => {
     try {
       const result = await apiRequest("/memories/batch-retag", { method: "POST", token });
       toast.success(`Re-tagged ${result.updated} memories with improved AI analysis.`);
-      loadMemories();
+      loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to re-tag memories.");
     } finally {
