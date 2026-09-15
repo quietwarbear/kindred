@@ -205,7 +205,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
         </div>
       </section>
 
-      {todayData.viewer_role === "host" ? <PlanUpgradeCard token={token} variant="today" /> : null}
+      <PlanUpgradeCard isHost={todayData.viewer_role === "host"} token={token} variant="today" />
 
       {todayData.secondary_actions.length ? (
         <section className="archival-card" aria-labelledby="today-secondary-heading">
