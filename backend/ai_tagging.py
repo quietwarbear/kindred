@@ -145,8 +145,7 @@ Return the JSON only.
         # Supports multiple providers: openai, gemini, claude, etc.
         response = await litellm.acompletion(
             model=model,
-            messages=messages,
-            system_prompt=SYSTEM_PROMPT,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
             api_key=api_key,
             temperature=0.3,
         )
