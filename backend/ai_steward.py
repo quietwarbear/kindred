@@ -88,8 +88,10 @@ async def generate_steward_notes(api_key: str, model: str, ctx: dict) -> dict:
 
         response = await litellm.acompletion(
             model=model,
-            messages=[{"role": "user", "content": user_payload}],
-            system_prompt=STEWARD_SYSTEM,
+            messages=[
+                {"role": "system", "content": STEWARD_SYSTEM},
+                {"role": "user", "content": user_payload},
+            ],
             api_key=api_key,
             temperature=0.7,
         )

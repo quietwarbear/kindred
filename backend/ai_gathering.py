@@ -89,8 +89,10 @@ async def generate_gathering_plan(api_key: str, model: str, ctx: dict) -> dict:
         })
         resp = await litellm.acompletion(
             model=model,
-            messages=[{"role": "user", "content": user_payload}],
-            system_prompt=PLAN_SYSTEM,
+            messages=[
+                {"role": "system", "content": PLAN_SYSTEM},
+                {"role": "user", "content": user_payload},
+            ],
             api_key=api_key,
             temperature=0.6,
         )
@@ -151,8 +153,10 @@ async def generate_community_history(api_key: str, model: str, ctx: dict) -> str
         })
         resp = await litellm.acompletion(
             model=model,
-            messages=[{"role": "user", "content": user_payload}],
-            system_prompt=HISTORY_SYSTEM,
+            messages=[
+                {"role": "system", "content": HISTORY_SYSTEM},
+                {"role": "user", "content": user_payload},
+            ],
             api_key=api_key,
             temperature=0.7,
         )

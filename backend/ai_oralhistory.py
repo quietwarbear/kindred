@@ -76,8 +76,10 @@ async def translate_text(api_key: str, model: str, text: str) -> dict:
     try:
         resp = await litellm.acompletion(
             model=model,
-            messages=[{"role": "user", "content": text}],
-            system_prompt=TRANSLATE_SYSTEM,
+            messages=[
+                {"role": "system", "content": TRANSLATE_SYSTEM},
+                {"role": "user", "content": text},
+            ],
             api_key=api_key,
             temperature=0.2,
         )
