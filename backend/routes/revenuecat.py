@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+import ga4
 from db import subscriptions_collection, users_collection
 from dependencies import get_current_user, now_iso
 from pricing import (
@@ -151,6 +152,21 @@ async def revenuecat_webhook(request: Request):
         )
         if not applied:
             return {"status": "ignored", "reason": "stale event"}
+        # GA4 purchase — RevenueCat is the live revenue path (App Store,
+        # Play, web billing). Only real charges carry a price, and firing
+        # after the dedup above means webhook retries can't double-count.
+        price = event.get("price") or 0
+        if event_type in {"INITIAL_PURCHASE", "RENEWAL"} and price > 0:
+            ga4.track_purchase(
+                transaction_id=event.get("transaction_id") or event.get("id", ""),
+                value_cents=int(round(price * 100)),
+                item_id=event.get("product_id", ""),
+                item_name="%s (%s)" % (
+                    SUBSCRIPTION_TIERS[active_tier]["name"],
+                    event.get("store", "unknown"),
+                ),
+                user_id=app_user_id,
+            )
     elif event_type in {
         "CANCELLATION",
         "SUBSCRIPTION_PAUSED",
