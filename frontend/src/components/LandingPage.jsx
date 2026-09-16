@@ -19,6 +19,10 @@ import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { trackReunionEvent } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
 
+// Mirrors PricingPage and SubscriptionPage: web purchases are live once the
+// deployment sets the RevenueCat Billing web key.
+const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);
+
 const APP_STORE_URL = "https://apps.apple.com/app/heykindred/id6760608478";
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.ubuntumarket.kindred";
 
@@ -247,11 +251,15 @@ export const LandingPage = ({ isAuthenticated }) => {
             <p className="eyebrow-text">Pricing</p>
             <h2 className="mt-3 font-display text-3xl text-foreground">Start planning without payment.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
-              Seedling remains free. Current plan details stay public while web subscription purchasing is temporarily unavailable.
+              {WEB_PURCHASES_ENABLED
+                ? "Seedling remains free. Draft your reunion first and upgrade whenever your family outgrows it."
+                : "Seedling remains free. Current plan details stay public while web subscription purchasing is temporarily unavailable."}
             </p>
-            <div className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4" data-testid="landing-billing-notice" role="status">
-              <p className="text-sm font-semibold text-foreground">Web subscriptions are temporarily unavailable while billing is being updated.</p>
-            </div>
+            {!WEB_PURCHASES_ENABLED && (
+              <div className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4" data-testid="landing-billing-notice" role="status">
+                <p className="text-sm font-semibold text-foreground">Web subscriptions are temporarily unavailable while billing is being updated.</p>
+              </div>
+            )}
             <div className="mt-8" aria-live="polite">
               {plansLoading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
               {plansError && <p className="text-sm text-destructive" role="alert">{plansError}</p>}
