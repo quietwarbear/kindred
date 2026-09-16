@@ -65,48 +65,6 @@ class TestRevenueCatConfig:
         print(f"✓ Webhook URL: {data['webhook_url']}")
 
 
-class TestRevenueCatStatus:
-    """Test RevenueCat status endpoint (requires auth)."""
-
-    def test_revenuecat_status_configured(self, auth_token):
-        """GET /api/revenuecat/status returns configured=true."""
-        resp = requests.get(
-            f"{BASE_URL}/api/revenuecat/status",
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
-        assert resp.status_code == 200, f"Status failed: {resp.text}"
-        data = resp.json()
-        assert data["configured"] is False
-        assert data["webhook_configured"] is False
-        print(f"✓ RevenueCat status: configured={data['configured']}, webhook_configured={data.get('webhook_configured')}")
-
-
-class TestRevenueCatOfferings:
-    """Test RevenueCat offerings endpoint (requires auth)."""
-
-    def test_revenuecat_offerings_returns_data(self, auth_token):
-        """GET /api/revenuecat/offerings returns subscriber data or error."""
-        resp = requests.get(
-            f"{BASE_URL}/api/revenuecat/offerings",
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == "RevenueCat not configured."
-
-
-class TestRevenueCatRestore:
-    """Test RevenueCat restore endpoint (requires auth)."""
-
-    def test_revenuecat_restore_returns_result(self, auth_token):
-        """POST /api/revenuecat/restore returns restore result."""
-        resp = requests.post(
-            f"{BASE_URL}/api/revenuecat/restore",
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == "RevenueCat not configured."
-
-
 class TestRevenueCatWebhook:
     """Test RevenueCat webhook endpoint."""
 

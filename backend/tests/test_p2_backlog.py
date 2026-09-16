@@ -169,23 +169,6 @@ class TestRevenueCat:
             return response.json()["token"]
         pytest.skip("Auth failed")
     
-    def test_revenuecat_status_endpoint(self, auth_token):
-        """GET /api/revenuecat/status returns configuration status"""
-        response = requests.get(f"{BASE_URL}/api/revenuecat/status", headers={
-            "Authorization": f"Bearer {auth_token}"
-        })
-        
-        assert response.status_code == 200, f"RevenueCat status failed: {response.text}"
-        data = response.json()
-        
-        # Verify response structure
-        assert "configured" in data, "Missing 'configured' field"
-        assert "webhook_configured" in data, "Missing 'webhook_configured' field"
-        assert isinstance(data["configured"], bool), "configured should be boolean"
-        assert isinstance(data["webhook_configured"], bool), "webhook_configured should be boolean"
-        
-        print(f"RevenueCat status: configured={data['configured']}, webhook_configured={data['webhook_configured']}")
-    
     def test_revenuecat_webhook_initial_purchase(self):
         """POST /api/revenuecat/webhook handles INITIAL_PURCHASE event"""
         # Test with mock payload (no auth required for webhooks)

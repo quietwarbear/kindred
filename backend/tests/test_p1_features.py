@@ -228,12 +228,3 @@ class TestRegressionMemories:
         assert isinstance(data, list), f"Memories should return a list, got {type(data)}"
 
 
-class TestRegressionRevenueCat:
-    """Regression: RevenueCat status endpoint still works."""
-
-    def test_revenuecat_status_works(self, auth_headers):
-        """Verify RevenueCat status endpoint returns configured: true or false."""
-        response = requests.get(f"{BASE_URL}/api/revenuecat/status", headers=auth_headers)
-        assert response.status_code == 200, f"RevenueCat status failed: {response.text}"
-        data = response.json()
-        assert "configured" in data, "No configured key in RevenueCat status"

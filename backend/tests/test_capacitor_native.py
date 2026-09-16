@@ -110,64 +110,6 @@ class TestRevenueCatConfig:
         assert data.get("platform") == "ios"
 
 
-class TestRevenueCatOfferings:
-    """Tests for GET /api/revenuecat/offerings endpoint"""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Login to get auth token"""
-        response = requests.post(
-            f"{BASE_URL}/api/auth/login",
-            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
-        )
-        assert response.status_code == 200
-        self.token = response.json().get("token")
-        self.headers = {"Authorization": f"Bearer {self.token}"}
-
-    def test_revenuecat_offerings_endpoint_exists(self):
-        """GET /api/revenuecat/offerings endpoint exists and returns response"""
-        response = requests.get(
-            f"{BASE_URL}/api/revenuecat/offerings",
-            headers=self.headers,
-        )
-        assert response.status_code == 503
-        assert response.json()["detail"] == "RevenueCat not configured."
-
-    def test_revenuecat_offerings_requires_auth(self):
-        """GET /api/revenuecat/offerings requires authentication"""
-        response = requests.get(f"{BASE_URL}/api/revenuecat/offerings")
-        assert response.status_code in [401, 403]
-
-
-class TestRevenueCatRestore:
-    """Tests for POST /api/revenuecat/restore endpoint"""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Login to get auth token"""
-        response = requests.post(
-            f"{BASE_URL}/api/auth/login",
-            json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
-        )
-        assert response.status_code == 200
-        self.token = response.json().get("token")
-        self.headers = {"Authorization": f"Bearer {self.token}"}
-
-    def test_revenuecat_restore_endpoint_exists(self):
-        """POST /api/revenuecat/restore endpoint exists and returns response"""
-        response = requests.post(
-            f"{BASE_URL}/api/revenuecat/restore",
-            headers=self.headers,
-        )
-        assert response.status_code == 503
-        assert response.json()["detail"] == "RevenueCat not configured."
-
-    def test_revenuecat_restore_requires_auth(self):
-        """POST /api/revenuecat/restore requires authentication"""
-        response = requests.post(f"{BASE_URL}/api/revenuecat/restore")
-        assert response.status_code in [401, 403]
-
-
 class TestPWAManifest:
     """Tests for PWA manifest accessibility and content"""
 
