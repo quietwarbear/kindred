@@ -18,18 +18,26 @@ export function initSentry() {
         release: process.env.REACT_APP_SENTRY_RELEASE || undefined,
         tracesSampleRate: 0.1,
         sendDefaultPii: false,
-        // Third-party noise filter: some in-app browsers and extensions inject
-        // scripts into the page; when those crash (xbrowser/swbrowser bridge
-        // globals and friends) the errors land in OUR project with no app
-        // frames. Drop the known injected globals and every browser-extension
-        // URL scheme. Real app errors are unaffected.
+        // Third-party noise filter: in-app browsers (Meta's Android IAB,
+        // various Android "x/sw browser" webviews) and extensions inject
+        // scripts into the page; when those crash the errors land in OUR
+        // project with no app frames. Drop the known injected-script
+        // signatures and every browser-extension URL scheme. Real app
+        // errors are unaffected.
         ignoreErrors: [
-          /\\b(xbrowser|swbrowser|zaloJSV2|__gCrWeb|__firefox__|_AutofillCallbackHandler|instantSearchSDKJSBridgeClearHighlight)\\b/,
+          /\b(xbrowser|swbrowser|zaloJSV2|__gCrWeb|__firefox__|_AutofillCallbackHandler|instantSearchSDKJSBridgeClearHighlight)\b/,
+          // Meta's Android in-app browser: its injected iabjs:// performance
+          // logger throws once the page is left and its Java bridge is gone.
+          /Java object is gone/,
+          // Service-worker UPDATE check dying on flaky mobile networks
+          // (common inside the Facebook webview). Deliberately narrow: a
+          // real sw.js outage says "bad HTTP response code" and still alerts.
+          /Failed to update a ServiceWorker[^]*unknown error occurred when fetching/,
         ],
         denyUrls: [
-          /^chrome-extension:\\/\\//i,
-          /^moz-extension:\\/\\//i,
-          /^safari-(web-)?extension:\\/\\//i,
+          /^chrome-extension:\/\//i,
+          /^moz-extension:\/\//i,
+          /^safari-(web-)?extension:\/\//i,
         ],
       },
       SentryReact.init,
