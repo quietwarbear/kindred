@@ -18,6 +18,19 @@ export function initSentry() {
         release: process.env.REACT_APP_SENTRY_RELEASE || undefined,
         tracesSampleRate: 0.1,
         sendDefaultPii: false,
+        // Third-party noise filter: some in-app browsers and extensions inject
+        // scripts into the page; when those crash (xbrowser/swbrowser bridge
+        // globals and friends) the errors land in OUR project with no app
+        // frames. Drop the known injected globals and every browser-extension
+        // URL scheme. Real app errors are unaffected.
+        ignoreErrors: [
+          /\\b(xbrowser|swbrowser|zaloJSV2|__gCrWeb|__firefox__|_AutofillCallbackHandler|instantSearchSDKJSBridgeClearHighlight)\\b/,
+        ],
+        denyUrls: [
+          /^chrome-extension:\\/\\//i,
+          /^moz-extension:\\/\\//i,
+          /^safari-(web-)?extension:\\/\\//i,
+        ],
       },
       SentryReact.init,
     );
