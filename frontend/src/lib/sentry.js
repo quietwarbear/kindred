@@ -6,6 +6,35 @@
 import * as Sentry from "@sentry/capacitor";
 import * as SentryReact from "@sentry/react";
 
+function hasInjectedMetaFrame(event) {
+  return (event?.exception?.values || []).some((exception) =>
+    (exception?.stacktrace?.frames || []).some((frame) =>
+      String(frame?.filename || "").includes("iabjs://"),
+    ),
+  );
+}
+
+function isHonorBrowserAdTimeout(event) {
+  const serialized = event?.extra?.__serialized__;
+  return (
+    String(serialized?.code) === "30013" &&
+    /ad loading process exceeded the timeout period/i.test(
+      String(serialized?.message || ""),
+    )
+  );
+}
+
+// Sentry applies ignoreErrors to exception messages, but some mobile browsers
+// inject code whose identifying evidence lives only in the stack filename or
+// serialized rejection payload. Keep this filter deliberately narrow so real
+// Kindred application failures still reach Sentry.
+export function filterInjectedBrowserNoise(event) {
+  if (hasInjectedMetaFrame(event) || isHonorBrowserAdTimeout(event)) {
+    return null;
+  }
+  return event;
+}
+
 export function initSentry() {
   const dsn = (process.env.REACT_APP_SENTRY_DSN || "").trim();
   if (!dsn) return;
@@ -39,6 +68,7 @@ export function initSentry() {
           /^moz-extension:\/\//i,
           /^safari-(web-)?extension:\/\//i,
         ],
+        beforeSend: filterInjectedBrowserNoise,
       },
       SentryReact.init,
     );
