@@ -24,6 +24,54 @@ describe("filterInjectedBrowserNoise", () => {
     expect(filterInjectedBrowserNoise(event)).toBeNull();
   });
 
+  test("drops Facebook's injected Android Java-bridge failure", () => {
+    const event = {
+      contexts: { browser: { name: "Facebook", version: "534.0.0" } },
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value:
+              "Error invoking postMessage: Java bridge method invocation error",
+            stacktrace: {
+              frames: [
+                { filename: "app:///<anonymous>" },
+                { filename: "app:///<anonymous>" },
+              ],
+            },
+          },
+        ],
+      },
+      request: {
+        headers: {
+          "User-Agent": "Mozilla/5.0 [FB_IAB/FB4A;FBAV/534.0.0.56.76;]",
+        },
+      },
+    };
+
+    expect(filterInjectedBrowserNoise(event)).toBeNull();
+  });
+
+  test("keeps Java-bridge failures outside Facebook's anonymous injected script", () => {
+    const nativeAppError = {
+      contexts: { browser: { name: "Chrome" } },
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value:
+              "Error invoking postMessage: Java bridge method invocation error",
+            stacktrace: {
+              frames: [{ filename: "app:///static/js/main.js" }],
+            },
+          },
+        ],
+      },
+    };
+
+    expect(filterInjectedBrowserNoise(nativeAppError)).toBe(nativeAppError);
+  });
+
   test("drops Honor Browser's injected ad-loader timeout rejection", () => {
     const event = {
       exception: {

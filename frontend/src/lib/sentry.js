@@ -14,6 +14,41 @@ function hasInjectedMetaFrame(event) {
   );
 }
 
+function getUserAgent(event) {
+  const headers = event?.request?.headers;
+  if (Array.isArray(headers)) {
+    return String(
+      headers.find(([name]) => String(name).toLowerCase() === "user-agent")?.[1] ||
+        "",
+    );
+  }
+
+  const entry = Object.entries(headers || {}).find(
+    ([name]) => name.toLowerCase() === "user-agent",
+  );
+  return String(entry?.[1] || "");
+}
+
+function isMetaJavaBridgeFailure(event) {
+  const isFacebookBrowser =
+    String(event?.contexts?.browser?.name || "").toLowerCase() === "facebook" ||
+    /\bFB_IAB\//i.test(getUserAgent(event));
+  if (!isFacebookBrowser) return false;
+
+  return (event?.exception?.values || []).some((exception) => {
+    const frames = exception?.stacktrace?.frames || [];
+    return (
+      /error invoking postMessage: Java bridge method invocation error/i.test(
+        String(exception?.value || ""),
+      ) &&
+      frames.length > 0 &&
+      frames.every(
+        (frame) => String(frame?.filename || "") === "app:///<anonymous>",
+      )
+    );
+  });
+}
+
 function isHonorBrowserAdTimeout(event) {
   const serialized = event?.extra?.__serialized__;
   return (
@@ -29,7 +64,11 @@ function isHonorBrowserAdTimeout(event) {
 // serialized rejection payload. Keep this filter deliberately narrow so real
 // Kindred application failures still reach Sentry.
 export function filterInjectedBrowserNoise(event) {
-  if (hasInjectedMetaFrame(event) || isHonorBrowserAdTimeout(event)) {
+  if (
+    hasInjectedMetaFrame(event) ||
+    isMetaJavaBridgeFailure(event) ||
+    isHonorBrowserAdTimeout(event)
+  ) {
     return null;
   }
   return event;
