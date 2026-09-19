@@ -29,14 +29,36 @@ function getUserAgent(event) {
   return String(entry?.[1] || "");
 }
 
-function isMetaJavaBridgeFailure(event) {
-  const isFacebookBrowser =
+function isFacebookBrowser(event) {
+  return (
     String(event?.contexts?.browser?.name || "").toLowerCase() === "facebook" ||
-    /\bFB_IAB\//i.test(getUserAgent(event));
-  if (!isFacebookBrowser) return false;
+    /\bFB_IAB\//i.test(getUserAgent(event))
+  );
+}
+
+function getExceptionFrames(exception) {
+  return exception?.stacktrace?.frames || [];
+}
+
+function isAnonymousOrDocumentFrame(frame) {
+  const filename = String(frame?.filename || "");
+  return (
+    filename === "app:///<anonymous>" ||
+    /^https:\/\/(?:www\.)?heykindred\.org\/?$/i.test(filename)
+  );
+}
+
+function isPaidMetaLandingRequest(event) {
+  return /(?:[?&]fbclid=|[?&]utm_source=fb(?:&|$))/i.test(
+    String(event?.request?.url || ""),
+  );
+}
+
+function isMetaJavaBridgeFailure(event) {
+  if (!isFacebookBrowser(event)) return false;
 
   return (event?.exception?.values || []).some((exception) => {
-    const frames = exception?.stacktrace?.frames || [];
+    const frames = getExceptionFrames(exception);
     return (
       /error invoking postMessage: Java bridge method invocation error/i.test(
         String(exception?.value || ""),
@@ -46,6 +68,49 @@ function isMetaJavaBridgeFailure(event) {
         (frame) => String(frame?.filename || "") === "app:///<anonymous>",
       )
     );
+  });
+}
+
+function isMetaInjectedRuntimeFailure(event) {
+  if (!isFacebookBrowser(event)) return false;
+
+  return (event?.exception?.values || []).some((exception) => {
+    const value = String(exception?.value || "");
+    const frames = getExceptionFrames(exception);
+    if (!frames.length || !frames.every(isAnonymousOrDocumentFrame)) {
+      return false;
+    }
+
+    if (/TTRCCallbacks\.onDomContentLoaded is not a function/i.test(value)) {
+      return frames.every(
+        (frame) => String(frame?.filename || "") === "app:///<anonymous>",
+      );
+    }
+
+    if (/window\.webkit\.messageHandlers/i.test(value)) {
+      return (
+        isPaidMetaLandingRequest(event) &&
+        frames.every((frame) =>
+          /^https:\/\/(?:www\.)?heykindred\.org\/?$/i.test(
+            String(frame?.filename || ""),
+          ),
+        )
+      );
+    }
+
+    if (/^Unexpected end of input$/i.test(value)) {
+      return (
+        isPaidMetaLandingRequest(event) &&
+        frames.every(
+          (frame) =>
+            /^https:\/\/(?:www\.)?heykindred\.org\/?$/i.test(
+              String(frame?.filename || ""),
+            ) && Number(frame?.lineno || 0) >= 36,
+        )
+      );
+    }
+
+    return false;
   });
 }
 
@@ -67,6 +132,7 @@ export function filterInjectedBrowserNoise(event) {
   if (
     hasInjectedMetaFrame(event) ||
     isMetaJavaBridgeFailure(event) ||
+    isMetaInjectedRuntimeFailure(event) ||
     isHonorBrowserAdTimeout(event)
   ) {
     return null;
