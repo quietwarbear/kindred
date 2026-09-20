@@ -78,6 +78,35 @@ describe("filterInjectedBrowserNoise", () => {
     expect(filterInjectedBrowserNoise(event)).toBeNull();
   });
 
+  test("drops Facebook's alternate Android Java-exception bridge failure", () => {
+    const event = {
+      contexts: { browser: { name: "Facebook", version: "542.0.0" } },
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value:
+              "Error invoking postMessage: Java exception was raised during method invocation",
+            stacktrace: {
+              frames: [
+                {
+                  filename: "app:///<anonymous>",
+                  function: "window.__call_iabjs_unified_bridge",
+                },
+                { filename: "app:///<anonymous>", function: "Object.init" },
+              ],
+            },
+          },
+        ],
+      },
+      request: {
+        url: "https://heykindred.org/?fbclid=test&utm_source=fb",
+      },
+    };
+
+    expect(filterInjectedBrowserNoise(event)).toBeNull();
+  });
+
   test("keeps Java-bridge failures outside Facebook's anonymous injected script", () => {
     const nativeAppError = {
       contexts: { browser: { name: "Chrome" } },
@@ -96,6 +125,28 @@ describe("filterInjectedBrowserNoise", () => {
     };
 
     expect(filterInjectedBrowserNoise(nativeAppError)).toBe(nativeAppError);
+  });
+
+  test("keeps alternate Java-exception bridge failures with Kindred frames", () => {
+    const appError = {
+      contexts: { browser: { name: "Facebook" } },
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value:
+              "Error invoking postMessage: Java exception was raised during method invocation",
+            stacktrace: {
+              frames: [
+                { filename: "https://heykindred.org/static/js/main.js" },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
+    expect(filterInjectedBrowserNoise(appError)).toBe(appError);
   });
 
   test("drops Facebook's injected iOS performance bridge failures", () => {
