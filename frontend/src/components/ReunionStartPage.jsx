@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,6 +21,7 @@ import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import {
   GATHERING_TYPES,
+  applyPreferredGatheringType,
   clearReunionDraft,
   draftLandingPath,
   gatheringTypeDetails,
@@ -91,16 +92,37 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const memoryFocus = searchParams.get("focus") === "memory";
-  const [draft, setDraft] = useState(() => loadReunionDraft());
-  const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(loadReunionDraft()));
+  const preferredType = searchParams.get("type") || "";
+  const [draft, setDraft] = useState(() => applyPreferredGatheringType(loadReunionDraft(), preferredType));
+  const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(draft));
+  const [draftReadySignal, setDraftReadySignal] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rescueEmail, setRescueEmail] = useState("");
   const [rescueState, setRescueState] = useState("idle"); // idle | sending | sent
+  const draftWorkspaceRef = useRef(null);
   const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
   const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
   const gatheringType = gatheringTypeDetails(draft);
+  const gatheringOptions = useMemo(() => {
+    const entries = Object.entries(GATHERING_TYPES);
+    if (!Object.prototype.hasOwnProperty.call(GATHERING_TYPES, preferredType)) return entries;
+    return entries.sort(([left], [right]) => {
+      if (left === preferredType) return -1;
+      if (right === preferredType) return 1;
+      return 0;
+    });
+  }, [preferredType]);
   const starter = useMemo(() => reunionDraftToEventPayload(draft), [draft]);
+
+  useEffect(() => {
+    if (!draftReadySignal) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      draftWorkspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      draftWorkspaceRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftReadySignal]);
 
   const dateLabel = useMemo(() => {
     if (!draft.approximate_date) return "Date to be confirmed";
@@ -139,6 +161,8 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
     setDraft(saved);
     setHasDraft(true);
     setShowPreview(false);
+    setDraftReadySignal((current) => current + 1);
+    toast.success(`Your ${gatheringTypeDetails(saved).noun} draft is ready.`);
     trackReunionEvent("reunion_draft_created", { source: "public_reunion_start" });
   };
 
@@ -187,7 +211,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
           data: {
             full_name: draft.organizer_name,
             community_name: provisionalCommunityName(draft),
-            community_type: "family reunion",
+            community_type: "family gathering",
             creation_mode: "reunion_first",
             location: draft.location,
           },
@@ -235,7 +259,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 <fieldset>
                   <legend className="field-label">What are you planning?</legend>
                   <div aria-label="What are you planning?" className="mt-2 flex flex-wrap gap-2" role="radiogroup">
-                    {Object.entries(GATHERING_TYPES).map(([id, option]) => (
+                    {gatheringOptions.map(([id, option]) => (
                       <button
                         aria-checked={draft.gathering_type === id}
                         className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${draft.gathering_type === id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:bg-accent/60"}`}
@@ -368,7 +392,12 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
               </div>
             ) : (
               <>
-                <div className="archival-card" data-testid="reunion-draft-workspace">
+                <div
+                  className="archival-card scroll-mt-6 outline-none"
+                  data-testid="reunion-draft-workspace"
+                  ref={draftWorkspaceRef}
+                  tabIndex={-1}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="eyebrow-text">Draft ready</p>

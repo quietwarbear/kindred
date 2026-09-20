@@ -1,4 +1,5 @@
 import {
+  applyPreferredGatheringType,
   clearReunionDraft,
   draftLandingPath,
   gatheringTypeDetails,
@@ -33,6 +34,15 @@ test("keeps the pre-account draft local and limits stored fields", () => {
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("secret");
 });
 
+test("a seasonal entry point can preselect an untouched gathering draft", () => {
+  expect(applyPreferredGatheringType({}, "holiday_meal").gathering_type).toBe("holiday_meal");
+  expect(applyPreferredGatheringType({}, "unknown").gathering_type).toBe("reunion");
+});
+
+test("a seasonal entry point never replaces a gathering someone already started", () => {
+  expect(applyPreferredGatheringType(completeDraft, "holiday_meal").gathering_type).toBe("reunion");
+});
+
 test("requires only a gathering name and an organizer", () => {
   expect(reunionDraftIsComplete(completeDraft)).toBe(true);
   expect(reunionDraftIsComplete({ ...completeDraft, gathering_name: "" })).toBe(false);
@@ -59,13 +69,12 @@ test("a draft with no date yet is still a draft", () => {
   })).toBe(true);
 });
 
-test("creates a useful reunion event without billing or community setup fields", () => {
+test("creates a general event without billing or community setup fields", () => {
   const payload = reunionDraftToEventPayload(completeDraft);
-  expect(payload.event_template).toBe("reunion");
-  expect(payload.volunteer_slots).toHaveLength(2);
-  expect(payload.potluck_items).toHaveLength(3);
-  expect(payload.agenda).toHaveLength(1);
-  expect(payload.agenda[0].visibility).toBe("draft");
+  expect(payload.event_template).toBe("custom");
+  expect(payload.volunteer_slots).toEqual([]);
+  expect(payload.potluck_items).toEqual([]);
+  expect(payload.agenda).toEqual([]);
   expect(payload.timezone).toBe("America/Los_Angeles");
   expect(payload.end_at).toBe("2027-07-18T18:00:00");
   expect(payload.client_request_id).toEqual(expect.any(String));
@@ -129,8 +138,8 @@ test.each(["birthday", "wedding", "custom"])("%s starts with its template and no
   expect(payload.description).not.toContain("reunion");
 });
 
-test("only reunions land on the reunion activation flow", () => {
-  expect(draftLandingPath(completeDraft, "evt-1")).toBe("/reunion/activate/evt-1");
+test("new public events land on the general gathering workspace", () => {
+  expect(draftLandingPath(completeDraft, "evt-1")).toBe("/gatherings/evt-1");
   for (const type of ["holiday_meal", "birthday", "wedding", "custom"]) {
     expect(draftLandingPath({ ...completeDraft, gathering_type: type }, "evt-1")).toBe("/gatherings/evt-1");
   }

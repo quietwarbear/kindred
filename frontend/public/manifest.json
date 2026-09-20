@@ -1,7 +1,7 @@
 {
   "name": "Kindred",
   "short_name": "Kindred",
-  "description": "Where your circles gather and grow. A private ecosystem for families, churches, and intentional communities.",
+  "description": "Private family gathering planning for RSVPs, meals, volunteers, photos, and stories.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",

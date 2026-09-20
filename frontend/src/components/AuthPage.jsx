@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent, gaClientId } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
+import { gatheringCampaign } from "@/lib/seasonalCampaign";
 import {
   clearReunionDraft,
   draftLandingPath,
@@ -46,6 +47,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   const navigate = useNavigate();
   const location = useLocation();
   const intent = new URLSearchParams(location.search).get("intent") || "";
+  const campaign = gatheringCampaign();
   const [reunionDraft] = useState(() => loadReunionDraft());
   const hasReunionIntent = intent === "reunion" && reunionDraftIsComplete(reunionDraft);
   const hasFamilyAccessIntent = intent === "family-access";
@@ -90,7 +92,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
             data: {
               full_name: reunionDraft.organizer_name,
               community_name: provisionalCommunityName(reunionDraft),
-              community_type: "family reunion",
+              community_type: "family gathering",
               creation_mode: "reunion_first",
               location: reunionDraft.location,
             },
@@ -270,9 +272,9 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           : {
               ...launchForm,
               community_name: provisionalCommunityName(reunionDraft),
-              community_type: "family reunion",
+              community_type: "family gathering",
               location: reunionDraft.location,
-              description: "A provisional private planning space created for a family reunion.",
+              description: `A provisional private planning space created for a family ${gatheringTypeDetails(reunionDraft).noun}.`,
               creation_mode: "reunion_first",
               motto: "",
               ga_client_id: gaId,
@@ -359,16 +361,16 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       <div className="page-section grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="archival-card order-2 flex flex-col justify-between gap-8 bg-stone-950 text-white lg:order-1">
           <div>
-            <p className="eyebrow-text text-orange-200">Private family reunion planning</p>
+            <p className="eyebrow-text text-orange-200">Private family gathering planning</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? `Save the ${gatheringTypeDetails(reunionDraft).noun}. Keep setup light.` : "Plan the reunion. Bring everyone in. Keep the stories."}
+              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? `Save the ${gatheringTypeDetails(reunionDraft).noun}. Keep setup light.` : campaign.headline}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
               {hasFamilyAccessIntent
                 ? "Sign in or create an account, then send the private request already connected to your RSVP. An organizer must approve before family access begins."
                 : hasReunionIntent
                 ? "Your draft stays private until you create this account. We’ll save the gathering first; permanent family-space details can wait."
-                : "Sign in to your family space, or use the invite code a relative sent you. New to Kindred? Start with the reunion — family details can wait. Existing family chats can continue while Kindred keeps the plan together."}
+                : "Sign in to your family space, or use the invite code a relative sent you. New to Kindred? Start with a gathering — family details can wait. Existing family chats can continue while Kindred keeps the plan together."}
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -390,11 +392,11 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
             <div className="mb-6 flex flex-col gap-3 rounded-[24px] border border-primary/20 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid="auth-new-here">
               <div>
                 <p className="text-base font-semibold text-foreground">New to Kindred?</p>
-                <p className="mt-1 text-sm text-muted-foreground">Start with your reunion. You’ll create an account when you save it.</p>
+                <p className="mt-1 text-sm text-muted-foreground">{campaign.active ? "Start with a holiday gathering. You’ll create an account when you save it." : "Start with a gathering. You’ll create an account when you save it."}</p>
               </div>
               <Button asChild className="rounded-full" data-testid="auth-plan-reunion-button">
-                <Link to="/reunion/start">
-                  Plan your reunion <ArrowRight className="ml-2 h-4 w-4" />
+                <Link to={campaign.startPath}>
+                  {campaign.cta} <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
             </div>
@@ -406,7 +408,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                 ? "Use an account you control. Your email address is not used as proof that you belong to this family."
                 : hasReunionIntent
                 ? `Use Apple or Google to save the ${gatheringTypeDetails(reunionDraft).noun} with the organizer identity you already chose.`
-                : "For new and returning families. New here? You’ll plan your reunion next."}
+                : "For new and returning families. New here? You’ll plan a gathering next."}
             </p>
             <button
               className="mt-4 flex w-full items-center justify-center gap-3 rounded-full border border-border/70 bg-background px-6 py-3.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent/60 hover:shadow-md disabled:opacity-50"
@@ -493,7 +495,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                 </div>
               )}
               <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                {isSubmitting ? "Opening…" : hasFamilyAccessIntent ? "Create account and continue" : "Save reunion draft"}
+                {isSubmitting ? "Opening…" : hasFamilyAccessIntent ? "Create account and continue" : `Save ${gatheringTypeDetails(reunionDraft).noun} draft`}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>
