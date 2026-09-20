@@ -1,6 +1,6 @@
 # Kindred — App Store Submission Checklist
 
-**Release 2 review date:** July 30, 2026
+**Release 3.1.2 review date:** September 20, 2026
 **Prior Rejection:** March 23, 2026 (Apple Guideline 3.1.2(c))
 
 ---
@@ -17,7 +17,7 @@
 
 1. **App Store Description**
    - [ ] Replace description with updated copy from `STORE_LISTINGS.md` (iOS section)
-   - [ ] Confirm reunion-first product name, subtitle, description, keywords, categories, and release notes
+   - [ ] Confirm event-first product name, subtitle, description, keywords, categories, and release notes
    - [ ] Verify Privacy Policy and Terms URLs at the bottom
 
 2. **Subscription Metadata (Subscriptions section)**
@@ -37,15 +37,18 @@
    - [ ] Support: `https://www.heykindred.org/support`
 
 5. **Build & Upload**
-   - [ ] `cd frontend && npm install && GENERATE_SOURCEMAP=false npm run build`
-   - [ ] `npx cap sync ios`
-   - [ ] Open `ios/App/App.xcworkspace` in Xcode
-   - [ ] Increment version/build number
-   - [ ] Archive and upload via Xcode Cloud or manual upload
+   - [x] Production frontend build completed and prerendered successfully
+   - [x] `npx cap sync ios` completed successfully
+   - [x] Version/build set to 3.1.2 (67)
+   - [x] Xcode 27 generic iOS archive completed successfully after updating the RevenueCat Capacitor bridge to 13.6.0
+   - [x] iPhone 17 simulator build, installation, and launch smoke test completed successfully
+   - [ ] Reconnect the physical iPhone and complete a final device smoke test
+   - [ ] Upload the archive through an authenticated Apple distribution session
    - [ ] Select new build in App Store Connect
 
 6. **Submit**
    - [ ] Verify test credentials are current
+   - [ ] Obtain the owner's explicit final approval at the Submit for Review action
    - [ ] Submit for Review
 
 ---
@@ -102,3 +105,16 @@
 ## KEY DIFFERENCE FROM MARCH 23 REJECTION
 
 The March rejection was for Apple Guideline 3.1.2(c) — the same issue that Ile Ubuntu had. The fix applied today adds the required auto-renewal disclosure, pricing info, and Terms/Privacy links directly in the subscription purchase flow (SubscriptionPage.jsx). The privacy and terms pages were already public routes.
+
+---
+
+## RELEASE 3.1.2 VERIFICATION SNAPSHOT
+
+- [x] 18 frontend suites and 119 tests passed
+- [x] RevenueCat native purchase unit tests passed on the 13.6.0 bridge
+- [x] Android debug assembly passed after the RevenueCat update
+- [x] iOS signed archive passed for bundle `com.ubuntumarket.kindred`
+- [x] Five iPhone, five iPad, and five Google phone screenshots passed the deterministic generator and manifest checks
+- [x] Screenshot copy uses family event and holiday gathering language rather than presenting every event as a reunion
+- [ ] Physical iPhone test is pending because the connected device was offline during verification
+- [ ] App Store Connect upload, metadata save, build selection, and review submission remain pending

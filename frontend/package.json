@@ -43,7 +43,7 @@
     "@radix-ui/react-toggle": "^1.1.6",
     "@radix-ui/react-toggle-group": "^1.1.7",
     "@radix-ui/react-tooltip": "^1.2.4",
-    "@revenuecat/purchases-capacitor": "^11.3.2",
+    "@revenuecat/purchases-capacitor": "13.6.0",
     "@revenuecat/purchases-js": "1.48.1",
     "@sentry/capacitor": "^4.3.0",
     "@sentry/react": "10.69.0",

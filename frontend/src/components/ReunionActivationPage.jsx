@@ -50,7 +50,7 @@ export const ReunionActivationPage = ({ session }) => {
       setOperations(operationsPayload);
       clearReunionDraft();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to load this reunion.");
+      toast.error(error.response?.data?.detail || "Unable to load this event.");
     } finally {
       setLoading(false);
     }
@@ -144,7 +144,7 @@ export const ReunionActivationPage = ({ session }) => {
       });
       setMemory("");
       trackReunionEvent("memory_prompt_completed", { source: "reunion_activation" });
-      toast.success("Your first reunion story is preserved.");
+      toast.success("Your first event story is preserved.");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Unable to preserve this story.");
     } finally {
@@ -160,7 +160,7 @@ export const ReunionActivationPage = ({ session }) => {
   if (loading) {
     return (
       <div className="app-canvas flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">Opening your reunion plan…</p>
+        <p className="text-sm text-muted-foreground">Opening your event plan…</p>
       </div>
     );
   }
@@ -169,8 +169,8 @@ export const ReunionActivationPage = ({ session }) => {
     return (
       <div className="app-canvas flex min-h-screen items-center justify-center px-6">
         <div className="archival-card max-w-lg text-center">
-          <h1 className="font-display text-3xl">This reunion could not be opened.</h1>
-          <Link className="mt-5 inline-flex text-sm font-semibold text-primary hover:underline" to="/reunion/start">Return to reunion planning</Link>
+          <h1 className="font-display text-3xl">This event could not be opened.</h1>
+          <Link className="mt-5 inline-flex text-sm font-semibold text-primary hover:underline" to="/reunion/start">Return to event planning</Link>
         </div>
       </div>
     );
@@ -192,7 +192,7 @@ export const ReunionActivationPage = ({ session }) => {
         <header className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
             <div className="p-6 sm:p-8">
-              <p className="eyebrow-text">Your reunion is ready to coordinate</p>
+              <p className="eyebrow-text">Your event is ready to coordinate</p>
               <h1 className="mt-3 font-display text-4xl text-foreground sm:text-5xl" data-testid="reunion-activation-title">{event.title}</h1>
               <div className="mt-5 flex flex-wrap gap-4 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /> {formatDateTime(event.start_at)}</span>
