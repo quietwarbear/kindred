@@ -2629,10 +2629,10 @@
     "@sentry/replay" "10.69.0"
     "@sentry/replay-canvas" "10.69.0"
 
-"@sentry/capacitor@^4.3.0":
-  version "4.4.0"
-  resolved "https://registry.npmjs.org/@sentry/capacitor/-/capacitor-4.4.0.tgz"
-  integrity sha512-t2PPB90JvKLCsSmF09jGYGtNW0ao6tLgyYyivFLNWRKkEbMWyHR5RtyaEb7CnRgdx9wOTUQ0mGrwYGpfbUE/ZQ==
+"@sentry/capacitor@4.3.0":
+  version "4.3.0"
+  resolved "https://registry.npmjs.org/@sentry/capacitor/-/capacitor-4.3.0.tgz"
+  integrity sha512-pDBC0nT8aOhZ0HRuYMgX4U+2FqqRv05oohQmREzC08eBSjToMRftgPbG0pgv7VK00Cf4cc0IwIHBMRSOyHjqFg==
   dependencies:
     "@sentry/browser" "10.69.0"
     "@sentry/core" "10.69.0"

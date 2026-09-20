@@ -1,6 +1,6 @@
 # Kindred — App Store Submission Checklist
 
-**Release 3.1.2 review date:** September 20, 2026
+**Release 3.1.3 preparation date:** September 20, 2026
 **Prior Rejection:** March 23, 2026 (Apple Guideline 3.1.2(c))
 
 ---
@@ -39,7 +39,7 @@
 5. **Build & Upload**
    - [x] Production frontend build completed and prerendered successfully
    - [x] `npx cap sync ios` completed successfully
-   - [x] Version/build set to 3.1.2 (67)
+   - [x] Version/build set to 3.1.3 (68); 3.1.2 (67) is already public
    - [x] Xcode 27 generic iOS archive completed successfully after updating the RevenueCat Capacitor bridge to 13.6.0
    - [x] iPhone 17 simulator build, installation, and launch smoke test completed successfully
    - [ ] Reconnect the physical iPhone and complete a final device smoke test
@@ -108,7 +108,7 @@ The March rejection was for Apple Guideline 3.1.2(c) — the same issue that Ile
 
 ---
 
-## RELEASE 3.1.2 VERIFICATION SNAPSHOT
+## RELEASE 3.1.3 VERIFICATION SNAPSHOT
 
 - [x] 18 frontend suites and 119 tests passed
 - [x] RevenueCat native purchase unit tests passed on the 13.6.0 bridge
@@ -117,4 +117,5 @@ The March rejection was for Apple Guideline 3.1.2(c) — the same issue that Ile
 - [x] Five iPhone, five iPad, and five Google phone screenshots passed the deterministic generator and manifest checks
 - [x] Screenshot copy uses family event and holiday gathering language rather than presenting every event as a reunion
 - [ ] Physical iPhone test is pending because the connected device was offline during verification
+- [x] Xcode Cloud dependency install was made reproducible with `npm ci`; Sentry Capacitor is pinned to 4.3.0 because the 4.4.0 npm tarball omits `SentryCapacitor.podspec`
 - [ ] App Store Connect upload, metadata save, build selection, and review submission remain pending
