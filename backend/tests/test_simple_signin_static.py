@@ -23,9 +23,12 @@ def test_signin_page_has_no_community_setup_form():
         assert removed not in auth, removed
 
 
-def test_new_visitors_are_sent_to_the_reunion_first_path():
+def test_new_visitors_are_sent_to_the_seasonal_gathering_path():
     auth = read("frontend/src/components/AuthPage.jsx")
-    assert '<Link to="/reunion/start">' in auth
+    assert "<Link to={campaign.startPath}>" in auth
+    assert 'startPath: "/reunion/start?type=holiday_meal&campaign=keep-the-record"' in read(
+        "frontend/src/lib/seasonalCampaign.js"
+    )
     assert "New to Kindred?" in auth
     # Create account only exists once a reunion draft or family-access request exists.
     assert "{hasLightweightIntent ? (\n          <TabsContent value=\"launch\">" in auth

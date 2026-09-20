@@ -19,6 +19,7 @@ import { rememberPendingPlan } from "@/lib/pricing";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { trackReunionEvent } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
+import { gatheringCampaign, KEEP_THE_RECORD_RULES_URL } from "@/lib/seasonalCampaign";
 
 // Mirrors PricingPage and SubscriptionPage: web purchases are live once the
 // deployment sets the RevenueCat Billing web key.
@@ -32,7 +33,7 @@ const steps = [
     number: "01",
     icon: CalendarDays,
     title: "Plan the gathering",
-    copy: "Start with the reunion name, approximate date, organizer, and optional location. Kindred creates the working checklist.",
+    copy: "Choose a reunion, holiday meal, birthday, wedding, or other gathering. Add only what you know; Kindred creates the working checklist.",
   },
   {
     number: "02",
@@ -50,6 +51,7 @@ const steps = [
 
 export const LandingPage = ({ isAuthenticated }) => {
   const showStoreBadges = !isNative();
+  const campaign = gatheringCampaign();
   const { plans, loading: plansLoading, error: plansError } = usePublicPlans();
   const navigate = useNavigate();
 
@@ -92,18 +94,18 @@ export const LandingPage = ({ isAuthenticated }) => {
           <div className="archival-card overflow-hidden p-0">
             <div className="grid lg:grid-cols-[1.02fr_0.98fr]">
               <div className="flex flex-col justify-center p-6 sm:p-9 lg:p-12">
-                <p className="eyebrow-text" data-testid="landing-eyebrow">Built for multigenerational families and diaspora organizers</p>
+                <p className="eyebrow-text" data-testid="landing-eyebrow">{campaign.eyebrow}</p>
                 <h1
                   className="mt-5 font-display text-5xl font-semibold leading-[1.02] tracking-tight text-foreground sm:text-6xl"
                   data-testid="landing-headline"
                 >
-                  Plan the reunion. Bring everyone in. Keep the stories.
+                  {campaign.headline}
                 </h1>
                 <p
                   className="mt-6 max-w-2xl text-lg leading-8 text-foreground/75"
                   data-testid="landing-subheadline"
                 >
-                  One private place for RSVPs, potluck, volunteers, travel, photos, and family stories.
+                  {campaign.subheadline}
                 </p>
                 <div className="mt-7 flex flex-wrap gap-3">
                   {/* Straight into the draft form. "Get started" pointing at
@@ -114,9 +116,9 @@ export const LandingPage = ({ isAuthenticated }) => {
                     className="pill-button"
                     data-testid="landing-primary-cta"
                     onClick={() => trackStart("homepage_hero")}
-                    to="/reunion/start"
+                    to={campaign.startPath}
                   >
-                    Start my reunion <ArrowRight className="ml-2 h-4 w-4" />
+                    {campaign.cta} <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                   <a
                     className="inline-flex items-center rounded-full border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-muted"
@@ -128,6 +130,9 @@ export const LandingPage = ({ isAuthenticated }) => {
                 </div>
                 <p className="mt-5 text-sm text-muted-foreground">
                   Draft and preview without payment. Create an account only when you’re ready to save and share.
+                  {campaign.active ? (
+                    <> See the <a className="font-semibold text-primary underline-offset-4 hover:underline" href={KEEP_THE_RECORD_RULES_URL} rel="noopener noreferrer" target="_blank">official contest rules</a> for eligibility and entry details.</>
+                  ) : null}
                 </p>
               </div>
 
@@ -135,9 +140,9 @@ export const LandingPage = ({ isAuthenticated }) => {
                 <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-2xl">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">Reunion workspace</p>
-                      <p className="mt-2 font-display text-3xl">The Family Reunion</p>
-                      <p className="mt-2 text-sm text-stone-300">Saturday, July 18 · Oakland, California</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">{campaign.active ? "Holiday gathering workspace" : "Family gathering workspace"}</p>
+                      <p className="mt-2 font-display text-3xl">{campaign.active ? "The Bell Family Holiday Table" : "The Family Gathering"}</p>
+                      <p className="mt-2 text-sm text-stone-300">{campaign.active ? "Saturday, November 28 · Oakland, California" : "Date and location to be confirmed"}</p>
                     </div>
                     <span className="rounded-full bg-emerald-300/15 px-3 py-1 text-xs font-semibold text-emerald-200">Private</span>
                   </div>
@@ -167,7 +172,7 @@ export const LandingPage = ({ isAuthenticated }) => {
 
                   <div className="mt-3 rounded-2xl border border-orange-200/15 bg-orange-200/10 p-4">
                     <p className="flex items-center gap-2 text-sm font-semibold"><MessageCircleHeart className="h-4 w-4 text-orange-200" /> Memory prompt</p>
-                    <p className="mt-2 text-sm leading-6 text-stone-200">What family story should every younger cousin know?</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-200">{campaign.active ? "Which recipe or gathering story should the next generation keep?" : "What family story should every younger cousin know?"}</p>
                   </div>
                 </div>
               </div>
@@ -213,9 +218,9 @@ export const LandingPage = ({ isAuthenticated }) => {
             className="pill-button mt-7"
             data-testid="landing-how-start-cta"
             onClick={() => trackStart("homepage_how")}
-            to="/reunion/start"
+            to={campaign.startPath}
           >
-            Start a reunion draft <ArrowRight className="ml-2 h-4 w-4" />
+            {campaign.active ? "Start a holiday gathering draft" : "Start a gathering draft"} <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </section>
 
@@ -228,7 +233,7 @@ export const LandingPage = ({ isAuthenticated }) => {
                 [CalendarDays, "No-account web RSVP", "Invitees can respond from a private link without installing an app."],
                 [Soup, "Potluck claims", "Organizers list what is needed and signed-in family members claim items."],
                 [HandHelping, "Volunteer sign-ups", "Create roles with capacity and see who has stepped in."],
-                [Camera, "Photos and stories", "Attach reunion memories to the gathering’s long-term archive."],
+                [Camera, "Photos and stories", "Attach gathering memories to the family’s long-term archive."],
               ].map(([Icon, title, copy]) => (
                 <div className="soft-panel" key={title}>
                   <Icon className="h-5 w-5 text-primary" />
@@ -244,7 +249,7 @@ export const LandingPage = ({ isAuthenticated }) => {
           <div className="archival-card grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
             <div>
               <p className="eyebrow-text">Keep the family chat</p>
-              <h2 className="mt-3 font-display text-4xl text-foreground">Give the reunion one private source of truth.</h2>
+              <h2 className="mt-3 font-display text-4xl text-foreground">Give the gathering one private source of truth.</h2>
             </div>
             <div className="space-y-4 text-sm leading-7 text-muted-foreground">
               <p>
@@ -252,7 +257,7 @@ export const LandingPage = ({ isAuthenticated }) => {
                 Facebook, text messages, or phone calls.
               </p>
               <p>
-                Use Kindred for the reunion details that are hard to keep straight in a conversation: the multiday schedule,
+                Use Kindred for gathering details that are hard to keep straight in a conversation: the schedule,
                 private invitation, RSVP responses, planning gaps, contributions, photos, and stories.
               </p>
             </div>
@@ -265,7 +270,7 @@ export const LandingPage = ({ isAuthenticated }) => {
             <h2 className="mt-3 font-display text-3xl text-foreground">Start planning without payment.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
               {WEB_PURCHASES_ENABLED
-                ? "Seedling remains free. Draft your reunion first and upgrade whenever your family outgrows it."
+                ? "Seedling remains free. Draft your gathering first and upgrade whenever your family outgrows it."
                 : "Seedling remains free. Current plan details stay public while web subscription purchasing is temporarily unavailable."}
             </p>
             {!WEB_PURCHASES_ENABLED && (

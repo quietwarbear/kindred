@@ -11,17 +11,20 @@ def read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
-def test_public_and_auth_positioning_share_reunion_first_promise():
+def test_public_and_auth_positioning_share_gathering_first_promise():
     landing = read("frontend/src/components/LandingPage.jsx")
     auth = read("frontend/src/components/AuthPage.jsx")
+    campaign = read("frontend/src/lib/seasonalCampaign.js")
     index = read("frontend/public/index.html")
     store = read("frontend/STORE_LISTINGS.md")
-    promise = "Plan the reunion. Bring everyone in. Keep the stories."
+    promise = "Plan the gathering. Bring everyone in. Keep the stories."
 
-    assert promise in landing
-    assert promise in auth
-    assert promise in store
-    assert "Private family reunion planning" in index
+    assert promise in campaign
+    assert "Gather the family. Keep the record." in campaign
+    assert "campaign.headline" in landing
+    assert "campaign.headline" in auth
+    assert "Plan the reunion. Bring everyone in. Keep the stories." in store
+    assert "Private family gathering planning" in index
     assert "does not need to replace WhatsApp" in landing
     assert "Facebook" in landing
     assert "automatically start your own Kindred space" not in auth

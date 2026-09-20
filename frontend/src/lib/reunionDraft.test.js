@@ -1,4 +1,5 @@
 import {
+  applyPreferredGatheringType,
   clearReunionDraft,
   draftLandingPath,
   gatheringTypeDetails,
@@ -31,6 +32,15 @@ test("keeps the pre-account draft local and limits stored fields", () => {
   expect(loadReunionDraft().client_request_id).toEqual(expect.any(String));
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("private@example.com");
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("secret");
+});
+
+test("a seasonal entry point can preselect an untouched gathering draft", () => {
+  expect(applyPreferredGatheringType({}, "holiday_meal").gathering_type).toBe("holiday_meal");
+  expect(applyPreferredGatheringType({}, "unknown").gathering_type).toBe("reunion");
+});
+
+test("a seasonal entry point never replaces a gathering someone already started", () => {
+  expect(applyPreferredGatheringType(completeDraft, "holiday_meal").gathering_type).toBe("reunion");
 });
 
 test("requires only a gathering name and an organizer", () => {

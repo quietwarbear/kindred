@@ -104,6 +104,19 @@ export function loadReunionDraft() {
   }
 }
 
+export function applyPreferredGatheringType(value, requestedType) {
+  const draft = normalizeReunionDraft(value);
+  if (!Object.prototype.hasOwnProperty.call(GATHERING_TYPES, requestedType)) return draft;
+  const alreadyStarted = Boolean(
+    draft.gathering_name
+    || draft.approximate_date
+    || draft.end_date
+    || draft.organizer_name
+    || draft.location
+  );
+  return alreadyStarted ? draft : { ...draft, gathering_type: requestedType };
+}
+
 export function saveReunionDraft(value) {
   const draft = normalizeReunionDraft(value);
   window.localStorage.setItem(REUNION_DRAFT_KEY, JSON.stringify(draft));

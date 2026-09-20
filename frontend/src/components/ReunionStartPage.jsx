@@ -21,6 +21,7 @@ import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import {
   GATHERING_TYPES,
+  applyPreferredGatheringType,
   clearReunionDraft,
   draftLandingPath,
   gatheringTypeDetails,
@@ -91,8 +92,9 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const memoryFocus = searchParams.get("focus") === "memory";
-  const [draft, setDraft] = useState(() => loadReunionDraft());
-  const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(loadReunionDraft()));
+  const preferredType = searchParams.get("type") || "";
+  const [draft, setDraft] = useState(() => applyPreferredGatheringType(loadReunionDraft(), preferredType));
+  const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(draft));
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rescueEmail, setRescueEmail] = useState("");
@@ -100,6 +102,15 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
   const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
   const gatheringType = gatheringTypeDetails(draft);
+  const gatheringOptions = useMemo(() => {
+    const entries = Object.entries(GATHERING_TYPES);
+    if (!Object.prototype.hasOwnProperty.call(GATHERING_TYPES, preferredType)) return entries;
+    return entries.sort(([left], [right]) => {
+      if (left === preferredType) return -1;
+      if (right === preferredType) return 1;
+      return 0;
+    });
+  }, [preferredType]);
   const starter = useMemo(() => reunionDraftToEventPayload(draft), [draft]);
 
   const dateLabel = useMemo(() => {
@@ -187,7 +198,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
           data: {
             full_name: draft.organizer_name,
             community_name: provisionalCommunityName(draft),
-            community_type: "family reunion",
+            community_type: draft.gathering_type === "reunion" ? "family reunion" : "family gathering",
             creation_mode: "reunion_first",
             location: draft.location,
           },
@@ -235,7 +246,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 <fieldset>
                   <legend className="field-label">What are you planning?</legend>
                   <div aria-label="What are you planning?" className="mt-2 flex flex-wrap gap-2" role="radiogroup">
-                    {Object.entries(GATHERING_TYPES).map(([id, option]) => (
+                    {gatheringOptions.map(([id, option]) => (
                       <button
                         aria-checked={draft.gathering_type === id}
                         className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${draft.gathering_type === id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:bg-accent/60"}`}
