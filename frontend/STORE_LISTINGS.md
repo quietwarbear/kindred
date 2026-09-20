@@ -149,7 +149,7 @@ The reproducible source campaign, exact dimensions, alt text, and synthetic-data
 2. To review organizer behavior, start a reunion draft, save it with the synthetic account, and create a private invitation for a synthetic disposable invitee.
 3. To review no-account RSVP, open that newly created synthetic invitation in a signed-out browser and submit a response. No account is required for this step.
 4. Do not use production family names, events, invitations, email addresses, or customer records.
-5. Web subscription checkout intentionally remains unavailable and returns HTTP 410 with `subscription_checkout_migrating`. Do not treat that paused path as a working purchase flow.
+5. Web subscriptions are available through RevenueCat Billing. The retained HTTP 410 `subscription_checkout_migrating` response applies only to the retired direct-Stripe subscription endpoint; reviewers should use the active RevenueCat purchase flow shown in the web client.
 
 ## External console changes intentionally unpublished
 

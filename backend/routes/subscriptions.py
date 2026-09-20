@@ -193,7 +193,12 @@ async def get_current_subscription(current_user: dict[str, Any] = Depends(get_cu
 
 
 # ---------------------------------------------------------------------------
-# Checkout — temporarily disabled while web billing migrates
+# Legacy direct-Stripe checkout compatibility boundary.
+#
+# Active web subscriptions use RevenueCat Billing through purchases-js and are
+# intentionally enabled when REACT_APP_REVENUECAT_WEB_KEY is present in the
+# frontend deployment. Keep this retired endpoint inert so an older client
+# cannot create a second subscription through a different billing provider.
 # ---------------------------------------------------------------------------
 
 @router.post("/subscriptions/checkout")
@@ -204,7 +209,7 @@ async def create_subscription_checkout(
         status_code=status.HTTP_410_GONE,
         detail={
             "code": "subscription_checkout_migrating",
-            "message": "New web subscription purchases are temporarily unavailable while billing is being updated.",
+            "message": "This legacy direct-Stripe subscription endpoint is retired. Use the active RevenueCat web checkout.",
         },
     )
 

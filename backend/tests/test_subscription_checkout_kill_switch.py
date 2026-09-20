@@ -1,4 +1,9 @@
-"""Offline regression tests for the emergency web-subscription kill switch."""
+"""Provider-boundary tests for active RevenueCat web subscriptions.
+
+The old direct-Stripe subscription endpoint must stay inert so web customers
+cannot be billed by two recurring providers. This is not a global web-checkout
+kill switch: the React client purchases through RevenueCat Billing.
+"""
 
 import ast
 import asyncio
@@ -21,7 +26,8 @@ PAID_PLAN_INTERVALS = (
 )
 EXPECTED_CODE = "subscription_checkout_migrating"
 EXPECTED_MESSAGE = (
-    "New web subscription purchases are temporarily unavailable while billing is being updated."
+    "This legacy direct-Stripe subscription endpoint is retired. "
+    "Use the active RevenueCat web checkout."
 )
 
 
@@ -66,7 +72,9 @@ def isolated_checkout_handler():
 
 
 @pytest.mark.parametrize(("plan_id", "billing_cycle"), PAID_PLAN_INTERVALS)
-def test_every_paid_plan_and_interval_returns_stable_410(plan_id, billing_cycle):
+def test_every_paid_plan_and_interval_rejects_legacy_direct_stripe_checkout(
+    plan_id, billing_cycle
+):
     handler = isolated_checkout_handler()
     payload = SubscriptionCheckoutRequest(plan_id, billing_cycle)
 
@@ -80,7 +88,7 @@ def test_every_paid_plan_and_interval_returns_stable_410(plan_id, billing_cycle)
     }
 
 
-def test_checkout_handler_cannot_reach_stripe_or_write_subscription_state():
+def test_legacy_checkout_handler_cannot_reach_stripe_or_write_subscription_state():
     node = checkout_handler_node()
     source = ast.get_source_segment(SUBSCRIPTIONS_SOURCE, node)
     prohibited = (
@@ -119,7 +127,7 @@ def test_unrelated_payment_and_existing_subscriber_routes_remain_present():
         assert route in subscriptions
 
 
-def test_web_ui_disables_subscription_purchase_without_disabling_addons():
+def test_web_ui_uses_revenuecat_and_only_fails_closed_when_unconfigured():
     subscription_page = (
         REPO_ROOT / "frontend" / "src" / "components" / "SubscriptionPage.jsx"
     ).read_text()
@@ -132,9 +140,9 @@ def test_web_ui_disables_subscription_purchase_without_disabling_addons():
 
     assert expected_ui_message in subscription_page
     assert expected_ui_message in pricing_page
-    # Web purchase is disabled until the deployment sets the RevenueCat Billing
-    # web key. Both surfaces must read the same flag, or the buttons and the
-    # "unavailable" notice disagree with each other.
+    # RevenueCat Billing web purchase is active when the deployment supplies its
+    # public key. Both surfaces must read the same flag, or the buttons and the
+    # fail-closed notice disagree with each other.
     # Native store platforms (iOS and Android) buy through RevenueCat, so the
     # web gate must not disable their buttons — hence isNativeBilling, not
     # isIOS. Gating on iOS alone left Android with no purchase path at all.

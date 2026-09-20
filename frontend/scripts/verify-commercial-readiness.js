@@ -502,7 +502,14 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
       throw new Error(`Unexpected reunion headline: ${headline}`);
     }
     await assertVisible(page, '[data-testid="landing-see-all-plans-link"]', 'Public plans link is missing.');
-    await assertVisible(page, '[data-testid="landing-billing-notice"]', 'Homepage billing suspension notice is missing.');
+    const landingBillingNotice = await page.$('[data-testid="landing-billing-notice"]');
+    const landingPaidPlanButton = await page.$('[data-testid="public-plan-choose-sapling-monthly"]');
+    if (!landingBillingNotice && !landingPaidPlanButton) {
+      throw new Error('Homepage exposes neither active RevenueCat checkout nor its fail-closed billing notice.');
+    }
+    if (landingBillingNotice && landingPaidPlanButton) {
+      throw new Error('Homepage exposes checkout while also claiming web subscriptions are unavailable.');
+    }
     await assertVisible(page, '[data-testid="landing-interface-evidence"]', 'Real reunion interface evidence is missing.');
     if (await page.$('[data-testid="landing-read-strategy-link"]')) throw new Error('Consumer strategy link still exists.');
     await assertVisible(page, '[data-testid="public-plan-seedling"]', 'Canonical landing prices did not render.');
@@ -548,11 +555,6 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
 
     await page.goto(`http://${HOST}:${PORT}/pricing`, { waitUntil: 'networkidle0' });
     await assertVisible(page, '[data-testid="public-pricing-page"]', 'Public pricing route did not open.');
-    await assertVisible(
-      page,
-      '[data-testid="web-subscription-unavailable"]',
-      'The web subscription suspension notice is missing.',
-    );
     for (const tier of ['seedling', 'sapling', 'oak', 'redwood', 'elder-grove']) {
       await assertVisible(page, `[data-testid="public-plan-${tier}"]`, `Missing ${tier} on public pricing.`);
     }
@@ -568,8 +570,16 @@ async function assertSensitivePageIsolation(page, externalRequests, label) {
     if (!pricingText.includes('Billed every month') || !pricingText.includes('Billed once per year')) {
       throw new Error('Public pricing does not disclose both billing intervals.');
     }
-    if (!pricingText.includes('Web subscriptions are temporarily unavailable while billing is being updated.')) {
-      throw new Error('Public pricing does not explain that web subscription purchasing is unavailable.');
+    const pricingBillingNotice = await page.$('[data-testid="web-subscription-unavailable"]');
+    const pricingPaidPlanButton = await page.$('[data-testid="public-plan-choose-sapling-monthly"]');
+    if (!pricingBillingNotice && !pricingPaidPlanButton) {
+      throw new Error('Public pricing exposes neither active RevenueCat checkout nor its fail-closed billing notice.');
+    }
+    if (pricingBillingNotice && pricingPaidPlanButton) {
+      throw new Error('Public pricing exposes checkout while also claiming web subscriptions are unavailable.');
+    }
+    if (pricingBillingNotice && !pricingText.includes('Web subscriptions are temporarily unavailable while billing is being updated.')) {
+      throw new Error('Fail-closed public pricing does not explain that web subscription purchasing is unavailable.');
     }
     await page.screenshot({ path: path.join(OUTPUT, 'public-pricing-desktop.png'), fullPage: true });
 

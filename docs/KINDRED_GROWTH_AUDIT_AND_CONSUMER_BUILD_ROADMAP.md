@@ -126,12 +126,12 @@ The consumer should not have to reconcile four product categories before install
 
 ### P0 — New users are exposed to monetization before demonstrated value
 
-**Evidence:** `frontend/src/components/AuthPage.jsx:80-99` navigates non-guest, non-reunion authentication to `/subscription`. Production web subscription checkout intentionally returns HTTP 410 with `subscription_checkout_migrating`.
+**Evidence:** `frontend/src/components/AuthPage.jsx:80-99` navigates non-guest, non-reunion authentication to `/subscription`. Recurring web checkout is active through RevenueCat Billing. The HTTP 410 `subscription_checkout_migrating` response is limited to the retired direct-Stripe subscription endpoint and is not used by the current web purchase client.
 
 **Impact:**
 
 - a first-time consumer encounters pricing before completing a reunion, invitation, or RSVP loop;
-- the destination contains a disabled purchase path;
+- the destination can present paid plans before the organizer experiences the product's reunion-planning value;
 - the experience suggests the product is asking for money before proving usefulness.
 
 **Required action:** route new organizers to a single activation workspace and defer plan presentation until a meaningful threshold—such as a saved reunion plus first invitation or a capacity boundary.
