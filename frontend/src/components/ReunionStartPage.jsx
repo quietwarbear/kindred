@@ -377,7 +377,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 <h2 className="mt-3 font-display text-3xl text-foreground">A useful planning space—not another setup questionnaire.</h2>
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   {[
-                    [ClipboardList, `A ${gatheringType.noun} checklist`],
+                    [ClipboardList, `${gatheringType.noun === "event" ? "An" : "A"} ${gatheringType.noun} checklist`],
                     [Users, "A clear RSVP area"],
                     [Soup, "Potluck coordination"],
                     [HandHelping, "Volunteer roles"],
