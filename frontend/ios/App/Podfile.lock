@@ -18,12 +18,12 @@ PODS:
     - Capacitor
   - CapacitorStatusBar (6.0.3):
     - Capacitor
-  - PurchasesHybridCommon (17.25.0):
-    - RevenueCat (= 5.51.1)
-  - RevenueCat (5.51.1)
-  - RevenuecatPurchasesCapacitor (11.3.2):
+  - PurchasesHybridCommon (19.0.0):
+    - RevenueCat (= 5.89.0)
+  - RevenueCat (5.89.0)
+  - RevenuecatPurchasesCapacitor (13.6.0):
     - Capacitor
-    - PurchasesHybridCommon (= 17.25.0)
+    - PurchasesHybridCommon (= 19.0.0)
   - Sentry (9.16.1):
     - Sentry/Core (= 9.16.1)
   - Sentry/Core (9.16.1)
@@ -88,9 +88,9 @@ SPEC CHECKSUMS:
   CapacitorPushNotifications: 83974a7be0f6829c26148f6ed65745b96a7d16bd
   CapacitorSplashScreen: f65292695df7d7b24a22954a6cfbaecadd1718a4
   CapacitorStatusBar: 38665f1a18c55677098367a29f6b42126b72dc65
-  PurchasesHybridCommon: 6a79a873ab52f777bfa36e9516f3fcd84d3b3428
-  RevenueCat: eab035bbab271faccfef5c36eaff2a1ffef14dc0
-  RevenuecatPurchasesCapacitor: 17db9f0b99ec5c4055d84af83d38bc5038f50ff2
+  PurchasesHybridCommon: 526db4f4895166e57ae866b3daeb0025030f84bd
+  RevenueCat: 5e390c204dafb3ceeff76ade29bf295b952e6681
+  RevenuecatPurchasesCapacitor: 63d3d626996ec76dd3adff9f8da408249b762a91
   Sentry: e5d82a3c1f2d951f75c04c57215a0abb1facbd51
   SentryCapacitor: 51a84af1e21f72895220340fe3b4e419dad43b5d
 

@@ -17,7 +17,7 @@ import { saveGuestFamilyClaim } from "@/lib/guestFamilyAccess";
 const APP_STORE_URL = "https://apps.apple.com/app/heykindred/id6760608478";
 
 const OVERALL_OPTIONS = [
-  { value: "going", label: "Attending", sub: "I plan to join the full reunion" },
+  { value: "going", label: "Attending", sub: "I plan to join the full event" },
   { value: "some", label: "Attending some activities", sub: "I’ll choose from the schedule" },
   { value: "maybe", label: "Not sure", sub: "Please keep me in the loop" },
   { value: "not-going", label: "Unable to attend", sub: "I’m sorry to miss it" },
@@ -281,7 +281,7 @@ export const PublicRSVPPage = () => {
       {saved ? (
         <section className="rounded-2xl bg-emerald-50 px-5 py-6" data-testid="public-rsvp-confirmation">
           <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-700" />
-          <h2 className="mt-3 text-xl font-semibold text-emerald-900">Your reunion response is saved.</h2>
+          <h2 className="mt-3 text-xl font-semibold text-emerald-900">Your event response is saved.</h2>
           <div className="mx-auto mt-4 max-w-xl rounded-xl bg-white/70 p-4 text-left text-sm text-emerald-950">
             <p><strong>Overall:</strong> {OVERALL_OPTIONS.find((option) => option.value === overall)?.label}</p>
             {activities.length ? (
@@ -308,7 +308,7 @@ export const PublicRSVPPage = () => {
 
       {saved && data?.family_access_available ? (
         <section className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-6" data-testid="guest-family-access-cta">
-          <h2 className="text-xl font-semibold text-slate-900">Stay connected after the reunion</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Stay connected after the event</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
             Creating an account is optional. If you ask to join the family space, a host or organizer must approve before you can see family posts, memories, or member areas.
           </p>
@@ -327,7 +327,7 @@ export const PublicRSVPPage = () => {
 
       {!saved && step === 1 ? (
         <fieldset data-testid="public-rsvp-options">
-          <legend className="text-xl font-semibold text-slate-900">Will you join the reunion?</legend>
+          <legend className="text-xl font-semibold text-slate-900">Will you join the event?</legend>
           <p className="mt-2 text-sm text-slate-600">You can still choose individual activities next.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {OVERALL_OPTIONS.map((option) => (
@@ -460,7 +460,7 @@ export const PublicRSVPPage = () => {
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white px-5 py-5 text-left">
         <p className="text-sm font-semibold text-slate-900">Private by design</p>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          This invitation link shows only this reunion, aggregate activity counts, and your response. It does not expose email addresses, phone numbers, minors’ details, private notes, the full guest list, or a public profile.
+          This invitation link shows only this event, aggregate activity counts, and your response. It does not expose email addresses, phone numbers, minors’ details, private notes, the full guest list, or a public profile.
         </p>
       </section>
 
@@ -476,7 +476,7 @@ export const PublicRSVPPage = () => {
         </a>
         <span className="mx-2">·</span>
         <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app</a>
-        <p className="mt-2 text-xs leading-5">Shared reunion memories require an account and approved family access; organizers can also use a separate private invitation. This RSVP link cannot open or add to the family’s memory capsule, and an account alone does not grant community access. A guest request remains private and requires organizer approval.</p>
+        <p className="mt-2 text-xs leading-5">Shared event memories require an account and approved family access; organizers can also use a separate private invitation. This RSVP link cannot open or add to the family’s memory capsule, and an account alone does not grant community access. A guest request remains private and requires organizer approval.</p>
       </div>
     </>
   );

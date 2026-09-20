@@ -1,14 +1,14 @@
 # heyKindred proposed store metadata
 
-Last reviewed against the built application and `docs/PRIVACY_DATA_MAP.md`: 2026-07-30
+Last reviewed against the built application and `docs/PRIVACY_DATA_MAP.md`: 2026-09-20
 
 These are repository-managed proposals. Nothing in this file has been published to App Store Connect or Google Play Console. Store-console privacy answers must follow `docs/STORE_PRIVACY_DECLARATION_MATRIX.md` and receive the production/legal confirmations listed there.
 
 ## Shared positioning
 
-**Primary promise:** Plan the reunion. Bring everyone in. Keep the stories.
+**Primary promise:** Plan the event. Bring everyone in. Keep the stories.
 
-**Position:** heyKindred is a private family-reunion planner and source of truth. Existing family chats can continue; Kindred keeps the itinerary, private invitation, RSVP responses, planning work, and memories together.
+**Position:** heyKindred is a private family-event planner and source of truth. Existing family chats can continue; Kindred keeps the itinerary, private invitation, RSVP responses, planning work, and memories together. During Keep The Record, the first path leads with a holiday gathering while still supporting reunions, birthdays, weddings, and other family events.
 
 **Do not claim:** that Kindred replaces WhatsApp or Facebook; that all data is deleted within 30 days; that Kindred collects no data; adoption figures; security certifications; end-to-end encryption; guaranteed delivery; unsupported prices; or provider behavior not confirmed in production.
 
@@ -20,19 +20,19 @@ heyKindred
 
 ### Subtitle
 
-Family Reunion Planner
+Family Event Planner
 
 ### Promotional text
 
-Plan a multiday family reunion, invite relatives privately, collect no-account RSVPs, coordinate the details, and keep the stories together.
+Plan a holiday gathering or family event, invite relatives privately, collect RSVPs, and keep the stories together.
 
 ### Description
 
-Plan the reunion. Bring everyone in. Keep the stories.
+Plan the event. Bring everyone in. Keep the stories.
 
-heyKindred gives your family one private place to coordinate a reunion without asking every relative to abandon the chats they already use.
+heyKindred gives your family one private place to coordinate a holiday gathering, reunion, birthday, wedding, or other event without asking every relative to abandon the chats they already use.
 
-START THE REUNION
+START THE EVENT
 
 Name the gathering, choose the dates and location, and begin with a focused planning workspace.
 
@@ -50,7 +50,7 @@ Organizers can review response gaps and planning progress while member and guest
 
 KEEP THE STORIES
 
-Preserve family photos, voice notes, oral histories, and memories after the reunion.
+Preserve family photos, voice notes, recipes, oral histories, and memories afterward.
 
 Kindred is invitation-only, has no public member profiles, and is not built around an advertising feed. Kindred processes account, community, content, device, purchase, communication, diagnostic, and usage information as described in its Privacy Policy.
 
@@ -59,13 +59,13 @@ Terms of Service: https://www.heykindred.org/terms
 
 ### Keywords
 
-family reunion,reunion planner,RSVP,itinerary,family memories,potluck,volunteers,invitation
+family event,holiday gathering,reunion,RSVP,itinerary,memories,potluck,invitation
 
 ### Category recommendation
 
 - Primary: Lifestyle
 - Secondary: Social Networking
-- Rationale: the acquisition job is personal family-reunion planning; social participation supports that job but is not the primary store promise.
+- Rationale: the acquisition job is private family-event planning; social participation supports that job but is not the primary store promise.
 
 ### URLs
 
@@ -76,25 +76,25 @@ family reunion,reunion planner,RSVP,itinerary,family memories,potluck,volunteers
 
 ### Release notes
 
-Kindred now opens with one reunion-first path: start a private reunion plan, build a multiday itinerary, share a private invitation, collect no-account RSVPs, see planning gaps, and preserve family stories. This release also aligns public privacy and support information with the application’s documented behavior.
+Plan a holiday gathering for Keep The Record, or start any family event. This update improves event setup, private draft previews, RSVPs, shared tables, volunteer coordination, and family story prompts.
 
 ## Google Play
 
 ### App name
 
-heyKindred: Reunion Planner
+heyKindred: Event Planner
 
 ### Short description
 
-Plan a private family reunion, collect RSVPs, and keep the stories together.
+Plan private family events, collect RSVPs, and keep the stories together.
 
 ### Full description
 
-Plan the reunion. Bring everyone in. Keep the stories.
+Plan the event. Bring everyone in. Keep the stories.
 
-heyKindred is a private family-reunion planner for organizers, invited relatives, and multigenerational families.
+heyKindred is a private family-event planner for organizers, invited relatives, and multigenerational families.
 
-Your family can keep using its existing group chats. Kindred serves as the private reunion source of truth for:
+Your family can keep using its existing group chats. Kindred serves as the private event source of truth for:
 
 - Multiday activities, times, and locations
 - Private invitations
@@ -103,7 +103,7 @@ Your family can keep using its existing group chats. Kindred serves as the priva
 - Potluck items, volunteer roles, and travel details
 - Family photos, voice notes, oral histories, and memories
 
-Organizers control the reunion plan and invitations. Guests receive the gathering information needed to respond from a private web link. Family membership is not published as a public profile.
+Organizers control the event plan and invitations. Guests receive the gathering information needed to respond from a private web link. Family membership is not published as a public profile.
 
 Kindred is not positioned as a replacement for WhatsApp, Facebook, text messages, or phone calls. It keeps the details that are difficult to manage inside a conversation in one private workspace.
 
@@ -115,7 +115,7 @@ Terms of Service: https://www.heykindred.org/terms
 ### Category recommendation
 
 - Category: Events
-- Rationale: the primary acquisition and first-value job is planning and coordinating a family reunion.
+- Rationale: the primary acquisition and first-value job is planning and coordinating a private family event.
 
 ### Contact and URLs
 
@@ -129,24 +129,24 @@ The branded support mailbox is verified as created and monitored. Store publicat
 
 ### Release notes
 
-A clearer reunion-first start, private multiday planning, no-account guest RSVP, response-gap visibility, and aligned privacy and support information.
+Plan a holiday gathering for Keep The Record, or start any family event. This update improves event setup, private draft previews, RSVPs, shared tables, volunteer coordination, and family story prompts.
 
 ## Screenshot captions and order
 
 Use the same five-frame narrative on Apple and Google:
 
-1. **Start a family reunion** — Name the gathering, dates, and place.
-2. **Build a multiday itinerary** — Keep every activity and update in one plan.
+1. **Start a family event** — Holiday meals, reunions, birthdays, and more.
+2. **Build the event plan** — Keep every activity and update in one place.
 3. **Share one private RSVP** — Relatives can answer from a private link without creating an account.
 4. **See what needs attention** — Track responses, gaps, and planning progress.
-5. **Keep the stories** — Preserve photos, voices, and memories after the reunion.
+5. **Keep the stories** — Preserve photos, voices, recipes, and memories afterward.
 
 The reproducible source campaign, exact dimensions, alt text, and synthetic-data statement are in `frontend/store-assets/README.md`.
 
 ## Reviewer instructions
 
 1. Use only the dedicated synthetic review account entered securely in the applicable store console. Do not place review credentials in this repository or in listing text.
-2. To review organizer behavior, start a reunion draft, save it with the synthetic account, and create a private invitation for a synthetic disposable invitee.
+2. To review organizer behavior, start an event draft, save it with the synthetic account, and create a private invitation for a synthetic disposable invitee.
 3. To review no-account RSVP, open that newly created synthetic invitation in a signed-out browser and submit a response. No account is required for this step.
 4. Do not use production family names, events, invitations, email addresses, or customer records.
 5. Web subscriptions are available through RevenueCat Billing. The retained HTTP 410 `subscription_checkout_migrating` response applies only to the retired direct-Stripe subscription endpoint; reviewers should use the active RevenueCat purchase flow shown in the web client.

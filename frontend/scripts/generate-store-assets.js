@@ -12,7 +12,7 @@ const HOST = '127.0.0.1';
 const SENSITIVE_HOST = 'kindred.localhost';
 const PORT = Number(process.env.KINDRED_STORE_ASSET_PORT || 4183);
 const API_ORIGIN = 'https://kindred-production-badd.up.railway.app';
-const CAMPAIGN_EVENT_ID = 'store-campaign-reunion';
+const CAMPAIGN_EVENT_ID = 'store-campaign-holiday-event';
 const CAMPAIGN_INVITATION = 'synthetic-store-campaign-invitation';
 
 const devices = [
@@ -50,25 +50,25 @@ const devices = [
 
 const frames = [
   {
-    id: 'start-reunion',
-    filename: '01-start-reunion.png',
-    title: 'Start a family reunion',
-    subtitle: 'Name the gathering, dates, and place.',
-    alt: 'Kindred reunion setup with synthetic reunion name, dates, organizer, and location.',
+    id: 'start-event',
+    filename: '01-start-event.png',
+    title: 'Start a family event',
+    subtitle: 'Holiday meals, reunions, birthdays, and more.',
+    alt: 'Kindred event setup with a synthetic holiday gathering name, dates, organizer, and location.',
   },
   {
     id: 'multiday-itinerary',
     filename: '02-multiday-itinerary.png',
-    title: 'Build a multiday itinerary',
-    subtitle: 'Keep every activity and update in one plan.',
-    alt: 'Kindred multiday reunion itinerary with synthetic welcome, workshop, outing, dinner, and brunch activities.',
+    title: 'Build the event plan',
+    subtitle: 'Keep every activity and update in one place.',
+    alt: 'Kindred multiday holiday event itinerary with synthetic welcome, recipe, meal, and story activities.',
   },
   {
     id: 'no-account-rsvp',
     filename: '03-private-rsvp.png',
     title: 'Share one private RSVP',
     subtitle: 'Relatives can answer without creating an account.',
-    alt: 'Kindred no-account RSVP choices for a synthetic multiday family reunion.',
+    alt: 'Kindred no-account RSVP choices for a synthetic family holiday event.',
   },
   {
     id: 'planning-progress',
@@ -81,21 +81,21 @@ const frames = [
     id: 'stories-memories',
     filename: '05-stories-memories.png',
     title: 'Keep the stories',
-    subtitle: 'Preserve photos, voices, and memories after the reunion.',
-    alt: 'Kindred family story prompt containing a clearly synthetic reunion memory.',
+    subtitle: 'Preserve photos, voices, recipes, and memories afterward.',
+    alt: 'Kindred family story prompt containing a clearly synthetic holiday memory.',
   },
 ];
 
 const syntheticActivities = [
   {
     id: 'arrival',
-    title: 'Welcome reception',
-    description: 'Reconnect and pick up the weekend plan.',
-    start_at: '2027-07-16T17:00:00',
-    end_at: '2027-07-16T19:00:00',
+    title: 'Holiday table welcome',
+    description: 'Reconnect and settle in before the family meal.',
+    start_at: '2026-12-20T15:00:00',
+    end_at: '2026-12-20T16:00:00',
     timezone: '',
     venue_name: 'Heritage Hall',
-    venue_address: '100 Reunion Way',
+    venue_address: '100 Gathering Way',
     venue_detail: 'Garden room',
     location_tba: false,
     capacity: 80,
@@ -106,10 +106,10 @@ const syntheticActivities = [
   },
   {
     id: 'story-circle',
-    title: 'Family story circle',
-    description: 'Bring a photograph or a story for younger relatives.',
-    start_at: '2027-07-17T10:00:00',
-    end_at: '2027-07-17T11:30:00',
+    title: 'Recipe story circle',
+    description: 'Cook one family recipe with the elder who holds it.',
+    start_at: '2026-12-20T16:00:00',
+    end_at: '2026-12-20T17:30:00',
     timezone: '',
     venue_name: 'Cedar Room',
     venue_address: '22 Story Lane',
@@ -123,14 +123,14 @@ const syntheticActivities = [
   },
   {
     id: 'picnic',
-    title: 'Family picnic',
-    description: 'Lunch, games, and family photographs.',
-    start_at: '2027-07-17T12:30:00',
-    end_at: '2027-07-17T15:30:00',
+    title: 'Family holiday meal',
+    description: 'Share the dishes, stories, and traditions everyone brought.',
+    start_at: '2026-12-20T18:00:00',
+    end_at: '2026-12-20T20:30:00',
     timezone: '',
-    venue_name: 'Magnolia Park',
-    venue_address: '5 Grove Drive',
-    venue_detail: 'Pavilion C',
+    venue_name: 'Heritage Hall',
+    venue_address: '100 Gathering Way',
+    venue_detail: 'Main room',
     location_tba: false,
     capacity: null,
     attendance_requested: true,
@@ -140,13 +140,13 @@ const syntheticActivities = [
   },
   {
     id: 'dinner',
-    title: 'Celebration dinner',
-    description: 'Dinner, acknowledgements, and family history.',
-    start_at: '2027-07-17T18:30:00',
-    end_at: '2027-07-17T21:30:00',
+    title: 'Keep The Record story hour',
+    description: 'Record the recipe, the elder, and the story behind the table.',
+    start_at: '2026-12-20T20:30:00',
+    end_at: '2026-12-20T21:30:00',
     timezone: '',
     venue_name: 'Heritage Hall',
-    venue_address: '100 Reunion Way',
+    venue_address: '100 Gathering Way',
     venue_detail: 'Main ballroom',
     location_tba: false,
     capacity: 80,
@@ -157,10 +157,10 @@ const syntheticActivities = [
   },
   {
     id: 'brunch',
-    title: 'Closing brunch',
-    description: 'One last meal before everyone travels home.',
-    start_at: '2027-07-18T10:00:00',
-    end_at: '2027-07-18T12:00:00',
+    title: 'Next-day family brunch',
+    description: 'One more meal and a plan to keep the stories together.',
+    start_at: '2026-12-21T10:00:00',
+    end_at: '2026-12-21T12:00:00',
     timezone: '',
     venue_name: 'Cedar Room',
     venue_address: '22 Story Lane',
@@ -179,13 +179,13 @@ const syntheticEvent = {
   community_id: 'store-campaign-family',
   created_by: 'store-campaign-organizer',
   created_by_name: 'Maya Rivers',
-  title: 'The Rivers Family Reunion',
-  description: 'A synthetic multiday family reunion created only for store assets.',
-  start_at: '2027-07-16T17:00:00',
-  end_at: '2027-07-18T12:00:00',
+  title: 'The Rivers Family Holiday Gathering',
+  description: 'A synthetic family holiday event created only for store assets.',
+  start_at: '2026-12-20T15:00:00',
+  end_at: '2026-12-21T12:00:00',
   timezone: 'America/New_York',
   location: 'Cedar Grove, Georgia',
-  event_template: 'reunion',
+  event_template: 'holiday_meal',
   gathering_format: 'in-person',
   max_attendees: 80,
   agenda: syntheticActivities,
@@ -201,8 +201,8 @@ const syntheticEvent = {
     invitee_name: `Rivers household ${index + 1}`,
     email: '',
     rsvp_status: index < 7 ? 'going' : index < 9 ? 'maybe' : 'pending',
-    share_message: 'A private family reunion invitation.',
-    opened_at: index < 9 ? '2027-06-20T12:00:00Z' : null,
+    share_message: 'A private family holiday gathering invitation.',
+    opened_at: index < 9 ? '2026-11-20T12:00:00Z' : null,
   })),
   rsvp_records: [],
   planning_checklist: [
@@ -217,7 +217,7 @@ const syntheticEvent = {
     { id: 'desserts', item: 'Dessert table', quantity_needed: 4, assigned_to: 'Rivers household 2' },
   ],
   assigned_roles: ['Organizer'],
-  created_at: '2027-06-15T12:00:00Z',
+  created_at: '2026-11-15T12:00:00Z',
 };
 
 const syntheticOperations = {
@@ -228,9 +228,8 @@ const syntheticOperations = {
   overall: { going: 31, some: 4, maybe: 3, 'not-going': 6 },
   activity_summaries: syntheticEvent.activity_rsvp_summaries,
   day_summaries: {
-    '2027-07-16': { coming: 31, maybe: 3, party_size: 42 },
-    '2027-07-17': { coming: 34, maybe: 5, party_size: 48 },
-    '2027-07-18': { coming: 24, maybe: 6, party_size: 31 },
+    '2026-12-20': { coming: 34, maybe: 5, party_size: 48 },
+    '2026-12-21': { coming: 24, maybe: 6, party_size: 31 },
   },
   activity_rosters: {},
   overlaps: [],
@@ -250,7 +249,7 @@ const syntheticPublicView = {
     end_at: syntheticEvent.end_at,
     timezone: syntheticEvent.timezone,
     location: syntheticEvent.location,
-    event_template: 'reunion',
+    event_template: 'holiday_meal',
     gathering_format: 'in-person',
     activity_count: syntheticActivities.length,
     activities: syntheticActivities.map((activity) => ({
@@ -627,14 +626,14 @@ async function prepareStartFrame(page) {
   await page.type('[data-testid="reunion-name-input"]', syntheticEvent.title);
   await page.$eval('[data-testid="reunion-date-input"]', (element) => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    setter.call(element, '2027-07-16');
+    setter.call(element, '2026-12-20');
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await page.click('[data-testid="reunion-multiday-toggle"]');
   await page.$eval('[data-testid="reunion-end-date-input"]', (element) => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    setter.call(element, '2027-07-18');
+    setter.call(element, '2026-12-21');
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   });
@@ -699,7 +698,7 @@ async function captureDevice(browser, device) {
     await prepareActivationFrame(page);
     await page.type(
       '[data-testid="reunion-memory-answer"]',
-      'Every summer, our family table made room for one more story.',
+      'Every holiday, our family table makes room for one more story and one more recipe.',
     );
     manifest.push(await screenshot(page, device, frames[4], '[data-testid="reunion-memory-prompt"]'));
   } finally {

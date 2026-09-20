@@ -4,11 +4,11 @@ This directory contains repository-managed **proposed** Apple and Google store c
 
 ## Narrative
 
-1. Start a family reunion.
-2. Build a multiday itinerary.
+1. Start a family event, including a holiday gathering.
+2. Build the event plan.
 3. Share one private RSVP that relatives can answer without an account.
 4. See response gaps and planning progress.
-5. Preserve stories and memories after the reunion.
+5. Preserve stories, recipes, and memories afterward.
 
 The exact captions, order, alt text, dimensions, and SHA-256 hashes are recorded in `manifest.json`.
 
@@ -25,10 +25,10 @@ npm run store-assets:generate
 
 The synthetic campaign uses:
 
-- The Rivers Family Reunion
+- The Rivers Family Holiday Gathering
 - Maya Rivers and Jordan Rivers
 - Cedar Grove, Georgia
-- July 16–18, 2027
+- December 20–21, 2026
 - synthetic itinerary, response totals, planning records, invitation state, and memory text
 
 These people, family-space records, responses, and invitations are disposable fixtures created solely in the screenshot generator. No email address appears in the source campaign or final creative. The private RSVP credential is synthetic, remains in a URL fragment and authorization header inside the local test harness, and is never rendered into an image, filename, report, or manifest.
