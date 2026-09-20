@@ -33,8 +33,9 @@ test("keeps the pre-account draft local and limits stored fields", () => {
   expect(window.localStorage.getItem("kindred-reunion-draft-v1")).not.toContain("secret");
 });
 
-test("requires only gathering, approximate date, and organizer", () => {
+test("requires only a gathering name and an organizer", () => {
   expect(reunionDraftIsComplete(completeDraft)).toBe(true);
+  expect(reunionDraftIsComplete({ ...completeDraft, gathering_name: "" })).toBe(false);
   expect(reunionDraftIsComplete({ ...completeDraft, organizer_name: "" })).toBe(false);
   expect(reunionDraftIsComplete({ ...completeDraft, location: "Oakland, CA" })).toBe(true);
   expect(reunionDraftIsComplete({ ...completeDraft, timezone: "Mars/Olympus" })).toBe(false);
@@ -43,6 +44,19 @@ test("requires only gathering, approximate date, and organizer", () => {
     multiday_enabled: true,
     end_date: "2027-07-17",
   })).toBe(false);
+});
+
+test("a draft with no date yet is still a draft", () => {
+  // The organizer who has not agreed a date with the family is exactly the
+  // person this page is for. Requiring the date was the wall.
+  const undated = { ...completeDraft, approximate_date: "" };
+  expect(reunionDraftIsComplete(undated)).toBe(true);
+  // With no start date there is nothing for an end date to contradict.
+  expect(reunionDraftIsComplete({
+    ...undated,
+    multiday_enabled: true,
+    end_date: "2027-07-17",
+  })).toBe(true);
 });
 
 test("creates a useful reunion event without billing or community setup fields", () => {

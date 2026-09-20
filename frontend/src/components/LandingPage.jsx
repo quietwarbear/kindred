@@ -97,13 +97,17 @@ export const LandingPage = ({ isAuthenticated }) => {
                   One private place for RSVPs, potluck, volunteers, travel, photos, and family stories.
                 </p>
                 <div className="mt-7 flex flex-wrap gap-3">
+                  {/* Straight into the draft form. "Get started" pointing at
+                      the intent chooser meant the primary CTA started nothing
+                      — it asked another question. /start still serves invite
+                      links and the "See how it works" path. */}
                   <Link
                     className="pill-button"
                     data-testid="landing-primary-cta"
                     onClick={() => trackStart("homepage_hero")}
-                    to="/start"
+                    to="/reunion/start"
                   >
-                    Get started <ArrowRight className="ml-2 h-4 w-4" />
+                    Start my reunion <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                   <a
                     className="inline-flex items-center rounded-full border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-muted"
