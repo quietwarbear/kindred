@@ -4,10 +4,10 @@ const REUNION_DRAFT_KEY = "kindred-reunion-draft-v1";
 // GATHERING_TEMPLATES; roles mirror each template's defaults.
 export const GATHERING_TYPES = Object.freeze({
   reunion: {
-    label: "Reunion",
-    noun: "reunion",
-    placeholder: "The Johnson Family Reunion",
-    roles: ["Organizer", "Historian", "Hospitality Lead"],
+    label: "Event",
+    noun: "event",
+    placeholder: "The family event",
+    roles: ["Organizer", "Historian", "Contributor"],
   },
   holiday_meal: {
     label: "Holiday meal",
@@ -147,9 +147,8 @@ export function gatheringTypeDetails(draft) {
   return GATHERING_TYPES[normalizeReunionDraft(draft).gathering_type];
 }
 
-// Starter content per type. Reunion keeps its itinerary starter; holiday meal
-// mirrors the backend template defaults; the rest start empty, exactly as when
-// the template is picked on the Gatherings page.
+// Holiday meal mirrors the backend template defaults. Every other public
+// starting point remains a general event until the organizer adds details.
 function starterContent(normalized) {
   if (normalized.gathering_type === "holiday_meal") {
     return {
@@ -161,35 +160,10 @@ function starterContent(normalized) {
       potluck_items: ["Main dish", "Side dish", "Dessert", "Drinks or supplies"],
     };
   }
-  if (normalized.gathering_type !== "reunion") {
-    return { agenda: [], volunteer_slots: [], potluck_items: [] };
-  }
   return {
-    agenda: [
-      {
-        time_label: "Arrival",
-        title: "Welcome and family check-in",
-        description: "A starting point for the reunion itinerary.",
-        start_at: `${normalized.approximate_date}T10:00:00`,
-        end_at: `${normalized.approximate_date}T11:00:00`,
-        timezone: "",
-        venue_name: "",
-        venue_address: "",
-        venue_detail: "",
-        map_url: "",
-        virtual_link: "",
-        location_tba: true,
-        attendance_requested: true,
-        notes: "",
-        visibility: "draft",
-        featured: true,
-      },
-    ],
-    volunteer_slots: [
-      { title: "Welcome and check-in", needed_count: 2 },
-      { title: "Photo and story team", needed_count: 2 },
-    ],
-    potluck_items: ["Main dish", "Side dish", "Dessert or drinks"],
+    agenda: [],
+    volunteer_slots: [],
+    potluck_items: [],
   };
 }
 
@@ -199,9 +173,7 @@ export function reunionDraftToEventPayload(draft) {
   const endDate = normalized.end_date || normalized.approximate_date;
   const startAt = `${normalized.approximate_date}T09:00:00`;
   const endAt = `${endDate}T18:00:00`;
-  const description = normalized.gathering_type === "reunion"
-    ? `A private reunion gathering organized by ${normalized.organizer_name}.`
-    : `A private ${type.noun} organized by ${normalized.organizer_name}.`;
+  const description = `A private ${type.noun} organized by ${normalized.organizer_name}.`;
   return {
     client_request_id: normalized.client_request_id,
     title: normalized.gathering_name,
@@ -210,7 +182,7 @@ export function reunionDraftToEventPayload(draft) {
     end_at: endAt,
     timezone: normalized.timezone,
     location: normalized.location,
-    event_template: normalized.gathering_type,
+    event_template: normalized.gathering_type === "reunion" ? "custom" : normalized.gathering_type,
     gathering_format: "in-person",
     max_attendees: 50,
     recurrence_frequency: "none",
@@ -221,12 +193,10 @@ export function reunionDraftToEventPayload(draft) {
   };
 }
 
-// Reunions open their dedicated activation flow; every other type opens the
-// general gathering page, which supports invites, RSVPs, potluck and roles.
-export function draftLandingPath(draft, eventId) {
-  return normalizeReunionDraft(draft).gathering_type === "reunion"
-    ? `/reunion/activate/${eventId}`
-    : `/gatherings/${eventId}`;
+// New public drafts open the general gathering page. Existing reunion events
+// keep their dedicated activation route elsewhere in the product.
+export function draftLandingPath(_draft, eventId) {
+  return `/gatherings/${eventId}`;
 }
 
 export function reunionDayCount(draft) {
@@ -240,5 +210,5 @@ export function reunionDayCount(draft) {
 
 export function provisionalCommunityName(draft) {
   const normalized = normalizeReunionDraft(draft);
-  return `${normalized.gathering_name || "Reunion"} planning space`;
+  return `${normalized.gathering_name || "Event"} planning space`;
 }
