@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -95,10 +95,12 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const preferredType = searchParams.get("type") || "";
   const [draft, setDraft] = useState(() => applyPreferredGatheringType(loadReunionDraft(), preferredType));
   const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(draft));
+  const [draftReadySignal, setDraftReadySignal] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rescueEmail, setRescueEmail] = useState("");
   const [rescueState, setRescueState] = useState("idle"); // idle | sending | sent
+  const draftWorkspaceRef = useRef(null);
   const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
   const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
   const gatheringType = gatheringTypeDetails(draft);
@@ -112,6 +114,15 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
     });
   }, [preferredType]);
   const starter = useMemo(() => reunionDraftToEventPayload(draft), [draft]);
+
+  useEffect(() => {
+    if (!draftReadySignal) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      draftWorkspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      draftWorkspaceRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftReadySignal]);
 
   const dateLabel = useMemo(() => {
     if (!draft.approximate_date) return "Date to be confirmed";
@@ -150,6 +161,8 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
     setDraft(saved);
     setHasDraft(true);
     setShowPreview(false);
+    setDraftReadySignal((current) => current + 1);
+    toast.success(`Your ${gatheringTypeDetails(saved).noun} draft is ready.`);
     trackReunionEvent("reunion_draft_created", { source: "public_reunion_start" });
   };
 
@@ -379,7 +392,12 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
               </div>
             ) : (
               <>
-                <div className="archival-card" data-testid="reunion-draft-workspace">
+                <div
+                  className="archival-card scroll-mt-6 outline-none"
+                  data-testid="reunion-draft-workspace"
+                  ref={draftWorkspaceRef}
+                  tabIndex={-1}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="eyebrow-text">Draft ready</p>
