@@ -12,7 +12,7 @@ describe("gatheringCampaign", () => {
   });
 
   it("returns to a gathering-first evergreen entry after the contest", () => {
-    expect(gatheringCampaign(Date.parse("2026-12-06T00:00:00-08:00"))).toMatchObject({
+    expect(gatheringCampaign(Date.parse("2026-12-07T00:00:00-08:00"))).toMatchObject({
       active: false,
       preferredType: "",
       startPath: "/reunion/start",

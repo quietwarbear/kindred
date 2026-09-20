@@ -7,12 +7,13 @@ const TOP_PLAN_IDS = new Set(["redwood", "elder-grove"]);
 const FREE_PLAN_ID = "seedling";
 export const NEAR_LIMIT_REMAINING = 3;
 
-// Keep The Record is open to subscriber families from Sep 7 through Dec 5 2026,
-// Pacific time. The end is exclusive: midnight starting Dec 6.
+// Keep The Record is open to subscriber families from Sep 7 through Dec 6 2026,
+// Pacific time — entries close Dec 6 at 11:59 PM PT, per the published rules at
+// legacytable.app/keeptherecord. The end is exclusive: midnight starting Dec 7.
 export const KEEP_THE_RECORD = {
   name: "Keep The Record",
   startsAt: Date.parse("2026-09-07T00:00:00-07:00"),
-  endsAt: Date.parse("2026-12-06T00:00:00-08:00"),
+  endsAt: Date.parse("2026-12-07T00:00:00-08:00"),
 };
 
 export const isContestOpen = (now = Date.now()) =>

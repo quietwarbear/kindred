@@ -8,7 +8,7 @@ export function gatheringCampaign(now = Date.now()) {
       active: true,
       preferredType: "holiday_meal",
       startPath: "/reunion/start?type=holiday_meal&campaign=keep-the-record",
-      eyebrow: "Keep The Record · Open through December 5",
+      eyebrow: "Keep The Record · Enter by December 6",
       headline: "Gather the family. Keep the record.",
       subheadline: "Plan one holiday gathering, bring everyone in, and preserve the recipe or story your family carries.",
       cta: "Plan a holiday gathering",
