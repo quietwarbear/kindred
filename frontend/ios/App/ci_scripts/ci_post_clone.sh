@@ -11,7 +11,15 @@ nvm install 22
 nvm use 22
 
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend
-npm install --legacy-peer-deps
+# Reproduce the committed dependency graph. `npm install` previously floated
+# @sentry/capacitor to 4.4.0, whose npm tarball omitted the CocoaPods podspec.
+npm ci --legacy-peer-deps
+
+if [ ! -f node_modules/@sentry/capacitor/SentryCapacitor.podspec ]; then
+  echo "error: @sentry/capacitor is missing SentryCapacitor.podspec" >&2
+  exit 1
+fi
+
 GENERATE_SOURCEMAP=false CI=false npm run build
 npx cap sync ios
 cd $CI_PRIMARY_REPOSITORY_PATH/frontend/ios/App

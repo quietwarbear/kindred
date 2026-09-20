@@ -1,15 +1,16 @@
-# Kindred iOS 3.1.2 release packet
+# Kindred iOS 3.1.3 release packet
 
-Prepared September 20, 2026. This packet records release preparation only. It does not claim that App Store Connect accepted a build or that Apple review was submitted.
+Prepared September 20, 2026. This packet records release preparation only. It does not claim that App Store Connect accepted build 68 or that Apple review was submitted.
 
 ## Release identity
 
 - App: heyKindred
 - Bundle identifier: `com.ubuntumarket.kindred`
-- Marketing version: 3.1.2
-- Build: 67
+- Marketing version: 3.1.3
+- Build: 68
 - Minimum iOS version: 16.6
 - Release focus: family events and the Keep The Record holiday campaign
+- Prior public version: 3.1.2 build 67, confirmed live in App Store Connect and Apple's public lookup API
 
 ## Proposed App Store metadata
 
@@ -24,15 +25,14 @@ Prepared September 20, 2026. This packet records release preparation only. It do
 
 ## Verification completed
 
-- 18 frontend test suites and 119 tests passed.
-- The production frontend build and public-page prerender passed.
+- 18 frontend test suites and 119 tests passed for the event-first change set.
+- The production frontend build and public-page prerender passed locally.
 - Capacitor sync completed for iOS and Android.
 - RevenueCat's Capacitor bridge was updated from 11.3.2 to 13.6.0 because the older bridge's RevenueCat iOS SDK did not compile under Xcode 27.
-- RevenueCat unit tests passed after the update.
-- Android debug assembly passed after the update.
-- A generic iOS archive completed successfully under Xcode 27 and passed Xcode's store validation build phase.
-- The archive reports version 3.1.2, build 67, bundle `com.ubuntumarket.kindred`, and team `H543QXDYUW`.
-- An iPhone 17 simulator build installed and launched successfully with the current Keep The Record landing screen.
+- RevenueCat unit tests and Android debug assembly passed after the update.
+- A disposable generic iOS archive completed successfully under Xcode 27 for 3.1.3 build 68, bundle `com.ubuntumarket.kindred`; Xcode's store validation build phase passed. An iPhone 17 simulator build also installed and launched successfully for the event-first change set.
+- Xcode Cloud build 180 failed before compilation because `npm install` resolved `@sentry/capacitor` 4.4.0, whose npm tarball omits `SentryCapacitor.podspec`.
+- The cloud install is now deterministic with `npm ci`, `@sentry/capacitor` is pinned to 4.3.0, and the script explicitly verifies that the podspec exists before Capacitor sync.
 - The deterministic screenshot generator produced exactly 15 synthetic PNGs: five iPhone, five iPad, and five Google phone images. Manifest inventory, dimensions, and SHA-256 hashes match.
 - The screenshots were rendered from the production frontend with synthetic in-process API responses. No generative-AI model was used.
 
@@ -48,9 +48,9 @@ Canonical file paths and hashes are in `frontend/store-assets/manifest.json`.
 
 ## Pending before review submission
 
-- Complete a physical-device smoke test. The available iPhone was offline during this verification.
-- Authenticate the Apple developer account in Xcode or App Store Connect; the locally cached Xcode account is missing its current Xcode token.
-- Export or upload using an Apple Distribution credential and select build 67 in App Store Connect.
+- Verify the 3.1.3/68 archive in Xcode Cloud and wait for App Store Connect processing; the local archive is development-signed and was not uploaded directly.
+- Complete a physical-device smoke test if the available iPhone can be brought online.
+- Create/select App Store version 3.1.3 and build 68.
 - Apply and verify the event-first metadata and the five iPhone plus five iPad screenshots in App Store Connect.
 - Reconcile App Privacy answers against the production data map. Do not infer identity linkage, tracking, retention, or processor/legal treatment.
 - Verify subscription products, reviewer credentials, export compliance, content rights, and release mode in App Store Connect.
