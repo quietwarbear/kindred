@@ -101,7 +101,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const starter = useMemo(() => reunionDraftToEventPayload(draft), [draft]);
 
   const dateLabel = useMemo(() => {
-    if (!draft.approximate_date) return "Choose an approximate date";
+    if (!draft.approximate_date) return "Date to be confirmed";
     return formatDateTime(new Date(`${draft.approximate_date}T12:00:00`).toISOString());
   }, [draft.approximate_date]);
 
@@ -126,7 +126,11 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const createDraft = (event) => {
     event.preventDefault();
     if (!reunionDraftIsComplete(draft)) {
-      toast.error("Check the date range and enter a valid IANA timezone.");
+      toast.error(
+        draft.end_date && draft.approximate_date && draft.end_date < draft.approximate_date
+          ? "The end date falls before the start date."
+          : "Add a name for the gathering and who is organizing it."
+      );
       return;
     }
     const saved = saveReunionDraft(draft);
@@ -231,15 +235,21 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                 />
               </label>
               <label>
-                <span className="field-label">Approximate date</span>
+                <span className="field-label">
+                  Approximate date{" "}
+                  <span className="font-normal text-muted-foreground">(optional)</span>
+                </span>
                 <Input
                   className="field-input"
                   data-testid="reunion-date-input"
                   onChange={(event) => update("approximate_date", event.target.value)}
-                  required
                   type="date"
                   value={draft.approximate_date}
                 />
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Still working it out? Leave it blank — the invitation reads
+                  “Date to be confirmed” until you set one.
+                </span>
               </label>
               <button
                 aria-expanded={draft.multiday_enabled}
@@ -264,30 +274,10 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                   />
                 </label>
               ) : null}
-              <label>
-                <span className="field-label">Primary timezone</span>
-                <Input
-                  autoComplete="off"
-                  className="field-input"
-                  data-testid="reunion-timezone-input"
-                  list="reunion-timezones"
-                  maxLength={80}
-                  onChange={(event) => update("timezone", event.target.value)}
-                  placeholder="America/Los_Angeles"
-                  required
-                  value={draft.timezone}
-                />
-                <datalist id="reunion-timezones">
-                  <option value="America/Los_Angeles" />
-                  <option value="America/Denver" />
-                  <option value="America/Chicago" />
-                  <option value="America/New_York" />
-                  <option value="Europe/London" />
-                  <option value="Africa/Lagos" />
-                  <option value="Africa/Nairobi" />
-                  <option value="UTC" />
-                </datalist>
-              </label>
+              {/* Timezone is taken from the browser and corrected later in the
+                  workspace. It was a required field on a page that promises
+                  "not another setup questionnaire", for a draft that never
+                  leaves this browser. */}
               <label>
                 <span className="field-label">Organizer name</span>
                 <Input

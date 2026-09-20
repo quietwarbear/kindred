@@ -115,14 +115,19 @@ export function clearReunionDraft() {
 }
 
 export function reunionDraftIsComplete(draft) {
+  // The date is deliberately NOT required. An organizer arrives because the
+  // date is the thing they are still negotiating with forty relatives, and
+  // demanding it before they can see anything was the wall the start form
+  // died on. The invitation preview already renders "Date to be confirmed".
   const complete = Boolean(
     draft?.gathering_name
-    && draft?.approximate_date
     && draft?.organizer_name
     && validReunionTimezone(draft?.timezone)
   );
   if (!complete) return false;
-  return !draft.end_date || draft.end_date >= draft.approximate_date;
+  // An end date only has to follow a start date that actually exists.
+  if (!draft.end_date) return true;
+  return !draft.approximate_date || draft.end_date >= draft.approximate_date;
 }
 
 export function gatheringTypeDetails(draft) {
