@@ -54,15 +54,17 @@ function isPaidMetaLandingRequest(event) {
   );
 }
 
+const META_JAVA_BRIDGE_FAILURE =
+  /error invoking postMessage: (?:Java bridge method invocation error|Java exception was raised during method invocation)/i;
+
 function isMetaJavaBridgeFailure(event) {
   if (!isFacebookBrowser(event)) return false;
 
   return (event?.exception?.values || []).some((exception) => {
     const frames = getExceptionFrames(exception);
+    const value = String(exception?.value || "");
     return (
-      /error invoking postMessage: Java bridge method invocation error/i.test(
-        String(exception?.value || ""),
-      ) &&
+      META_JAVA_BRIDGE_FAILURE.test(value) &&
       frames.length > 0 &&
       frames.every(
         (frame) => String(frame?.filename || "") === "app:///<anonymous>",
