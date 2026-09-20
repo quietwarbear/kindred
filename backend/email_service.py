@@ -89,6 +89,47 @@ async def send_subscription_welcome(email: str, plan_name: str, billing_cycle: s
     await _send_email(email, f"Welcome to Kindred {plan_name}!", _base_template("You're all set!", body))
 
 
+async def send_reunion_draft_copy(email: str, draft: dict) -> bool:
+    """Send an organizer the draft they built before making an account.
+
+    Every value in `draft` has already been escaped and length-capped by
+    draft_rescue.clean_field — this is an email built from text a stranger
+    typed, so nothing here may be interpolated raw.
+    """
+    noun = draft.get("gathering_noun") or "gathering"
+    name = draft.get("gathering_name") or f"Your family {noun}"
+    when = draft.get("approximate_date") or "Date to be confirmed"
+    if draft.get("end_date") and draft.get("end_date") != draft.get("approximate_date"):
+        when = f"{when} through {draft['end_date']}"
+    where = draft.get("location") or "Location to be confirmed"
+    organizer = draft.get("organizer_name") or "you"
+
+    body = f"""
+    <p style="font-size:16px;line-height:1.6;">Here is the {noun} you started planning, so it is not lost if you close that tab.</p>
+    <div style="background:#f9f5f0;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="margin:0;font-size:14px;color:#5a4a3a;">
+            <strong>{name}</strong><br>
+            {when}<br>
+            {where}<br>
+            Organized by {organizer}
+        </p>
+    </div>
+    <p style="font-size:14px;line-height:1.6;color:#5a4a3a;">
+        Nothing has been shared with anyone. When you are ready to invite the
+        family, open Kindred and pick up where you left off.
+    </p>
+    <div style="text-align:center;margin:28px 0;">
+        <a href="{APP_URL}/reunion/start" style="background:#d4a574;color:#2d1810;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Continue planning</a>
+    </div>
+    <p style="font-size:12px;line-height:1.6;color:#8b7355;">
+        You received this because someone asked us to email this draft to this
+        address. If that was not you, ignore it — no account exists and nothing
+        was shared.
+    </p>
+    """
+    return await _send_email(email, f"Your {noun} draft: {name}", _base_template("Your draft, saved", body))
+
+
 async def send_subscription_renewed(email: str, plan_name: str, amount: float, next_renewal: str):
     """Email after a successful recurring payment."""
     body = f"""

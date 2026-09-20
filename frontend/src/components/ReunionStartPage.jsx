@@ -95,6 +95,8 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
   const [hasDraft, setHasDraft] = useState(() => reunionDraftIsComplete(loadReunionDraft()));
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rescueEmail, setRescueEmail] = useState("");
+  const [rescueState, setRescueState] = useState("idle"); // idle | sending | sent
   const canActivateOrganizer = Boolean(session?.token && !session?.user?.community_id);
   const canPersist = canActivateOrganizer || ["host", "organizer"].includes(session?.user?.role);
   const gatheringType = gatheringTypeDetails(draft);
@@ -138,6 +140,34 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
     setHasDraft(true);
     setShowPreview(false);
     trackReunionEvent("reunion_draft_created", { source: "public_reunion_start" });
+  };
+
+  // The one consented exception to "this draft never leaves your browser":
+  // the organizer types their own address and asks us to send it. Everything
+  // above this line still stays local.
+  const emailDraftToMe = async (event) => {
+    event.preventDefault();
+    if (!rescueEmail.trim() || rescueState === "sending") return;
+    setRescueState("sending");
+    try {
+      await apiRequest("/reunion/draft/email", {
+        method: "POST",
+        data: {
+          email: rescueEmail.trim(),
+          gathering_name: draft.gathering_name,
+          gathering_noun: gatheringType.noun,
+          organizer_name: draft.organizer_name,
+          approximate_date: draft.approximate_date,
+          end_date: draft.end_date,
+          location: draft.location,
+        },
+      });
+      setRescueState("sent");
+      trackReunionEvent("reunion_draft_emailed", { source: "public_reunion_start" });
+    } catch (error) {
+      setRescueState("idle");
+      toast.error(error.response?.data?.detail || "Could not send that draft. Try again in a moment.");
+    }
   };
 
   const previewInvitation = () => {
@@ -311,7 +341,7 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
             <div className="mt-6 flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/40 p-4">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <p className="text-xs leading-5 text-muted-foreground">
-                Before sign-in, this draft stays only in this browser. It is not shareable and is not sent to Kindred’s servers.
+                Before sign-in, this draft stays only in this browser. It is not shareable, and it reaches Kindred’s servers only if you ask us to email it to you.
               </p>
             </div>
           </section>
@@ -402,6 +432,48 @@ export const ReunionStartPage = ({ onSessionRefresh, session }) => {
                   </div>
                   {session?.token && !canPersist ? (
                     <p className="mt-3 text-sm text-muted-foreground">A host or organizer role is required to save a new gathering.</p>
+                  ) : null}
+
+                  {!session?.token ? (
+                    <div className="mt-6 rounded-2xl border border-border/70 bg-muted/40 p-4" data-testid="reunion-draft-rescue">
+                      {rescueState === "sent" ? (
+                        <p className="flex items-center gap-2 text-sm text-foreground">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                          Sent. Check that inbox — the draft is waiting there if you close this tab.
+                        </p>
+                      ) : (
+                        <form className="space-y-3" onSubmit={emailDraftToMe}>
+                          <label className="block">
+                            <span className="field-label">Email this draft to yourself (optional)</span>
+                            <Input
+                              autoComplete="email"
+                              className="field-input"
+                              data-testid="reunion-rescue-email-input"
+                              maxLength={254}
+                              onChange={(event) => setRescueEmail(event.target.value)}
+                              placeholder="you@example.com"
+                              type="email"
+                              value={rescueEmail}
+                            />
+                          </label>
+                          <Button
+                            className="w-full sm:w-auto"
+                            data-testid="reunion-rescue-send-button"
+                            disabled={rescueState === "sending" || !rescueEmail.trim()}
+                            type="submit"
+                            variant="outline"
+                          >
+                            {rescueState === "sending" ? "Sending…" : "Email it to me"}
+                          </Button>
+                          <p className="text-xs leading-5 text-muted-foreground">
+                            Your draft stays in this browser unless you ask us to email it.
+                            Sending it shares this draft and your address with Kindred so we
+                            can deliver it — nothing is shared with your family, and no
+                            account is created.
+                          </p>
+                        </form>
+                      )}
+                    </div>
                   ) : null}
                 </div>
 

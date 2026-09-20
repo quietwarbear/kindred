@@ -28,6 +28,7 @@ family_access_requests_collection = db.family_access_requests
 reunion_recaps_collection = db.reunion_recaps
 next_gathering_operations_collection = db.next_gathering_operations
 gathering_proposals_collection = db.gathering_proposals
+reunion_draft_leads_collection = db.reunion_draft_leads
 gathering_proposal_responses_collection = db.gathering_proposal_responses
 gathering_proposal_conversions_collection = db.gathering_proposal_conversions
 memories_collection = db.memories
