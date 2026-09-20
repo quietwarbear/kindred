@@ -12,9 +12,10 @@ import {
   UserRoundCheck,
   Users,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { PublicPlanCards } from "@/components/PublicPlanCards";
+import { rememberPendingPlan } from "@/lib/pricing";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { trackReunionEvent } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
@@ -50,6 +51,14 @@ const steps = [
 export const LandingPage = ({ isAuthenticated }) => {
   const showStoreBadges = !isNative();
   const { plans, loading: plansLoading, error: plansError } = usePublicPlans();
+  const navigate = useNavigate();
+
+  // Same handoff as /pricing: the plan follows the visitor through sign-up,
+  // because RevenueCat web billing needs an app user id before it can bill.
+  const choosePlan = (planId, cycle) => {
+    if (cycle !== "free") rememberPendingPlan(planId, cycle);
+    navigate(isAuthenticated ? "/subscription" : "/login?intent=subscribe");
+  };
 
   const trackStart = (source) => {
     trackReunionEvent("reunion_start_clicked", { source });
@@ -267,7 +276,12 @@ export const LandingPage = ({ isAuthenticated }) => {
             <div className="mt-8" aria-live="polite">
               {plansLoading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
               {plansError && <p className="text-sm text-destructive" role="alert">{plansError}</p>}
-              {!plansLoading && !plansError && <PublicPlanCards plans={plans.filter((plan) => plan.id !== "elder-grove")} />}
+              {!plansLoading && !plansError && (
+                <PublicPlanCards
+                  onChoose={WEB_PURCHASES_ENABLED ? choosePlan : undefined}
+                  plans={plans.filter((plan) => plan.id !== "elder-grove")}
+                />
+              )}
             </div>
             <Link className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary" data-testid="landing-see-all-plans-link" to="/pricing">
               See all plans <ArrowRight className="h-4 w-4" />

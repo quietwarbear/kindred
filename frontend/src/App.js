@@ -334,7 +334,7 @@ function App() {
             <Route element={<PublicRSVPPage />} path="/rsvp/:token" />
             <Route element={<SSOHandoffPage onAuthSuccess={handleFreshLogin} />} path="/sso" />
             <Route element={<PrivacyPolicyPage />} path="/privacy" />
-            <Route element={<PricingPage />} path="/pricing" />
+            <Route element={<PricingPage session={session} />} path="/pricing" />
             <Route element={<TermsOfServicePage />} path="/terms" />
             <Route element={<SupportPage />} path="/support" />
             <Route

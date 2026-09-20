@@ -1,3 +1,30 @@
+const PENDING_PLAN_KEY = "kindredPendingPlan";
+
+// A visitor picks a plan on a public page, then has to make an account before
+// RevenueCat can bill them (web billing needs an app user id). Remember the
+// choice so /subscription opens on it instead of asking twice. Wrapped because
+// private mode and blocked site data make localStorage throw.
+export const rememberPendingPlan = (planId, cycle) => {
+  try {
+    localStorage.setItem(PENDING_PLAN_KEY, JSON.stringify({ planId, cycle }));
+  } catch (error) {
+    /* the plan just won't be preselected */
+  }
+};
+
+export const takePendingPlan = () => {
+  try {
+    const raw = localStorage.getItem(PENDING_PLAN_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(PENDING_PLAN_KEY);
+    const parsed = JSON.parse(raw);
+    if (!parsed?.planId) return null;
+    return { planId: parsed.planId, cycle: parsed.cycle === "annual" ? "annual" : "monthly" };
+  } catch (error) {
+    return null;
+  }
+};
+
 export const formatPrice = (amount, minimumFractionDigits = 2) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
