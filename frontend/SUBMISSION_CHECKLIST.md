@@ -92,7 +92,10 @@
 - [ ] Do not publish Apple metadata, privacy answers, screenshots, or listing changes without separate approval.
 - [ ] Do not publish Google metadata, Data Safety answers, screenshots, or listing changes without separate approval.
 - [ ] Use the verified `support@heykindred.org` mailbox, but do not publish the console identity change without separate approval.
-- [ ] Keep web subscription checkout disabled with `subscription_checkout_migrating`.
+- [ ] Keep RevenueCat Billing web subscriptions enabled and verify the production
+      public web key, canonical web catalog, and signed webhook end to end with
+      synthetic evidence. The HTTP 410 `subscription_checkout_migrating`
+      boundary applies only to the retired direct-Stripe subscription endpoint.
 
 ---
 

@@ -4,7 +4,9 @@ This is the operator checklist to take the built pilot software live. It exists
 because the remaining "critical path" and "enablement" work is gated on
 deploy access and provider secrets that only the owner holds — every step below
 is one you run, in order. Nothing here is automated; the code is ready and
-disabled-by-default.
+disabled-by-default. Recurring subscriptions are an exception: the active web
+rail is RevenueCat Billing and should remain available when its production
+catalog, public web key, and signed webhook are verified.
 
 Deploy topology: **Vercel** (frontend) + **Railway** (backend), MongoDB. The app
 serves from `https://www.heykindred.org`.
@@ -34,7 +36,9 @@ above; deploy from `main`.
 
 ### Required base environment (should already be set)
 `MONGO_URL`, `DB_NAME`, `APP_URL=https://www.heykindred.org`, `CORS_ORIGINS`,
-`UBUNTU_SSO_SECRET`, Stripe keys (`sk_`, `whsec_` — backend only), RevenueCat.
+`UBUNTU_SSO_SECRET`, Stripe keys (`sk_`, `whsec_` — backend only, for one-time
+contributions/add-ons), `REACT_APP_REVENUECAT_WEB_KEY` (Vercel),
+`REVENUECAT_SECRET_KEY`, and `REVENUECAT_WEBHOOK_SECRET` (Railway).
 
 ### New for this launch
 - [ ] **`PLATFORM_ADMIN_EMAIL`** — set to the admin's email. Required for the
@@ -48,8 +52,16 @@ Run these read-only checks against production:
 - [ ] `GET /api/` returns the health message.
 - [ ] `GET /api/public/rsvp` with **no** Authorization header → **HTTP 401**.
 - [ ] There is **no** backend `/rsvp/:token` path-token API route (header-only).
-- [ ] Subscription checkout returns **HTTP 410** `subscription_checkout_migrating`
-      (kill switch intact; subscription recovery stays paused).
+- [ ] The public pricing page offers monthly and annual paid plans without an
+      unavailable notice, and choosing one carries the selected plan into the
+      authenticated RevenueCat Billing flow.
+- [ ] `GET /api/revenuecat/web-catalog` succeeds for a disposable synthetic
+      account and matches the live RevenueCat offering/package/product catalog.
+- [ ] A signed synthetic RevenueCat lifecycle event reaches
+      `POST /api/revenuecat/webhook`; do not make a real charge for this smoke.
+- [ ] The retired direct-Stripe `POST /api/subscriptions/checkout` route alone
+      returns HTTP 410 `subscription_checkout_migrating`, preventing duplicate
+      recurring billing through Stripe.
 - [ ] The web/app pricing match (both read the canonical catalog — Sapling
       $9.99/$89.99, Oak $19.99/$179.99, Redwood $39.99/$359.99).
 

@@ -1,5 +1,10 @@
 # Release 13 — Production Launch Checklist
 
+> Historical checklist note: Release 13 launched while direct web subscription
+> recovery was paused. Current recurring web checkout is active through
+> RevenueCat Billing. The HTTP 410 check below applies only to the retired
+> direct-Stripe endpoint and must not be used to disable the current web flow.
+
 This checklist is intentionally separate from merge and deployment. Completing the engineering PR does not authorize a real event, invitations, provider calls, or customer communication.
 
 ## Release provenance and containment
@@ -10,8 +15,10 @@ This checklist is intentionally separate from merge and deployment. Completing t
 - [ ] No non-production Railway environment was confused with production.
 - [ ] `GET /api/public/rsvp` without a credential returns HTTP 401.
 - [ ] No backend `/rsvp/:token` API route exists.
-- [ ] Subscription checkout returns HTTP 410 with `subscription_checkout_migrating`.
-- [ ] Subscription recovery remains paused.
+- [ ] The retired direct-Stripe subscription endpoint returns HTTP 410 with
+      `subscription_checkout_migrating`.
+- [ ] Active RevenueCat Billing web checkout remains available and reconciles
+      access through the signed RevenueCat webhook.
 
 ## Synthetic smoke test
 
