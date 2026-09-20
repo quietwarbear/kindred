@@ -31,7 +31,7 @@ import {
   makeRevenueCatWebPurchase,
 } from "@/lib/revenuecatWeb";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
-import { formatLocalizedPrice, formatPrice, normalizePlans } from "@/lib/pricing";
+import { formatLocalizedPrice, formatPrice, normalizePlans, takePendingPlan } from "@/lib/pricing";
 
 const WEB_SUBSCRIPTION_MESSAGE = "Web subscriptions are temporarily unavailable while billing is being updated.";
 // Web purchases go live only when the deployment sets the RevenueCat Billing
@@ -73,6 +73,7 @@ const TIER_BTN = {
 const PlanCard = ({
   plan,
   isCurrentTier,
+  isPreselected = false,
   billingCycle,
   onSelect,
   isLoading,
@@ -97,7 +98,8 @@ const PlanCard = ({
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-gradient-to-b p-6 transition-all duration-300 hover:shadow-lg ${TIER_COLORS[plan.id]} ${isCurrentTier ? "ring-2 ring-primary shadow-lg" : ""} ${isPopular ? "md:-translate-y-2" : ""}`}
+      className={`relative flex flex-col rounded-2xl border bg-gradient-to-b p-6 transition-all duration-300 hover:shadow-lg ${TIER_COLORS[plan.id]} ${isCurrentTier ? "ring-2 ring-primary shadow-lg" : ""} ${!isCurrentTier && isPreselected ? "ring-2 ring-primary/60 shadow-lg" : ""} ${isPopular ? "md:-translate-y-2" : ""}`}
+      data-preselected={isPreselected ? "true" : undefined}
       data-testid={`plan-card-${plan.id}`}
     >
       {isPopular && (
@@ -112,6 +114,14 @@ const PlanCard = ({
         <div className="absolute -top-3 right-4">
           <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md" data-testid="current-plan-badge">
             Current Plan
+          </span>
+        </div>
+      )}
+
+      {!isCurrentTier && isPreselected && (
+        <div className="absolute -top-3 right-4">
+          <span className="rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md" data-testid="preselected-plan-badge">
+            The plan you picked
           </span>
         </div>
       )}
@@ -318,6 +328,7 @@ export const SubscriptionPage = ({ token, user }) => {
   const [currentTier, setCurrentTier] = useState(null);
   const [usage, setUsage] = useState({});
   const [billingCycle, setBillingCycle] = useState("monthly");
+  const [preselectedPlanId, setPreselectedPlanId] = useState(null);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [pollingSessionId, setPollingSessionId] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -426,6 +437,15 @@ export const SubscriptionPage = ({ token, user }) => {
     }, 2500);
     return () => clearInterval(interval);
   }, [pollingSessionId, token, loadCurrentSub]);
+
+  // The visitor chose a plan on a public page and made an account to get
+  // here. Open on that plan's billing cycle instead of asking a second time.
+  useEffect(() => {
+    const pending = takePendingPlan();
+    if (!pending) return;
+    setPreselectedPlanId(pending.planId);
+    setBillingCycle(pending.cycle);
+  }, []);
 
   const handleSelectPlan = async (planId) => {
     if (!isHost) {
@@ -701,6 +721,7 @@ export const SubscriptionPage = ({ token, user }) => {
             billingCycle={billingCycle}
             currentTierId={currentTierId}
             isCurrentTier={currentTierId === plan.id}
+            isPreselected={preselectedPlanId === plan.id}
             isLoading={checkoutLoading === plan.id}
             key={plan.id}
             localizedBillingOption={localizedPricing[plan.id]?.[billingCycle]}
