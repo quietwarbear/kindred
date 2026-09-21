@@ -404,3 +404,78 @@ describe("gaClientId", () => {
     expect(gaClientId()).toBe("");
   });
 });
+
+// The Pixel sends the page URL with every event, and invitation tokens live
+// in /rsvp/<token>. These guard that Meta never receives family content: not
+// a token in a URL, not a property, not an event from a private route.
+describe("Meta Pixel", () => {
+  beforeEach(() => {
+    window.fbq = jest.fn();
+    window.history.replaceState({}, "", "/");
+  });
+
+  afterEach(() => {
+    delete window.fbq;
+  });
+
+  it.each([
+    ["reunion_start_clicked", "ViewContent"],
+    ["reunion_draft_created", "Lead"],
+    ["reunion_saved", "Schedule"],
+    ["community_activated", "CompleteRegistration"],
+  ])("%s is forwarded to Meta as %s", (event, standard) => {
+    trackReunionEvent(event, { source: "family_today" });
+    expect(window.fbq).toHaveBeenCalledWith("track", standard);
+  });
+
+  it("forwards the event name only — never properties", () => {
+    trackReunionEvent("reunion_saved", {
+      source: "family_today",
+      invite_count: 12,
+      status: "active",
+    });
+    // exactly two arguments: no third properties object reaches Meta
+    expect(window.fbq).toHaveBeenCalledWith("track", "Schedule");
+    expect(window.fbq.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("reunion events with no Meta mapping stay out of Meta", () => {
+    trackReunionEvent("invite_link_copied", {});
+    trackReunionEvent("rsvp_completed", {});
+    expect(window.fbq).not.toHaveBeenCalled();
+  });
+
+  it("an event not on the reunion allowlist never reaches Meta", () => {
+    trackReunionEvent("not_a_real_event", {});
+    expect(window.fbq).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "/family/activate",
+    "/reunion/memories/abc",
+    "/proposals",
+    "/dashboard",
+  ])("sends nothing to Meta from the private route %s", (path) => {
+    window.history.replaceState({}, "", path);
+    trackReunionEvent("reunion_saved", {});
+    expect(window.fbq).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing to Meta from an invitation route, where the URL holds a token", () => {
+    window.history.replaceState({}, "", "/rsvp/secret-token-123");
+    trackReunionEvent("reunion_saved", {});
+    expect(window.fbq).not.toHaveBeenCalled();
+  });
+
+  it("no Pixel on the page is a no-op, not a crash", () => {
+    delete window.fbq;
+    expect(() => trackReunionEvent("reunion_saved", {})).not.toThrow();
+  });
+
+  it("initAnalytics does not load a Pixel when no id is configured", () => {
+    // REACT_APP_META_PIXEL_ID is unset in tests, so nothing should be injected
+    delete window.fbq;
+    initAnalytics();
+    expect(window.fbq).toBeUndefined();
+  });
+});
