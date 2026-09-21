@@ -93,8 +93,77 @@ export function gaClientId() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+// Meta Pixel. Absent id = the snippet never loads and every Meta call is a
+// no-op, matching how the backend gates Sentry and push.
+//
+// This is the ONLY conversion signal Meta receives. GA4 and Meta are separate
+// pipes: the server-side GA4 events (sign_up, begin_checkout, purchase) never
+// reach Meta's optimiser, so without this a paid campaign has nothing to aim
+// at and buys the cheapest clicks it can find.
+const META_PIXEL_ID = process.env.REACT_APP_META_PIXEL_ID || "";
+
+// Kindred's activation funnel -> Meta standard events. Deliberately shallow:
+// Meta needs roughly 50 events a week to leave the learning phase, so the
+// upper-funnel steps are here to give it volume to optimise on long before
+// purchases exist.
+//
+// Purchase is absent on purpose. Subscriptions complete in the RevenueCat
+// webhook, server-side, where the browser cannot see them — that needs the
+// Conversions API, not this file.
+const META_STANDARD_EVENTS = {
+  reunion_start_clicked: "ViewContent",
+  reunion_draft_created: "Lead",
+  reunion_saved: "Schedule",
+  community_activated: "CompleteRegistration",
+};
+
+// The Pixel transmits the page URL with every event, and invitation tokens
+// live in /rsvp/<token> paths. So the Pixel is not merely silenced on
+// sensitive routes — it is never loaded there, because even the script
+// request would carry that URL to Meta as a Referer.
+const metaPixelForbidden = () => analyticsSuppressed() || isSensitiveContentRoute();
+
+function loadMetaPixel() {
+  if (!META_PIXEL_ID || typeof window === "undefined") return;
+  if (metaPixelForbidden()) return;
+  if (typeof window.fbq === "function") return; // already loaded
+  /* eslint-disable */
+  !(function (f, b, e, v, n, t, s) {
+    if (f.fbq) return;
+    n = f.fbq = function () {
+      n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+    };
+    if (!f._fbq) f._fbq = n;
+    n.push = n;
+    n.loaded = !0;
+    n.version = "2.0";
+    n.queue = [];
+    t = b.createElement(e);
+    t.async = !0;
+    t.src = v;
+    s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s);
+  })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+  /* eslint-enable */
+  window.fbq("init", META_PIXEL_ID);
+  window.fbq("track", "PageView");
+}
+
+// Event NAME only — never properties. Everything this app tracks may carry
+// family content, and Meta gets none of it. The standard event name alone is
+// what the optimiser needs.
+function forwardToMeta(name) {
+  const standard = META_STANDARD_EVENTS[name];
+  if (!standard) return;
+  if (metaPixelForbidden()) return;
+  if (typeof window !== "undefined" && typeof window.fbq === "function") {
+    window.fbq("track", standard);
+  }
+}
+
 export function initAnalytics() {
   if (analyticsSuppressed()) return false;
+  loadMetaPixel();
   posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
     capture_pageview: true,
@@ -353,6 +422,7 @@ const SAFE_REUNION_PROPERTY_KEYS = new Set([
 // invitation tokens, provider identifiers, or community identifiers.
 export function trackReunionEvent(name, properties = {}) {
   if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
+  forwardToMeta(name);
   if (FAMILY_ACTIVATION_EVENTS.has(name)) {
     posthog.capture(name, safeFamilyActivationProperties(properties));
     return;
