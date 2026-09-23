@@ -57,11 +57,19 @@ describe("Today card during Keep The Record", () => {
     expect(el.textContent).toContain("Only 1 spot is left.");
   });
 
-  it("tells a member of a free-plan family to ask the host, with no checkout link", async () => {
+  it("tells a member of a free-plan family that only the host can change the plan", async () => {
     const el = await render({ now: CONTEST_OPEN, payload: plan(), variant: "today", isHost: false });
     expect(el.textContent).toContain("Your family isn’t entered yet");
-    expect(el.textContent).toContain("Ask your family host to upgrade so everyone can enter.");
-    expect(el.querySelector("a")).toBeNull();
+    expect(el.textContent).toContain("Only your host can change the plan");
+  });
+
+  it("never offers a member a link to the plan page — only the host may buy", async () => {
+    // The member CAN chip in toward the host's Reunion Pass (that card renders
+    // itself, and is covered by its own tests), but must never be handed a
+    // route to the subscription page: only the host can change the plan, and
+    // sending a member there produces a request they cannot complete.
+    const el = await render({ now: CONTEST_OPEN, payload: plan(), variant: "today", isHost: false });
+    expect(el.querySelector('a[href="/subscription"]')).toBeNull();
   });
 
   it("shows nothing to a paid family, host or not", async () => {
