@@ -57,8 +57,16 @@ describe("isContestOpen", () => {
     expect(isContestOpen(KEEP_THE_RECORD.startsAt)).toBe(true);
   });
 
-  it("stays open through the whole of Dec 5 Pacific and closes after", () => {
-    expect(isContestOpen(Date.parse("2026-12-05T23:59:59-08:00"))).toBe(true);
-    expect(isContestOpen(Date.parse("2026-12-06T00:00:00-08:00"))).toBe(false);
+  // The amended rules close entries on Dec 6 at 11:59 PM PT, so the last full
+  // day of entry is Dec 6 and the window ends at midnight starting Dec 7.
+  // This test still asserted the older Dec 5 close after d36710e corrected
+  // planUsage.js, which is why it has been failing on main since Sep 20.
+  it("stays open through the whole of Dec 6 Pacific and closes after", () => {
+    expect(isContestOpen(Date.parse("2026-12-06T23:59:59-08:00"))).toBe(true);
+    expect(isContestOpen(Date.parse("2026-12-07T00:00:00-08:00"))).toBe(false);
+  });
+
+  it("is still open on Dec 5, a day the older window wrongly excluded", () => {
+    expect(isContestOpen(Date.parse("2026-12-05T12:00:00-08:00"))).toBe(true);
   });
 });
