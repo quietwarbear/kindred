@@ -24,6 +24,7 @@ from pricing import (
     PAID_TIER_IDS,
     plan_payload,
     price_cents,
+    reunion_pass_payload,
     stripe_api_key_matches_environment,
     stripe_price_expectation,
 )
@@ -155,7 +156,10 @@ async def _get_or_create_stripe_customer(user: dict[str, Any]) -> str:
 
 @router.get("/subscriptions/plans")
 async def list_subscription_plans():
-    return {"plans": [plan_payload(tier_id) for tier_id in TIER_ORDER]}
+    return {
+        "plans": [plan_payload(tier_id) for tier_id in TIER_ORDER],
+        "reunion_pass": reunion_pass_payload(),
+    }
 
 
 @router.get("/subscriptions/current")

@@ -120,6 +120,66 @@ SUBSCRIPTION_TIERS = {
 }
 
 TIER_ORDER = ["seedling", "sapling", "oak", "redwood", "elder-grove"]
+
+# ---------------------------------------------------------------------------
+# Reunion Pass — a one-time purchase, deliberately NOT a subscription tier.
+#
+# A reunion is a project with an end date; the tier ladder sells months. The
+# pass is the reunion-shaped door: one payment, no auto-renew, no member cap.
+#
+# It is kept OUT of SUBSCRIPTION_TIERS on purpose. Every entry there must
+# appear in TIER_ORDER, carry a pricing-matrix entry, and (if paid) a full
+# provider matrix of Stripe and RevenueCat identifiers — invariants asserted
+# further down this module. The pass has no store products and no recurring
+# interval, so forcing it into that shape would mean inventing identifiers for
+# products that do not exist and showing a one-time SKU as a rung on a ladder.
+#
+# Instead it GRANTS a tier's capabilities for a fixed window. `grants_tier`
+# says which capability set; `unlimited_members` lifts that tier's cap, which
+# is the whole point — headcount is what an organizer is still discovering,
+# and the biggest families are the ones worth winning.
+REUNION_PASS = {
+    "id": "reunion-pass",
+    "name": "Reunion Pass",
+    "tagline": "One payment. Your whole family, through the gathering.",
+    "amount": 149.00,
+    "currency": "usd",
+    "duration_days": 365,
+    "grants_tier": "oak",
+    "unlimited_members": True,
+    "auto_renews": False,
+}
+
+REUNION_PASS_PLAN_ID = REUNION_PASS["id"]
+# Generous rather than truly unbounded: a number no family reaches, while
+# still bounding anything that loops over the limit.
+REUNION_PASS_MAX_MEMBERS = 100000
+
+
+def reunion_pass_price_cents() -> int:
+    return int(
+        (Decimal(str(REUNION_PASS["amount"])) * 100).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+    )
+
+
+def is_reunion_pass(subscription: Optional[dict]) -> bool:
+    return bool(subscription) and subscription.get("plan_id") == REUNION_PASS_PLAN_ID
+
+
+def reunion_pass_expires_at(purchased_at=None) -> str:
+    """When a pass bought now runs out, as an ISO timestamp.
+
+    Twelve months from purchase rather than a window tied to the gathering
+    date: that date is the field organizers most often leave blank, and it
+    moves. Defined here so the checkout route and the webhook that grants the
+    entitlement can never disagree about the length of a pass.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    start = purchased_at or datetime.now(timezone.utc)
+    return (start + timedelta(days=REUNION_PASS["duration_days"])).isoformat()
 BILLING_INTERVALS = ("monthly", "annual")
 BILLING_ENVIRONMENT = (
     os.environ.get("BILLING_ENVIRONMENT", "production").strip().lower()
@@ -393,6 +453,32 @@ def plan_payload(tier_id: str) -> dict:
         **tier,
         "billing_options": public_billing_options(tier_id),
         "custom_pricing": tier_id == "elder-grove",
+    }
+
+
+def reunion_pass_payload() -> dict:
+    """Public shape for the Reunion Pass.
+
+    Returned alongside `plans`, never inside it: the pass sits beside the
+    ladder (decision, 2026-09-23) and has no billing interval to compare.
+    """
+    return {
+        "id": REUNION_PASS_PLAN_ID,
+        "name": REUNION_PASS["name"],
+        "tagline": REUNION_PASS["tagline"],
+        "amount": REUNION_PASS["amount"],
+        "currency": REUNION_PASS["currency"],
+        "duration_days": REUNION_PASS["duration_days"],
+        "auto_renews": REUNION_PASS["auto_renews"],
+        "unlimited_members": REUNION_PASS["unlimited_members"],
+        "features": [
+            "Everything in Oak",
+            "No member limit \u2014 invite the whole family",
+            "Unlimited invitations, RSVPs and reminders",
+            "Itinerary, potluck and volunteer roles",
+            "Memory capsule and the reunion recap",
+            "Twelve months, then it simply ends",
+        ],
     }
 
 

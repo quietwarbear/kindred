@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { PublicPlanCards } from "@/components/PublicPlanCards";
+import { ReunionPassCard } from "@/components/ReunionPassCard";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { rememberPendingPlan } from "@/lib/pricing";
@@ -11,7 +12,7 @@ import { rememberPendingPlan } from "@/lib/pricing";
 const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);
 
 export const PricingPage = ({ session }) => {
-  const { plans, loading, error } = usePublicPlans();
+  const { plans, reunionPass, loading, error } = usePublicPlans();
   const navigate = useNavigate();
 
   // RevenueCat web billing needs an app user id, so a visitor with no account
@@ -50,6 +51,18 @@ export const PricingPage = ({ session }) => {
           <div className="mt-8" aria-live="polite">
             {loading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
             {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+            {!loading && !error && reunionPass && (
+              <div className="mb-10">
+                <ReunionPassCard
+                  onChoose={WEB_PURCHASES_ENABLED ? choosePlan : undefined}
+                  pass={reunionPass}
+                />
+                <p className="mt-6 text-sm text-muted-foreground">
+                  Planning beyond one gathering? The plans below bill monthly or
+                  annually and keep the family space going year-round.
+                </p>
+              </div>
+            )}
             {!loading && !error && (
               <PublicPlanCards
                 detailed
