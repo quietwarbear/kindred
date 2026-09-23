@@ -33,6 +33,7 @@ import {
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans, takePendingPlan } from "@/lib/pricing";
 import { ReunionPassCard } from "@/components/ReunionPassCard";
+import { ReunionPassChipIn } from "@/components/ReunionPassChipIn";
 
 const REUNION_PASS_ID = "reunion-pass";
 
@@ -757,6 +758,12 @@ export const SubscriptionPage = ({ token, user }) => {
           )}
         </div>
       )}
+
+      {/* Everyone sees the goal and can put money toward it — the host too,
+          since a family that is part-funded should not have to start over. */}
+      <div className="mb-8">
+        <ReunionPassChipIn token={token} />
+      </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" data-testid="plans-grid">
         {plans.map((plan) => (

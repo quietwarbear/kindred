@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { describePlanUsage, isContestOpen, KEEP_THE_RECORD } from "@/lib/planUsage";
+import { ReunionPassChipIn } from "@/components/ReunionPassChipIn";
 
 /**
  * Plan status with a path to the subscription page.
@@ -54,9 +55,14 @@ export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false })
               <h2 className="mt-2 font-display text-3xl">Your family isn’t entered yet</h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
                 {KEEP_THE_RECORD.name} is for subscriber families, and yours is on the free {usage.planName} plan.
-                Ask your family host to upgrade so everyone can enter.
+                Only your host can change the plan — but you can help pay for it.
               </p>
             </div>
+          </div>
+          {/* Was an errand: "ask your host". Now an action — a cousin can put
+              money toward the pass without waiting for anyone. */}
+          <div className="mt-5">
+            <ReunionPassChipIn token={token} variant="today" />
           </div>
         </section>
       );
@@ -76,7 +82,7 @@ export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false })
     let body;
     if (contestPrompt) {
       heading = `Upgrade to enter ${KEEP_THE_RECORD.name}`;
-      body = `${KEEP_THE_RECORD.name} is for subscriber families. Upgrade from ${usage.planName} by December 5 so your family can enter.${limitSentence ? ` ${limitSentence}` : ""}`;
+      body = `${KEEP_THE_RECORD.name} is for subscriber families. Upgrade from ${usage.planName} by December 6 so your family can enter.${limitSentence ? ` ${limitSentence}` : ""}`;
     } else if (usage.atLimit) {
       heading = "Your family is full";
       body = `${limitSentence} Upgrade to keep bringing everyone in.`;
