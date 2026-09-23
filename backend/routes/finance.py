@@ -22,12 +22,18 @@ from dependencies import (
     require_feature,
 )
 from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreateRequest
+from reunion_pass_ledger import (
+    CHIP_IN_PACKAGE_ID,
+    activate_reunion_pass,
+    contributed_cents,
+)
 from pricing import (
     BILLING_ENVIRONMENT,
     REUNION_PASS,
     REUNION_PASS_PLAN_ID,
     billing_amount,
     reunion_pass_expires_at,
+    reunion_pass_price_cents,
     price_cents,
     resolve_stripe_price,
     stripe_api_key_matches_environment,
@@ -492,6 +498,52 @@ async def stripe_webhook(request: Request):
                     user_id=metadata.get("user_id", ""),
                     ga_client_id=metadata.get("ga_client_id", ""),
                 )
+                return {"received": True, "event_type": event_type, "status": "ok"}
+
+            if payment_status == "paid" and metadata.get("kind") == "reunion_pass_chip_in":
+                # A family member put money toward the host's pass. Record it,
+                # then activate only once the goal is met. The update is keyed
+                # on session_id so a Stripe retry cannot count a contribution
+                # twice and tip the family over the line on a duplicate.
+                community_id = metadata.get("community_id", "")
+                paid_cents = int(data_object.get("amount_total") or 0)
+                await payments_collection.update_one(
+                    {"session_id": session_id},
+                    {"$set": {
+                        "status": "checkout.session.completed",
+                        "payment_status": "paid",
+                        "amount_cents": paid_cents,
+                        "amount": paid_cents / 100,
+                        "completed_at": now_iso(),
+                    }},
+                )
+                ga4.track_purchase(
+                    transaction_id=session_id or "",
+                    value_cents=paid_cents,
+                    item_id=CHIP_IN_PACKAGE_ID,
+                    item_name=f"Toward the {REUNION_PASS['name']}",
+                    item_category="reunion_pass_chip_in",
+                    user_id=metadata.get("user_id", ""),
+                    ga_client_id=metadata.get("ga_client_id", ""),
+                )
+                total = await contributed_cents(payments_collection, community_id)
+                if total >= reunion_pass_price_cents():
+                    granted = await activate_reunion_pass(
+                        subscriptions_collection,
+                        community_id,
+                        plan_id=REUNION_PASS_PLAN_ID,
+                        expires_at=reunion_pass_expires_at(),
+                        amount=REUNION_PASS["amount"],
+                        currency=REUNION_PASS["currency"],
+                        now=now_iso(),
+                        funded_by="chip_in",
+                    )
+                    logger.info(
+                        "Reunion Pass %s for community=%s after chip-in totalling %d cents",
+                        "activated" if granted else "already active",
+                        community_id,
+                        total,
+                    )
                 return {"received": True, "event_type": event_type, "status": "ok"}
 
             if payment_status == "paid":
