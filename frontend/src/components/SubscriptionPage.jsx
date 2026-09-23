@@ -14,7 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
-import { gaClientId } from "@/lib/analytics";
+import { gaClientId, trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 import {
   ensureInitialized,
@@ -32,6 +32,9 @@ import {
 } from "@/lib/revenuecatWeb";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { formatLocalizedPrice, formatPrice, normalizePlans, takePendingPlan } from "@/lib/pricing";
+import { ReunionPassCard } from "@/components/ReunionPassCard";
+
+const REUNION_PASS_ID = "reunion-pass";
 
 const WEB_SUBSCRIPTION_MESSAGE = "Web subscriptions are temporarily unavailable while billing is being updated.";
 // Web purchases go live only when the deployment sets the RevenueCat Billing
@@ -329,6 +332,8 @@ export const SubscriptionPage = ({ token, user }) => {
   const [usage, setUsage] = useState({});
   const [billingCycle, setBillingCycle] = useState("monthly");
   const [preselectedPlanId, setPreselectedPlanId] = useState(null);
+  const [buyingPass, setBuyingPass] = useState(false);
+  const [reunionPass, setReunionPass] = useState(null);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [pollingSessionId, setPollingSessionId] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -342,6 +347,7 @@ export const SubscriptionPage = ({ token, user }) => {
     try {
       const payload = await apiRequest("/subscriptions/plans", { token });
       setPlans(normalizePlans(payload.plans));
+      setReunionPass(payload.reunion_pass || null);
     } catch {
       toast.error("Unable to load subscription plans.");
     }
@@ -444,8 +450,34 @@ export const SubscriptionPage = ({ token, user }) => {
     const pending = takePendingPlan();
     if (!pending) return;
     setPreselectedPlanId(pending.planId);
-    setBillingCycle(pending.cycle);
+    if (pending.planId !== REUNION_PASS_ID) setBillingCycle(pending.cycle);
   }, []);
+
+  // The pass is a one-time purchase on its own endpoint — not a tier, so it
+  // does not go through handleSelectPlan or RevenueCat. Web only; the app
+  // stays silent about it (decided 2026-09-20).
+  const handleBuyReunionPass = async () => {
+    if (!isHost) {
+      toast.error("Only the community host can buy a Reunion Pass.");
+      return;
+    }
+    setBuyingPass(true);
+    try {
+      trackReunionEvent("begin_checkout", { plan: REUNION_PASS_ID, surface: "web" });
+      const res = await apiRequest("/reunion-pass/checkout", {
+        method: "POST",
+        token,
+        data: { origin_url: window.location.origin, ga_client_id: gaClientId() },
+      });
+      if (res?.url) window.location.href = res.url;
+      else throw new Error("no checkout url");
+    } catch (error) {
+      setBuyingPass(false);
+      toast.error(
+        error.response?.data?.detail || "Could not start checkout. Please try again."
+      );
+    }
+  };
 
   const handleSelectPlan = async (planId) => {
     if (!isHost) {
@@ -715,6 +747,17 @@ export const SubscriptionPage = ({ token, user }) => {
       )}
 
       {/* Plan Cards */}
+      {/* The pass sits above the ladder, not inside it: one payment for one
+          reunion, versus months of subscription. Web only, host only. */}
+      {reunionPass && !isNativeBilling() && WEB_PURCHASES_ENABLED && isHost && (
+        <div className="mb-8">
+          <ReunionPassCard onChoose={buyingPass ? undefined : handleBuyReunionPass} pass={reunionPass} />
+          {buyingPass && (
+            <p className="mt-3 text-sm text-muted-foreground">Opening checkout…</p>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" data-testid="plans-grid">
         {plans.map((plan) => (
           <PlanCard

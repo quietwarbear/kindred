@@ -15,6 +15,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 
 import { PublicPlanCards } from "@/components/PublicPlanCards";
+import { ReunionPassCard } from "@/components/ReunionPassCard";
 import { rememberPendingPlan } from "@/lib/pricing";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { trackReunionEvent } from "@/lib/analytics";
@@ -52,7 +53,7 @@ const steps = [
 export const LandingPage = ({ isAuthenticated }) => {
   const showStoreBadges = !isNative();
   const campaign = gatheringCampaign();
-  const { plans, loading: plansLoading, error: plansError } = usePublicPlans();
+  const { plans, reunionPass, loading: plansLoading, error: plansError } = usePublicPlans();
   const navigate = useNavigate();
 
   // Same handoff as /pricing: the plan follows the visitor through sign-up,
@@ -281,6 +282,14 @@ export const LandingPage = ({ isAuthenticated }) => {
             <div className="mt-8" aria-live="polite">
               {plansLoading && <p className="text-sm text-muted-foreground">Loading current plans…</p>}
               {plansError && <p className="text-sm text-destructive" role="alert">{plansError}</p>}
+              {!plansLoading && !plansError && reunionPass && (
+                <div className="mb-8">
+                  <ReunionPassCard
+                    onChoose={WEB_PURCHASES_ENABLED ? choosePlan : undefined}
+                    pass={reunionPass}
+                  />
+                </div>
+              )}
               {!plansLoading && !plansError && (
                 <PublicPlanCards
                   onChoose={WEB_PURCHASES_ENABLED ? choosePlan : undefined}

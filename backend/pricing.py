@@ -456,6 +456,32 @@ def plan_payload(tier_id: str) -> dict:
     }
 
 
+def reunion_pass_payload() -> dict:
+    """Public shape for the Reunion Pass.
+
+    Returned alongside `plans`, never inside it: the pass sits beside the
+    ladder (decision, 2026-09-23) and has no billing interval to compare.
+    """
+    return {
+        "id": REUNION_PASS_PLAN_ID,
+        "name": REUNION_PASS["name"],
+        "tagline": REUNION_PASS["tagline"],
+        "amount": REUNION_PASS["amount"],
+        "currency": REUNION_PASS["currency"],
+        "duration_days": REUNION_PASS["duration_days"],
+        "auto_renews": REUNION_PASS["auto_renews"],
+        "unlimited_members": REUNION_PASS["unlimited_members"],
+        "features": [
+            "Everything in Oak",
+            "No member limit \u2014 invite the whole family",
+            "Unlimited invitations, RSVPs and reminders",
+            "Itinerary, potluck and volunteer roles",
+            "Memory capsule and the reunion recap",
+            "Twelve months, then it simply ends",
+        ],
+    }
+
+
 def provider_mapping(provider: str) -> dict[str, dict[str, str]]:
     """Return plan/interval Stripe Price IDs (legacy direct-Stripe rail)."""
     if provider != "stripe":
