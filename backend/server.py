@@ -45,6 +45,7 @@ from routes.pilot import router as pilot_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
 from routes.reunion_draft import router as reunion_draft_router
+from routes.reunion_pass import router as reunion_pass_router
 from routes.reunion_memories import router as reunion_memories_router
 from routes.reunion_recap import router as reunion_recap_router
 from routes.revenuecat import router as revenuecat_router
@@ -138,6 +139,7 @@ app.include_router(pilot_router)
 app.include_router(polls_router)
 app.include_router(public_router)
 app.include_router(reunion_draft_router)
+app.include_router(reunion_pass_router)
 app.include_router(reunion_memories_router)
 app.include_router(reunion_recap_router)
 app.include_router(revenuecat_router)

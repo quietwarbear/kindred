@@ -24,7 +24,10 @@ from dependencies import (
 from models import BudgetCreateRequest, PaymentCheckoutRequest, TravelPlanCreateRequest
 from pricing import (
     BILLING_ENVIRONMENT,
+    REUNION_PASS,
+    REUNION_PASS_PLAN_ID,
     billing_amount,
+    reunion_pass_expires_at,
     price_cents,
     resolve_stripe_price,
     stripe_api_key_matches_environment,
@@ -456,6 +459,40 @@ async def stripe_webhook(request: Request):
             if payment_status == "paid":
                 update_payload["completed_at"] = now_iso()
             await payments_collection.update_one({"session_id": session_id}, {"$set": update_payload})
+
+            if payment_status == "paid" and metadata.get("kind") == "reunion_pass":
+                # The pass is a one-time payment that grants a dated
+                # entitlement. Written through the same guarded helper as
+                # subscription events so a Stripe retry cannot double-apply.
+                granted_until = reunion_pass_expires_at()
+                applied, _ = await _apply_stripe_subscription_event(
+                    {"session_id": session_id, "plan_id": REUNION_PASS_PLAN_ID},
+                    event,
+                    {
+                        "status": "active",
+                        "payment_status": payment_status,
+                        "activated_at": now_iso(),
+                        "current_period_end": granted_until,
+                        "expires_at": granted_until,
+                        "amount": float(data_object.get("amount_total") or 0) / 100,
+                    },
+                )
+                logger.info(
+                    "Reunion Pass %s for community=%s until %s",
+                    "granted" if applied else "already applied",
+                    metadata.get("community_id", ""),
+                    granted_until,
+                )
+                ga4.track_purchase(
+                    transaction_id=session_id or "",
+                    value_cents=int(data_object.get("amount_total") or 0),
+                    item_id=REUNION_PASS_PLAN_ID,
+                    item_name=REUNION_PASS["name"],
+                    item_category="reunion_pass",
+                    user_id=metadata.get("user_id", ""),
+                    ga_client_id=metadata.get("ga_client_id", ""),
+                )
+                return {"received": True, "event_type": event_type, "status": "ok"}
 
             if payment_status == "paid":
                 # amount_total is Stripe's own figure, so promo codes and tax

@@ -2,6 +2,7 @@
 
 import os
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -17,7 +18,15 @@ from db import (
     users_collection,
 )
 from security import create_access_token, decode_token
-from pricing import STRIPE_PRICE_IDS, SUBSCRIPTION_TIERS, TIER_ORDER
+from pricing import (
+    REUNION_PASS,
+    REUNION_PASS_MAX_MEMBERS,
+    REUNION_PASS_PLAN_ID,
+    STRIPE_PRICE_IDS,
+    SUBSCRIPTION_TIERS,
+    TIER_ORDER,
+    is_reunion_pass,
+)
 from subscription_lifecycle import PAID_ACCESS_STATUSES, subscription_has_paid_access
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -49,9 +58,27 @@ def get_community_tier(subscription: dict | None) -> dict:
     """Return the tier config for a subscription, defaulting to seedling."""
     if not subscription_has_paid_access(subscription):
         return SUBSCRIPTION_TIERS["seedling"]
+    if is_reunion_pass(subscription):
+        return reunion_pass_tier()
     return SUBSCRIPTION_TIERS.get(
         subscription.get("plan_id", "seedling"), SUBSCRIPTION_TIERS["seedling"]
     )
+
+
+def reunion_pass_tier() -> dict:
+    """The capability set a Reunion Pass confers.
+
+    The pass is not in SUBSCRIPTION_TIERS (see pricing.REUNION_PASS), so it is
+    resolved here: the capabilities of `grants_tier` with the member cap
+    lifted. Returned as a copy — callers must never mutate the catalog.
+    """
+    tier = deepcopy(SUBSCRIPTION_TIERS[REUNION_PASS["grants_tier"]])
+    tier["id"] = REUNION_PASS_PLAN_ID
+    tier["name"] = REUNION_PASS["name"]
+    tier["tagline"] = REUNION_PASS["tagline"]
+    if REUNION_PASS["unlimited_members"]:
+        tier["max_members"] = REUNION_PASS_MAX_MEMBERS
+    return tier
 
 
 # ---------------------------------------------------------------------------
