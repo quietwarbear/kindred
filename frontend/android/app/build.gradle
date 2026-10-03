@@ -78,6 +78,12 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // TikTok App Events (ad attribution) — bridged by TikTokEventsPlugin.java.
+    implementation 'com.github.tiktok:tiktok-business-android-sdk:1.7.1'
+    // Required by the TikTok SDK: app lifecycle + Google Play install referrer.
+    implementation 'androidx.lifecycle:lifecycle-process:2.3.1'
+    implementation 'androidx.lifecycle:lifecycle-common-java8:2.3.1'
+    implementation 'com.android.installreferrer:installreferrer:2.2'
 }
 
 apply from: 'capacitor.build.gradle'

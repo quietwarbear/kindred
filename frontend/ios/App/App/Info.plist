@@ -30,6 +30,8 @@
 	<string>Kindred uses your camera to capture and share photos with your community.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kindred uses your microphone to record voice notes and oral-history reflections you choose to share with your community.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Kindred uses this to measure the effectiveness of the ads we run. No family content is ever shared. You can change this anytime in Settings.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

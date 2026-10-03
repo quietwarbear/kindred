@@ -5,11 +5,13 @@ import App from "@/App";
 import { registerServiceWorker } from "@/lib/sw-register";
 import { initializeRevenueCat } from "@/lib/revenuecat";
 import { initAnalytics } from "@/lib/analytics";
+import { initTikTokEvents } from "@/lib/tiktokEvents";
 import { initSentry } from "@/lib/sentry";
 
 initSentry();
 registerServiceWorker();
 initAnalytics();
+initTikTokEvents();
 
 const rootEl = document.getElementById("root");
 const app = (

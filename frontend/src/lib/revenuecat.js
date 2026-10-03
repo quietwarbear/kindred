@@ -7,6 +7,7 @@ import { Browser } from "@capacitor/browser";
 import { Purchases } from "@revenuecat/purchases-capacitor";
 import { apiRequest } from "@/lib/api";
 import { calculateSavings } from "@/lib/pricing";
+import { trackTikTokEvent } from "@/lib/tiktokEvents";
 
 // One RevenueCat app per store, so one public key per platform. Android was
 // previously unreachable: the iOS key was the only one wired, so an Android
@@ -299,6 +300,14 @@ export const makePurchase = async (productId, billingInterval, expectedEntitleme
         throw new Error("The purchased product did not grant the expected plan entitlement.");
       }
       if (Object.keys(activeEntitlements).length > 0) {
+              // Ad attribution: the event TikTok campaigns optimise toward.
+              // Fire-and-forget — it must never turn a paid purchase into an error.
+              trackTikTokEvent("Subscribe", {
+                content_id: productId,
+                content_type: "subscription",
+                ...(typeof pkg.product?.price === "number" ? { value: pkg.product.price } : {}),
+                ...(pkg.product?.currencyCode ? { currency: pkg.product.currencyCode } : {}),
+              });
               return {
                         success: true,
                         message: "Purchase successful",
