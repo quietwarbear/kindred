@@ -38,6 +38,7 @@ public class TikTokEventsPlugin extends Plugin {
                 .setAppId(appId)
                 .setTTAppId(ttAppId);
         if (Boolean.TRUE.equals(call.getBoolean("debug", false))) {
+            config.openDebugMode();
             config.setLogLevel(TikTokBusinessSdk.LogLevel.DEBUG);
         }
         TikTokBusinessSdk.initializeSdk(

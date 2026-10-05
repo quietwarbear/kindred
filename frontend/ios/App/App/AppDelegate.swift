@@ -82,6 +82,7 @@ public class TikTokEventsPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         if call.getBool("debug") == true {
+            config.enableDebugMode()
             config.setLogLevel(TikTokLogLevelDebug)
         }
         // Until the user has answered the tracking prompt, hold the first
