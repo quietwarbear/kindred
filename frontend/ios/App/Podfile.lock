@@ -30,6 +30,7 @@ PODS:
   - SentryCapacitor (4.3.0):
     - Capacitor
     - Sentry (= 9.16.1)
+  - TikTokBusinessSDK (1.7.2)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -44,12 +45,14 @@ DEPENDENCIES:
   - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
   - "RevenuecatPurchasesCapacitor (from `../../node_modules/@revenuecat/purchases-capacitor`)"
   - "SentryCapacitor (from `../../node_modules/@sentry/capacitor`)"
+  - TikTokBusinessSDK (~> 1.7)
 
 SPEC REPOS:
   trunk:
     - PurchasesHybridCommon
     - RevenueCat
     - Sentry
+    - TikTokBusinessSDK
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -93,7 +96,8 @@ SPEC CHECKSUMS:
   RevenuecatPurchasesCapacitor: 63d3d626996ec76dd3adff9f8da408249b762a91
   Sentry: e5d82a3c1f2d951f75c04c57215a0abb1facbd51
   SentryCapacitor: 51a84af1e21f72895220340fe3b4e419dad43b5d
+  TikTokBusinessSDK: c8878048daf0c46a0d9e89932359d553ea38096c
 
-PODFILE CHECKSUM: fb6917b5fa439ad0d84c088189b479142b217b4b
+PODFILE CHECKSUM: 676ca67bf757b67485b8eabc3717a552e98ed825
 
 COCOAPODS: 1.13.0

@@ -26,6 +26,9 @@ end
 target 'App' do
   capacitor_pods
   # Add your Pods here
+  # TikTok App Events (ad attribution) — bridged by TikTokEventsPlugin in
+  # App/AppDelegate.swift.
+  pod 'TikTokBusinessSDK', '~> 1.7'
 end
 
 post_install do |installer|

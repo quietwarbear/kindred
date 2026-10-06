@@ -1,5 +1,7 @@
+import AppTrackingTransparency
 import UIKit
 import Capacitor
+import TikTokBusinessSDK
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -46,4 +48,80 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+}
+
+/// Root view controller. Exists only to register app-local Capacitor plugins;
+/// Main.storyboard points at this class instead of CAPBridgeViewController.
+class MainViewController: CAPBridgeViewController {
+    override open func capacitorDidLoad() {
+        bridge?.registerPluginInstance(TikTokEventsPlugin())
+    }
+}
+
+/// TikTok App Events (TikTokBusinessSDK pod) — JS side is src/lib/tiktokEvents.js.
+/// Nothing here runs unless JS calls `start`, which it only does when a
+/// REACT_APP_TIKTOK_APP_SECRET_IOS value was present at build time.
+@objc(TikTokEventsPlugin)
+public class TikTokEventsPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "TikTokEventsPlugin"
+    public let jsName = "TikTokEvents"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestTracking", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "track", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func start(_ call: CAPPluginCall) {
+        guard
+            let accessToken = call.getString("accessToken"), !accessToken.isEmpty,
+            let appId = call.getString("appId"),
+            let ttAppId = call.getString("ttAppId"),
+            let config = TikTokConfig(accessToken: accessToken, appId: appId, tiktokAppId: ttAppId)
+        else {
+            call.reject("Missing TikTok config")
+            return
+        }
+        // React's production bundle is also embedded in Xcode Debug builds, so
+        // the native compilation configuration must own Test Event mode.
+        #if DEBUG
+        let debugEnabled = true
+        #else
+        let debugEnabled = call.getBool("debug") == true
+        #endif
+        if debugEnabled {
+            config.enableDebugMode()
+            config.setLogLevel(TikTokLogLevelDebug)
+        }
+        // Until the user has answered the tracking prompt, hold the first
+        // upload briefly so the install event can carry their choice.
+        if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
+            config.setDelayForATTUserAuthorizationInSeconds(20)
+        }
+        TikTokBusiness.initializeSdk(config) { success, error in
+            if success {
+                call.resolve()
+            } else {
+                call.reject(error?.localizedDescription ?? "TikTok SDK init failed")
+            }
+        }
+    }
+
+    @objc func requestTracking(_ call: CAPPluginCall) {
+        TikTokBusiness.requestTrackingAuthorization { status in
+            call.resolve(["status": Int(status)])
+        }
+    }
+
+    @objc func track(_ call: CAPPluginCall) {
+        guard let name = call.getString("event"), !name.isEmpty else {
+            call.reject("Missing event name")
+            return
+        }
+        let event = TikTokBaseEvent(eventName: name)
+        for (key, value) in call.getObject("properties") ?? [:] {
+            event.addProperty(withKey: key, value: value)
+        }
+        TikTokBusiness.trackTTEvent(event)
+        call.resolve()
+    }
 }
