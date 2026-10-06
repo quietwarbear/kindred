@@ -81,7 +81,14 @@ public class TikTokEventsPlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("Missing TikTok config")
             return
         }
-        if call.getBool("debug") == true {
+        // React's production bundle is also embedded in Xcode Debug builds, so
+        // the native compilation configuration must own Test Event mode.
+        #if DEBUG
+        let debugEnabled = true
+        #else
+        let debugEnabled = call.getBool("debug") == true
+        #endif
+        if debugEnabled {
             config.enableDebugMode()
             config.setLogLevel(TikTokLogLevelDebug)
         }

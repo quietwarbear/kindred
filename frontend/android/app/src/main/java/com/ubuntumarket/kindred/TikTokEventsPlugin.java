@@ -1,5 +1,7 @@
 package com.ubuntumarket.kindred;
 
+import android.content.pm.ApplicationInfo;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -37,7 +39,11 @@ public class TikTokEventsPlugin extends Plugin {
             new TikTokBusinessSdk.TTConfig(getContext().getApplicationContext(), accessToken)
                 .setAppId(appId)
                 .setTTAppId(ttAppId);
-        if (Boolean.TRUE.equals(call.getBoolean("debug", false))) {
+        // React's production bundle is also embedded in Android debug APKs, so
+        // NODE_ENV cannot identify a native debug build. The package flag can.
+        boolean isDebuggable =
+            (getContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (isDebuggable || Boolean.TRUE.equals(call.getBoolean("debug", false))) {
             config.openDebugMode();
             config.setLogLevel(TikTokBusinessSdk.LogLevel.DEBUG);
         }

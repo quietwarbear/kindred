@@ -51,5 +51,6 @@ cd ios/App && pod install
 
 TikTok Events Manager > the app > **Test event**. Run a build with the secret,
 activate a community and buy a tier in sandbox, and confirm `Registration` and
-`Subscribe` arrive. Debug builds enable TikTok's SDK Test Event mode; release
+`Subscribe` arrive. Native Android and iOS Debug builds enable TikTok's SDK
+Test Event mode even though Capacitor embeds a production React bundle; release
 builds do not.
