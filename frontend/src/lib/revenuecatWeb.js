@@ -1,4 +1,5 @@
 import { calculateSavings } from "./pricing";
+import { isNative } from "./native-bridge";
 
 const WEB_API_KEY = process.env.REACT_APP_REVENUECAT_WEB_KEY;
 
@@ -30,6 +31,9 @@ const requireMapping = (mapping, planId, billingInterval) => {
 };
 
 export const initializeRevenueCatWeb = async (appUserId) => {
+  if (isNative()) {
+    throw new Error("Web billing is not available inside the mobile app. Use your device's app store.");
+  }
   if (!WEB_API_KEY) {
     throw new Error("RevenueCat Billing is not configured for web purchases.");
   }

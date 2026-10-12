@@ -1,4 +1,16 @@
-import { validateRevenueCatWebProduct } from "./revenuecatWeb";
+import { initializeRevenueCatWeb, validateRevenueCatWebProduct } from "./revenuecatWeb";
+
+const mockPlatform = { native: false };
+jest.mock("./native-bridge", () => ({ isNative: () => mockPlatform.native }));
+
+test.each(["ios", "android"])("rejects web billing on %s before loading the web SDK", async () => {
+  mockPlatform.native = true;
+  try {
+    await expect(initializeRevenueCatWeb("synthetic-user")).rejects.toThrow("Use your device's app store");
+  } finally {
+    mockPlatform.native = false;
+  }
+});
 
 const expected = {
   product_id: "oak_annual_web_v2",

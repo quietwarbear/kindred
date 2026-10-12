@@ -14,6 +14,7 @@ import { CarePage } from "@/components/CarePage";
 import { CommunitySetupPage } from "@/components/CommunitySetupPage";
 import { HealthDashboardPage } from "@/components/HealthDashboardPage";
 import { HomePage } from "@/components/HomePage";
+import { todayFailure } from "@/lib/todayRecovery";
 import { KinshipMapPage } from "@/components/KinshipMapPage";
 import { LegacyThreadsPage } from "@/components/LegacyThreadsPage";
 import { MemoryVaultPage } from "@/components/MemoryVaultPage";
@@ -100,7 +101,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
       const payload = await apiRequest("/today", { token });
       setTodayData(payload);
     } catch (error) {
-      setTodayError(error.response?.data?.detail || "Today is temporarily unavailable.");
+      setTodayData(null);
+      setTodayError(todayFailure(error));
     } finally {
       setTodayLoading(false);
     }
@@ -363,8 +365,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
             </div>
 
             <Routes>
-              <Route element={<HomePage onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="dashboard" />
-              <Route element={<HomePage onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="home" />
+              <Route element={<HomePage onSignInAgain={onLogout} onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="dashboard" />
+              <Route element={<HomePage onSignInAgain={onLogout} onRetryToday={loadToday} todayData={todayData} todayError={todayError} todayLoading={todayLoading} token={token} />} path="home" />
               <Route element={<StewardPage token={token} />} path="steward" />
               <Route element={<HealthDashboardPage token={token} />} path="health" />
               <Route element={<CarePage token={token} user={user} />} path="care" />

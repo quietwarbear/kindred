@@ -54,3 +54,31 @@ activate a community and buy a tier in sandbox, and confirm `Registration` and
 `Subscribe` arrive. Native Android and iOS Debug builds enable TikTok's SDK
 Test Event mode even though Capacitor embeds a production React bundle; release
 builds do not.
+
+## October 11, 2026 rebuild handoff
+
+Local, not yet shipped: the iOS plugin now creates its TikTok configuration and
+initializes the SDK on `DispatchQueue.main`. Capacitor invokes plugin methods
+on a background bridge queue; the SDK schedules upload/session timers on the
+calling thread's run loop. ATT requests are also dispatched to the main queue.
+Debug/test mode, the ATT delay, and missing-secret safeguards are unchanged.
+
+Local verification: all 22 frontend test suites / 157 tests pass, including
+source guards for main-queue initialization and ATT. The unsigned Release iOS
+simulator build in a disposable copy exited successfully and produced an app
+binary for arm64 and x86_64. Third-party SDK/compiler diagnostics remain; this
+is compilation evidence, not signed-device or production-delivery verification.
+
+This addresses the observed timer-threading defect; it is not proof that TikTok
+has accepted an event. Before submitting the next builds:
+
+- Privately verify each compiled artifact's platform-specific TikTok App ID and
+  secret against its corresponding Events Manager source. Report matches only;
+  never print credentials or compiled-bundle snippets.
+- Sync the rebuilt frontend so the mobile billing separation and Today recovery
+  changes are included, not the previous embedded JavaScript bundle.
+- Confirm initialization and a timed upload on a device. Debug events should
+  appear in Test event; production verification requires a non-test event.
+- Confirm an event API acceptance response or an event in Events Manager before
+  declaring delivery fixed. Initialization/remote-switch logs alone do not prove it.
+- Keep store submission and publication separate from build verification.

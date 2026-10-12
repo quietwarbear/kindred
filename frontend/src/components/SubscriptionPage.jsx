@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { gaClientId, trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
+import { isNative } from "@/lib/native-bridge";
 import {
   ensureInitialized,
   getLocalizedRevenueCatPricing,
@@ -327,6 +328,7 @@ const AddOnsSection = ({ token }) => {
 };
 
 export const SubscriptionPage = ({ token, user }) => {
+  const nativeApp = isNative();
   const [plans, setPlans] = useState([]);
   const [currentSub, setCurrentSub] = useState(null);
   const [currentTier, setCurrentTier] = useState(null);
@@ -403,13 +405,14 @@ export const SubscriptionPage = ({ token, user }) => {
 
   // Handle redirect back from Stripe with session_id
   useEffect(() => {
+    if (nativeApp) return;
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
     if (sessionId) {
       setPollingSessionId(sessionId);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [nativeApp]);
 
   // Poll checkout status
   useEffect(() => {
@@ -458,6 +461,7 @@ export const SubscriptionPage = ({ token, user }) => {
   // does not go through handleSelectPlan or RevenueCat. Web only; the app
   // stays silent about it (decided 2026-09-20).
   const handleBuyReunionPass = async () => {
+    if (nativeApp) return;
     if (!isHost) {
       toast.error("Only the community host can buy a Reunion Pass.");
       return;
@@ -498,7 +502,7 @@ export const SubscriptionPage = ({ token, user }) => {
     setCheckoutLoading(planId);
     try {
       // Determine if we're on iOS and should use RevenueCat
-      const useRevenueCat = isNativeBilling();
+      const useRevenueCat = nativeApp;
 
       if (useRevenueCat) {
         // iOS: Use RevenueCat for native IAP
@@ -589,7 +593,7 @@ export const SubscriptionPage = ({ token, user }) => {
     if (!window.confirm("Are you sure you want to cancel your subscription? You'll retain access until the end of your billing period.")) return;
     setCancelLoading(true);
     try {
-      if (isNativeBilling() && currentSub?.provider === "revenuecat") {
+      if (nativeApp) {
         await openRevenueCatSubscriptionManagement();
         toast.info("Use the App Store subscription screen to turn off renewal.");
         return;
@@ -691,7 +695,7 @@ export const SubscriptionPage = ({ token, user }) => {
         )}
       </div>
 
-      {!isNativeBilling() && !WEB_PURCHASES_ENABLED && (
+      {!nativeApp && !WEB_PURCHASES_ENABLED && (
         <div
           className="archival-card border-amber-500/40 bg-amber-500/10 text-center"
           data-testid="web-subscription-unavailable"
@@ -750,7 +754,7 @@ export const SubscriptionPage = ({ token, user }) => {
       {/* Plan Cards */}
       {/* The pass sits above the ladder, not inside it: one payment for one
           reunion, versus months of subscription. Web only, host only. */}
-      {reunionPass && !isNativeBilling() && WEB_PURCHASES_ENABLED && isHost && (
+      {reunionPass && !nativeApp && WEB_PURCHASES_ENABLED && isHost && (
         <div className="mb-8">
           <ReunionPassCard onChoose={buyingPass ? undefined : handleBuyReunionPass} pass={reunionPass} />
           {buyingPass && (
@@ -775,24 +779,24 @@ export const SubscriptionPage = ({ token, user }) => {
             isLoading={checkoutLoading === plan.id}
             key={plan.id}
             localizedBillingOption={localizedPricing[plan.id]?.[billingCycle]}
-            nativePricing={isNativeBilling()}
+            nativePricing={nativeApp}
             nativePricingLoading={nativePricingLoading}
             onSelect={handleSelectPlan}
             plan={plan}
-            webPurchaseDisabled={!isNativeBilling() && !WEB_PURCHASES_ENABLED}
+            webPurchaseDisabled={nativeApp ? !isNativeBilling() : !WEB_PURCHASES_ENABLED}
           />
         ))}
       </div>
 
       {/* Add-Ons Section — hidden on iOS per App Store guideline 3.1.1 */}
-      {!isNativeBilling() && <AddOnsSection token={token} />}
+      {!nativeApp && <AddOnsSection token={token} />}
 
       {/* FAQ / Notes */}
       <div className="archival-card" data-testid="subscription-faq">
         <h2 className="font-display text-xl text-foreground">Pricing Notes</h2>
         <div className="mt-3 space-y-3 text-sm text-muted-foreground">
           <p>Each paid plan shows its complete monthly or annual charge. Annual savings appear only when both interval prices are available in the same currency.</p>
-          <p>The effective date of a plan change is confirmed by the applicable web or App Store purchase flow.</p>
+          <p>{nativeApp ? "The effective date of a plan change is confirmed by your device's app store." : "The effective date of a plan change is confirmed by the web purchase flow."}</p>
           <p>For communities of 100+ members, Elder Grove offers dedicated support and custom integrations — reach out to discuss your needs.</p>
         </div>
       </div>
@@ -800,10 +804,10 @@ export const SubscriptionPage = ({ token, user }) => {
       {/* Auto-Renewal Disclosure (Apple 3.1.2(c) compliance) */}
       <div className="archival-card space-y-3" data-testid="subscription-legal">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Paid plans are auto-renewable subscriptions. The applicable checkout or App Store confirmation
-          shows the complete charge and interval before purchase. Subscriptions renew unless auto-renew is
-          turned off. You can manage renewal through your device's subscription settings for App Store
-          purchases or through the web billing portal for Stripe purchases.
+          Paid plans are auto-renewable subscriptions. {nativeApp
+            ? "Your device's app store confirms the complete charge and interval before purchase. Manage renewal through your device's subscription settings."
+            : "Web checkout confirms the complete charge and interval before purchase. Manage renewal through your web subscription settings."}
+          {" "}Subscriptions renew unless auto-renew is turned off.
         </p>
         <div className="flex items-center justify-center gap-4 text-xs">
           <a href="/terms" className="text-primary hover:underline">Terms of Service</a>

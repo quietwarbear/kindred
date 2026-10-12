@@ -265,7 +265,7 @@ export const LandingPage = ({ isAuthenticated }) => {
           </div>
         </section>
 
-        <section className="page-section pb-16" id="plans">
+        {!isNative() && <section className="page-section pb-16" id="plans">
           <div className="archival-card">
             <p className="eyebrow-text">Pricing</p>
             <h2 className="mt-3 font-display text-3xl text-foreground">Start planning without payment.</h2>
@@ -301,7 +301,7 @@ export const LandingPage = ({ isAuthenticated }) => {
               See all plans <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-        </section>
+        </section>}
       </main>
 
       <footer className="page-section border-t border-border/40 py-8" data-testid="landing-footer">

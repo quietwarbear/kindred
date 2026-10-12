@@ -72,43 +72,49 @@ public class TikTokEventsPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     @objc func start(_ call: CAPPluginCall) {
-        guard
-            let accessToken = call.getString("accessToken"), !accessToken.isEmpty,
-            let appId = call.getString("appId"),
-            let ttAppId = call.getString("ttAppId"),
-            let config = TikTokConfig(accessToken: accessToken, appId: appId, tiktokAppId: ttAppId)
-        else {
-            call.reject("Missing TikTok config")
-            return
-        }
-        // React's production bundle is also embedded in Xcode Debug builds, so
-        // the native compilation configuration must own Test Event mode.
-        #if DEBUG
-        let debugEnabled = true
-        #else
-        let debugEnabled = call.getBool("debug") == true
-        #endif
-        if debugEnabled {
-            config.enableDebugMode()
-            config.setLogLevel(TikTokLogLevelDebug)
-        }
-        // Until the user has answered the tracking prompt, hold the first
-        // upload briefly so the install event can carry their choice.
-        if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
-            config.setDelayForATTUserAuthorizationInSeconds(20)
-        }
-        TikTokBusiness.initializeSdk(config) { success, error in
-            if success {
-                call.resolve()
-            } else {
-                call.reject(error?.localizedDescription ?? "TikTok SDK init failed")
+        // Capacitor invokes plugin methods on its bridge queue. TikTok creates
+        // scheduled upload/session timers on the calling thread's run loop;
+        // initialize on the main queue so those timers can actually fire.
+        DispatchQueue.main.async {
+            guard
+                let accessToken = call.getString("accessToken"), !accessToken.isEmpty,
+                let appId = call.getString("appId"),
+                let ttAppId = call.getString("ttAppId"),
+                let config = TikTokConfig(accessToken: accessToken, appId: appId, tiktokAppId: ttAppId)
+            else {
+                call.reject("Missing TikTok config")
+                return
+            }
+            // React's production bundle is also embedded in Xcode Debug builds,
+            // so native compilation owns Test Event mode.
+            #if DEBUG
+            let debugEnabled = true
+            #else
+            let debugEnabled = call.getBool("debug") == true
+            #endif
+            if debugEnabled {
+                config.enableDebugMode()
+                config.setLogLevel(TikTokLogLevelDebug)
+            }
+            // Hold the first upload briefly while the tracking prompt is pending.
+            if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
+                config.setDelayForATTUserAuthorizationInSeconds(20)
+            }
+            TikTokBusiness.initializeSdk(config) { success, error in
+                if success {
+                    call.resolve()
+                } else {
+                    call.reject(error?.localizedDescription ?? "TikTok SDK init failed")
+                }
             }
         }
     }
 
     @objc func requestTracking(_ call: CAPPluginCall) {
-        TikTokBusiness.requestTrackingAuthorization { status in
-            call.resolve(["status": Int(status)])
+        DispatchQueue.main.async {
+            TikTokBusiness.requestTrackingAuthorization { status in
+                call.resolve(["status": Int(status)])
+            }
         }
     }
 

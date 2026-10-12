@@ -65,9 +65,11 @@ const roleLabel = (value) => {
   return "Family Today";
 };
 
-export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryToday }) => {
+export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryToday, onSignInAgain }) => {
   const navigate = useNavigate();
   const [busy, setBusy] = useState("");
+  const [retrying, setRetrying] = useState(false);
+  const retryInFlight = useRef(false);
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
   const viewedRef = useRef(false);
   const shownCodeRef = useRef("");
@@ -160,17 +162,41 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
     }
   };
 
+  const retryToday = async () => {
+    if (retryInFlight.current || !onRetryToday) return;
+    retryInFlight.current = true;
+    setRetrying(true);
+    try {
+      await onRetryToday();
+    } catch {
+      toast.error("Today could not be refreshed. You can still open family activity.");
+    } finally {
+      retryInFlight.current = false;
+      setRetrying(false);
+    }
+  };
+
   if (todayLoading) {
     return <section className="archival-card" aria-busy="true" data-testid="today-loading"><p className="eyebrow-text">Family Today</p><h1 className="mt-3 font-display text-4xl">Finding what matters now…</h1></section>;
   }
 
   if (todayError || !todayData || !todayData.primary_action) {
+    const unavailable = todayError?.kind === "unavailable";
+    const sessionExpired = todayError?.kind === "session";
     return (
-      <section className="archival-card text-center" data-testid="today-error">
+      <section className="archival-card text-center" data-testid="today-error" aria-live="polite" aria-busy={retrying}>
         <CircleAlert className="mx-auto h-8 w-8 text-primary" />
-        <h1 className="mt-4 font-display text-4xl">Today needs a fresh look</h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-muted-foreground">Your family data was not changed. Try the private Today view again when the connection is ready.</p>
-        <Button className="mt-5" onClick={onRetryToday} type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Try again</Button>
+        <h1 className="mt-4 font-display text-4xl">{unavailable ? "Open your family space" : sessionExpired ? "Your session needs a refresh" : "Today couldn’t load"}</h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-muted-foreground">{unavailable
+          ? "The Today summary isn’t available for your current family access. Your family data was not changed. Open family activity or gatherings to continue."
+          : sessionExpired
+            ? "Sign in again to reconnect securely. Your family data was not changed."
+            : "We couldn’t load your private summary. Your family data was not changed. Retry, or open family activity to continue."}</p>
+        {sessionExpired ? <Button className="mt-5" onClick={onSignInAgain || (() => navigate("/login"))} type="button">Sign in again</Button> : !unavailable && <Button className="mt-5" disabled={retrying || !onRetryToday} onClick={retryToday} type="button" variant="outline"><RefreshCw className={`mr-2 h-4 w-4 ${retrying ? "animate-spin" : ""}`} />{retrying ? "Refreshing…" : "Try again"}</Button>}
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
+          <Button onClick={() => navigate("/activity")} type="button">Open family activity</Button>
+          <Button onClick={() => navigate("/gatherings")} type="button" variant="outline">Open gatherings</Button>
+        </div>
       </section>
     );
   }

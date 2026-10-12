@@ -6,6 +6,7 @@ import { ReunionPassCard } from "@/components/ReunionPassCard";
 import { PUBLIC_IDENTITY } from "@/config/publicIdentity";
 import { usePublicPlans } from "@/hooks/usePublicPlans";
 import { rememberPendingPlan } from "@/lib/pricing";
+import { isNative } from "@/lib/native-bridge";
 
 // Mirrors SubscriptionPage: web purchases are live only once the deployment
 // sets the RevenueCat Billing web key.
@@ -22,6 +23,19 @@ export const PricingPage = ({ session }) => {
     if (cycle !== "free") rememberPendingPlan(planId, cycle);
     navigate(session?.token ? "/subscription" : "/login?intent=subscribe");
   };
+
+  // Public web prices and checkout never belong in store-distributed apps.
+  if (isNative()) {
+    return (
+      <main className="page-section py-8" data-testid="native-pricing-page">
+        <h1 className="font-display text-4xl text-foreground">Kindred plans</h1>
+        <p className="mt-4 text-muted-foreground">View current plans and manage purchases securely through your device's app store.</p>
+        <Link className="mt-6 inline-block font-semibold text-primary" to={session?.token ? "/subscription" : "/login?intent=subscribe"}>
+          View in-app plans
+        </Link>
+      </main>
+    );
+  }
 
   return (
     <div className="app-canvas min-h-screen py-8">
