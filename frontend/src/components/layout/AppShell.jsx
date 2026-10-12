@@ -5,6 +5,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom"
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { NotificationPanel } from "@/components/layout/NotificationPanel";
 import { ActivityFeedPage } from "@/components/ActivityFeedPage";
 import { CourtyardsPage } from "@/components/CourtyardsPage";
@@ -157,7 +158,8 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
     }
   };
 
-  const effectiveRole = todayData?.viewer_role === "new_member" ? "member" : todayData?.viewer_role;
+  const viewerRole = todayData?.viewer_role ?? user?.role;
+  const effectiveRole = viewerRole === "new_member" ? "member" : viewerRole;
   const visibleNavItems = navItems.filter((item) => {
     if (item.adminOnly && !user?.is_platform_admin) return false;
     if (item.module && enabledModules && !enabledModules.includes(item.module)) return false;
@@ -165,7 +167,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
     if (item.category === "family_activation" && todayData?.lifecycle_state !== "provisional") return false;
     return true;
   });
-  const primaryCategories = new Set(todayData?.navigation_categories || ["today", "gatherings", "activity"]);
+  const primaryCategories = new Set(todayData?.navigation_categories?.length ? todayData.navigation_categories : ["today", "gatherings", "activity"]);
   const primaryNavItems = visibleNavItems.filter((item) => item.category && primaryCategories.has(item.category));
   const moreNavItems = visibleNavItems.filter((item) => !primaryNavItems.includes(item));
 
@@ -194,30 +196,11 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
     </NavLink>
   );
 
-  return (
-    <div className="app-canvas min-h-screen pb-10" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
-      <div className="page-section pt-6 md:pt-8">
-        {/* Mobile menu toggle — extra top padding so it clears the iOS status bar */}
-        <div className="mb-4 flex items-center justify-between lg:hidden" style={{ paddingTop: "calc(env(safe-area-inset-top, 20px) + 8px)" }}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <h1 className="font-display text-xl text-foreground">Kindred</h1>
-          </div>
-          <Button
-            className="rounded-full"
-            data-testid="mobile-menu-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            size="sm"
-            variant="outline"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className={`archival-card flex h-fit flex-col gap-6 lg:sticky lg:top-6 ${sidebarOpen ? "block" : "hidden lg:flex"}`}>
+  const sidebarContent = (
+    <>
+            <nav aria-label="Family tools" className="order-first grid gap-2 lg:hidden" data-testid="mobile-navigation">
+              {visibleNavItems.map(navLink)}
+            </nav>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -279,7 +262,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               </div>
             </div>
 
-            <nav className="grid gap-2" data-testid="shell-navigation">
+            <nav className="hidden gap-2 lg:grid" data-testid="shell-navigation">
               {primaryNavItems.map(navLink)}
               {moreNavItems.length ? (
                 <div className="grid gap-2">
@@ -342,6 +325,34 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                 Support
               </NavLink>
             </div>
+    </>
+  );
+
+  return (
+    <div className="app-canvas min-h-screen pb-10" style={{ paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
+      <div className="page-section pt-6 md:pt-8">
+        <div className="mb-4 flex items-center justify-between lg:hidden" style={{ paddingTop: "calc(env(safe-area-inset-top, 20px) + 8px)" }}>
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h1 className="font-display text-xl text-foreground">Kindred</h1>
+          </div>
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button aria-label="Open family menu" className="rounded-full" data-testid="mobile-menu-toggle" size="sm" variant="outline">
+                <Menu className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="flex w-[min(90vw,24rem)] flex-col gap-6 overflow-y-auto pt-[calc(env(safe-area-inset-top,0px)+3rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] [&>button]:top-[calc(env(safe-area-inset-top,0px)+1rem)]" data-testid="mobile-menu-drawer">
+              <SheetTitle className="sr-only">Kindred family menu</SheetTitle>
+              <SheetDescription className="sr-only">Choose a family tool or manage your account.</SheetDescription>
+              {sidebarContent}
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="archival-card hidden h-fit flex-col gap-6 lg:sticky lg:top-6 lg:flex">
+            {sidebarContent}
           </aside>
 
           <main className="space-y-6">
@@ -352,11 +363,11 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
                   Your family space, without the noise.
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  Start with what matters today. Every existing family tool remains close by under More.
+                  Start with what matters today. Open the menu for your family tools.
                 </p>
               </div>
               <div className="soft-panel flex items-center gap-3 self-start" data-testid="shell-value-pill">
-                <Menu className="h-4 w-4 text-primary" />
+                <Sparkles aria-hidden="true" className="h-4 w-4 text-primary" />
                 <div>
                   <p className="text-sm font-semibold text-foreground">Digital sovereignty</p>
                   <p className="text-xs text-muted-foreground">No feed. No ads. No algorithm.</p>
