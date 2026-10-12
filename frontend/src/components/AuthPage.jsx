@@ -51,10 +51,12 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
   const [reunionDraft] = useState(() => loadReunionDraft());
   const hasReunionIntent = intent === "reunion" && reunionDraftIsComplete(reunionDraft);
   const hasFamilyAccessIntent = intent === "family-access";
-  const hasLightweightIntent = hasReunionIntent || hasFamilyAccessIntent;
+  const hasAccountCreationIntent = isNative() && intent === "create-account";
+  const identityOnly = hasFamilyAccessIntent || hasAccountCreationIntent;
+  const hasLightweightIntent = hasReunionIntent || identityOnly;
   const [launchForm, setLaunchForm] = useState(initialLaunchState);
   const [joinForm, setJoinForm] = useState(initialJoinState);
-  const [activeTab, setActiveTab] = useState(pendingInviteCode || intent === "join" ? "join" : hasReunionIntent ? "launch" : "login");
+  const [activeTab, setActiveTab] = useState(pendingInviteCode || intent === "join" ? "join" : hasReunionIntent || hasAccountCreationIntent ? "launch" : "login");
 
   // Pre-fill invite code from deep link
   useEffect(() => {
@@ -261,8 +263,8 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
     setIsSubmitting(true);
     try {
       const gaId = gaClientId();
-      const payload = await apiRequest(hasFamilyAccessIntent ? "/auth/guest-account" : "/auth/bootstrap", {
-        data: hasFamilyAccessIntent
+      const payload = await apiRequest(identityOnly ? "/auth/guest-account" : "/auth/bootstrap", {
+        data: identityOnly
           ? {
               full_name: launchForm.full_name,
               email: launchForm.email,
@@ -363,10 +365,10 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
           <div>
             <p className="eyebrow-text text-orange-200">Private family gathering planning</p>
             <h1 className="mt-4 font-display text-4xl sm:text-5xl" data-testid="auth-headline">
-              {hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? `Save the ${gatheringTypeDetails(reunionDraft).noun}. Keep setup light.` : campaign.headline}
+              {hasAccountCreationIntent ? "Create your Kindred account." : hasFamilyAccessIntent ? "Ask to stay connected. Keep access deliberate." : hasReunionIntent ? `Save the ${gatheringTypeDetails(reunionDraft).noun}. Keep setup light.` : campaign.headline}
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-stone-200 sm:text-base">
-              {hasFamilyAccessIntent
+              {hasAccountCreationIntent ? "Create your account first, then start a private gathering or join through a family invitation." : hasFamilyAccessIntent
                 ? "Sign in or create an account, then send the private request already connected to your RSVP. An organizer must approve before family access begins."
                 : hasReunionIntent
                 ? "Your draft stays private until you create this account. We’ll save the gathering first; permanent family-space details can wait."
@@ -388,7 +390,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
         </div>
 
         <div className="archival-card order-1 lg:order-2">
-          {!hasLightweightIntent ? (
+          {!hasLightweightIntent && !isNative() ? (
             <div className="mb-6 flex flex-col gap-3 rounded-[24px] border border-primary/20 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid="auth-new-here">
               <div>
                 <p className="text-base font-semibold text-foreground">New to Kindred?</p>
@@ -490,12 +492,12 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
                 </div>
               ) : (
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-testid="family-access-account-summary">
-                  <p className="text-sm font-semibold text-foreground">Account first, approval second</p>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">Creating this account does not join a family space. Kindred will submit the private guest claim only after authentication.</p>
+                  <p className="text-sm font-semibold text-foreground">{hasAccountCreationIntent ? "Account first, family setup next" : "Account first, approval second"}</p>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{hasAccountCreationIntent ? "Creating an account does not grant access to another family’s space." : "Creating this account does not join a family space. Kindred will submit the private guest claim only after authentication."}</p>
                 </div>
               )}
               <Button className="rounded-full py-6 text-base" data-testid="launch-submit-button" disabled={isSubmitting} type="submit">
-                {isSubmitting ? "Opening…" : hasFamilyAccessIntent ? "Create account and continue" : `Save ${gatheringTypeDetails(reunionDraft).noun} draft`}
+                {isSubmitting ? "Opening…" : identityOnly ? "Create account and continue" : `Save ${gatheringTypeDetails(reunionDraft).noun} draft`}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>

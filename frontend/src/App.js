@@ -8,6 +8,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthPage } from "@/components/AuthPage";
 import { InviteLandingPage } from "@/components/InviteLandingPage";
 import { LandingPage } from "@/components/LandingPage";
+import { NativeInvitationPage, NativeWelcomePage } from "@/components/NativeWelcomePage";
 import { PricingPage } from "@/components/PricingPage";
 import { PrivacyPolicyPage } from "@/components/PrivacyPolicyPage";
 import { PublicRSVPPage } from "@/components/PublicRSVPPage";
@@ -290,7 +291,8 @@ function App() {
       <div className="App min-h-screen bg-background text-foreground">
         <BrowserRouter>
           <Routes>
-            <Route element={<LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
+            <Route element={isNative() ? session?.token ? <Navigate replace to={session.user?.community_id ? "/home" : "/reunion/start"} /> : <NativeWelcomePage /> : <LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
+            <Route element={<NativeInvitationPage />} path="/invitation" />
             <Route element={<IntentChooserPage />} path="/start" />
             <Route element={<ReunionStartPage onSessionRefresh={handleAuthSuccess} session={session} />} path="/reunion/start" />
             <Route
