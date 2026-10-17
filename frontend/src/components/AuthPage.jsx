@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, errorDetail } from "@/lib/api";
 import { trackReunionEvent, gaClientId } from "@/lib/analytics";
 import { isNative } from "@/lib/native-bridge";
 import { gatheringCampaign } from "@/lib/seasonalCampaign";
@@ -111,7 +111,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
         trackReunionEvent("reunion_saved", { source: "account_boundary" });
         navigate(draftLandingPath(reunionDraft, event.id));
       } catch (error) {
-        toast.error(error.response?.data?.detail || "Your account is ready, but the draft could not be saved.");
+        toast.error(errorDetail(error, "Your account is ready, but the draft could not be saved."));
         navigate("/reunion/start");
       }
       return;
@@ -285,7 +285,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       });
       await completeAuthentication(payload, hasFamilyAccessIntent ? "Your account is ready. No family access has been granted yet." : "Your planning account is ready.");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to create your account.");
+      toast.error(errorDetail(error, "Unable to create your account."));
     } finally {
       setIsSubmitting(false);
     }
@@ -301,7 +301,7 @@ export const AuthPage = ({ onAuthSuccess, onGoogleNativeSignIn, pendingInviteCod
       });
       await completeAuthentication(payload, "Welcome into the community.");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to accept that invite.");
+      toast.error(errorDetail(error, "Unable to accept that invite."));
     } finally {
       setIsSubmitting(false);
     }

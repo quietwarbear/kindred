@@ -126,6 +126,33 @@ function isHonorBrowserAdTimeout(event) {
   );
 }
 
+// In-app browsers beyond Meta's — TikTok's and various iOS/Android webviews —
+// inject their own bridge scripts. These signatures reference APIs that live
+// only in those host webviews (Kindred's own code never calls TTRCCallbacks
+// or window.webkit.messageHandlers), so they are third-party, not ours.
+// TTRCCallbacks is TikTok-only and safe to drop on the message alone; the
+// webkit/sendDataToNative bridge is kept only when NO real Kindred bundle
+// frame is present, so a genuine Capacitor bridge failure would still reach us.
+function isThirdPartyWebviewBridgeNoise(event) {
+  return (event?.exception?.values || []).some((exception) => {
+    const value = String(exception?.value || "");
+    if (/\bTTRCCallbacks\b/i.test(value)) return true;
+    const frames = getExceptionFrames(exception);
+    const bridgeSignature =
+      /window\.webkit\.messageHandlers/i.test(value) ||
+      /\bsendDataToNative\b/i.test(value);
+    return (
+      bridgeSignature &&
+      frames.length > 0 &&
+      frames.every(
+        (frame) =>
+          isAnonymousOrDocumentFrame(frame) ||
+          String(frame?.filename || "").includes("iabjs://"),
+      )
+    );
+  });
+}
+
 // Sentry applies ignoreErrors to exception messages, but some mobile browsers
 // inject code whose identifying evidence lives only in the stack filename or
 // serialized rejection payload. Keep this filter deliberately narrow so real
@@ -135,6 +162,7 @@ export function filterInjectedBrowserNoise(event) {
     hasInjectedMetaFrame(event) ||
     isMetaJavaBridgeFailure(event) ||
     isMetaInjectedRuntimeFailure(event) ||
+    isThirdPartyWebviewBridgeNoise(event) ||
     isHonorBrowserAdTimeout(event)
   ) {
     return null;
