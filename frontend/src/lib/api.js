@@ -20,6 +20,19 @@ export const apiRequest = async (path, { method = "GET", data, token, params, he
   return response.data;
 };
 
+// FastAPI/Pydantic 422 responses put an ARRAY of {type, loc, msg, ...} objects
+// in `detail`. Passing that straight to a React child (e.g. toast.error)
+// crashes with "Objects are not valid as a React child" (KINDRED-FRONTEND-Q).
+// Always run backend error details through this before rendering them.
+export const errorDetail = (error, fallback = "Something went wrong.") => {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((e) => (e && typeof e === "object" ? e.msg : String(e))).filter(Boolean).join(", ") || fallback;
+  }
+  if (detail && typeof detail === "object") return detail.msg || fallback;
+  return detail || fallback;
+};
+
 export const convertFileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
     if (!file) {
