@@ -203,7 +203,9 @@ async def _send_to_members(community_id: str, force: bool = False) -> dict:
         }
 
     members = await users_collection.find(
-        {"community_id": community_id},
+        # Skip unverified signups (bots never verify). Accounts without the
+        # field — existing users and provider sign-ins — are treated as verified.
+        {"community_id": community_id, "email_verified": {"$ne": False}},
         {
             "_id": 0,
             "id": 1,

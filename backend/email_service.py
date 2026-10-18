@@ -89,6 +89,22 @@ async def send_subscription_welcome(email: str, plan_name: str, billing_cycle: s
     await _send_email(email, f"Welcome to Kindred {plan_name}!", _base_template("You're all set!", body))
 
 
+async def send_verify_email(email: str, full_name: str, verify_url: str) -> bool:
+    """One-time 'verify your email' email, sent on password signup. Clicking it
+    confirms the address is real, which gates the welcome and filters bots
+    (bots don't verify). Best-effort; never blocks or fails signup.
+    """
+    first = (full_name or "").strip().split(" ")[0] or "there"
+    body = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first}, one quick step to finish setting up Kindred — confirm this is really your email.</p>
+    <div style="text-align:center;margin:28px 0;">
+        <a href="{verify_url}" style="background:#d4a574;color:#2d1810;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Verify my email</a>
+    </div>
+    <p style="font-size:13px;line-height:1.6;color:#8b7355;">This link expires in 48 hours. If you didn't create a Kindred account, you can safely ignore this email.</p>
+    """
+    return await _send_email(email, "Verify your email for Kindred", _base_template("Confirm your email", body))
+
+
 async def send_account_welcome(email: str, full_name: str, community_name: str | None = None) -> bool:
     """One-time welcome email when someone first creates or joins a Kindred account.
 
