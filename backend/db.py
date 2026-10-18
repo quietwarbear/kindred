@@ -18,6 +18,7 @@ communities_collection = db.communities
 invites_collection = db.invites
 user_sessions_collection = db.user_sessions
 password_resets_collection = db.password_resets
+email_verifications_collection = db.email_verifications
 subyards_collection = db.subyards
 kinships_collection = db.kinship_relationships
 events_collection = db.events

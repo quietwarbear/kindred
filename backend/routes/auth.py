@@ -84,6 +84,7 @@ from db import (
     notification_events_collection,
     notification_preferences_collection,
     password_resets_collection,
+    email_verifications_collection,
     polls_collection,
     reunion_recaps_collection,
     sso_codes_collection,
@@ -521,6 +522,172 @@ async def apple_login_callback(request: Request):
     return redirect
 
 
+# --- Email verification (soft gate) -----------------------------------------
+# Password signups start unverified and get a "verify your email" link; the
+# welcome and ongoing email only follow once they click it. Bots don't verify,
+# so this keeps them out of our email and our real-user counts. Invited
+# relatives and provider sign-ins (Google/SSO) are already verified, so they
+# skip this. The gate is SOFT: an unverified account still works in the app.
+VERIFY_TOKEN_TTL = timedelta(hours=48)
+
+
+def _verification_expired(doc: dict[str, Any]) -> bool:
+    raw = doc.get("expires_at")
+    if not raw:
+        return False
+    try:
+        exp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp < datetime.now(timezone.utc)
+
+
+async def _issue_email_verification(user_id: str, email: str, full_name: str) -> None:
+    """Store (replacing any prior) a verification token and send the verify
+    email. Best-effort: failures are logged, never raised into signup."""
+    try:
+        token = secrets.token_urlsafe(32)
+        await email_verifications_collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "email": email,
+                    "token": token,
+                    "created_at": now_iso(),
+                    "expires_at": (
+                        datetime.now(timezone.utc) + VERIFY_TOKEN_TTL
+                    ).isoformat(),
+                }
+            },
+            upsert=True,
+        )
+        api_base = os.environ.get("PUBLIC_API_BASE_URL", "").strip().rstrip("/")
+        verify_url = f"{api_base}/api/auth/verify/{token}"
+        from email_service import send_verify_email
+
+        asyncio.create_task(send_verify_email(email, full_name, verify_url))
+    except Exception:
+        logger.exception("Failed to issue email verification for user %s", user_id)
+
+
+def _verify_page(
+    title: str,
+    message: str,
+    button_label: str | None = None,
+    button_url: str = "",
+    post_action: str | None = None,
+) -> str:
+    app_url = os.environ.get("APP_URL", "https://www.heykindred.org")
+    if post_action:
+        cta = (
+            f'<form method="post" action="{post_action}" style="margin:24px 0 0;">'
+            f'<button type="submit" style="background:#d4a574;color:#2d1810;border:none;'
+            f'padding:12px 32px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;">'
+            f"{button_label}</button></form>"
+        )
+    elif button_label:
+        cta = (
+            f'<div style="margin:24px 0 0;"><a href="{button_url or app_url}" '
+            f'style="background:#d4a574;color:#2d1810;padding:12px 32px;border-radius:8px;'
+            f'text-decoration:none;font-weight:600;font-size:15px;">{button_label}</a></div>'
+        )
+    else:
+        cta = ""
+    return (
+        '<!doctype html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{title} — Kindred</title></head>"
+        '<body style="margin:0;background:#f9f5f0;font-family:-apple-system,BlinkMacSystemFont,'
+        "'Segoe UI',Roboto,sans-serif;\">"
+        '<div style="max-width:480px;margin:48px auto;background:#fff;border:1px solid #e8e0d8;'
+        'border-radius:12px;overflow:hidden;">'
+        '<div style="background:linear-gradient(135deg,#2d1810 0%,#4a2c1f 100%);padding:28px 24px;text-align:center;">'
+        '<h1 style="color:#d4a574;margin:0;font-size:26px;">Kindred</h1></div>'
+        '<div style="padding:32px 28px;text-align:center;color:#1a1a1a;">'
+        f'<h2 style="margin:0 0 12px;color:#2d1810;font-size:22px;">{title}</h2>'
+        f'<p style="margin:0;font-size:15px;line-height:1.6;color:#5a4a3a;">{message}</p>'
+        f"{cta}</div></div></body></html>"
+    )
+
+
+_VERIFY_EXPIRED_MSG = (
+    "This verification link is no longer valid. Open Kindred and sign in to request a new one."
+)
+
+
+@router.post("/auth/verify/resend")
+async def resend_email_verification(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Re-send the verification email to the signed-in user (if still unverified)."""
+    if current_user.get("email_verified"):
+        return {"ok": True, "already_verified": True}
+    await _issue_email_verification(
+        current_user["id"], current_user["email"], current_user.get("full_name", "")
+    )
+    return {"ok": True}
+
+
+@router.get("/auth/verify/{token}", response_class=HTMLResponse)
+async def verify_email_confirm(token: str):
+    """Confirmation page. A bare GET (mail scanners prefetch links) must not
+    verify anyone — the POST below does, triggered by the button."""
+    doc = await email_verifications_collection.find_one({"token": token}, {"_id": 0})
+    if not doc or _verification_expired(doc):
+        return HTMLResponse(
+            _verify_page("Link expired", _VERIFY_EXPIRED_MSG, button_label="Open Kindred"),
+            status_code=404,
+        )
+    return HTMLResponse(
+        _verify_page(
+            "Verify your email",
+            "Click below to confirm your email and finish setting up your Kindred account.",
+            button_label="Verify my email",
+            post_action=f"/api/auth/verify/{token}",
+        )
+    )
+
+
+@router.post("/auth/verify/{token}", response_class=HTMLResponse)
+async def verify_email(token: str):
+    doc = await email_verifications_collection.find_one({"token": token}, {"_id": 0})
+    if not doc or _verification_expired(doc):
+        return HTMLResponse(
+            _verify_page("Link expired", _VERIFY_EXPIRED_MSG, button_label="Open Kindred"),
+            status_code=404,
+        )
+    user = await users_collection.find_one({"id": doc["user_id"]}, {"_id": 0})
+    if user:
+        await users_collection.update_one(
+            {"id": user["id"]},
+            {"$set": {"email_verified": True, "email_verified_at": now_iso()}},
+        )
+        community = None
+        if user.get("community_id"):
+            community = await communities_collection.find_one(
+                {"id": user["community_id"]}, {"_id": 0}
+            )
+        # Welcome lands only now, once we know a real person owns this inbox.
+        from email_service import send_account_welcome
+
+        asyncio.create_task(
+            send_account_welcome(
+                user["email"], user.get("full_name", ""), (community or {}).get("name")
+            )
+        )
+    await email_verifications_collection.delete_one({"token": token})
+    return HTMLResponse(
+        _verify_page(
+            "You're verified!",
+            "Your email is confirmed. Head back to Kindred — everything's ready.",
+            button_label="Open Kindred",
+        )
+    )
+
+
 @router.post("/auth/bootstrap", response_model=AuthResponse)
 async def bootstrap_community(payload: CommunityBootstrapRequest):
     email = normalize_email(payload.email)
@@ -558,6 +725,7 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
         "google_picture": "",
         "password_hash": hash_password(payload.password),
         "role": "host",
+        "email_verified": False,
         "community_id": community_id,
         "community_ids": [community_id],
         "auth_provider": "password",
@@ -604,13 +772,10 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
     # A host creating a community is Kindred's headline acquisition event.
     ga4.track_sign_up(user_id, method="bootstrap", ga_client_id=payload.ga_client_id or "")
 
-    # One-time welcome email. Fire-and-forget so a slow/failed send never blocks
-    # signup. Note: a bootstrap host's email is unverified, so this also reaches
-    # bot signups — gate behind email verification when that lands.
-    from email_service import send_account_welcome
-    asyncio.create_task(
-        send_account_welcome(email, user_doc["full_name"], community_doc["name"])
-    )
+    # Password signup starts unverified: send a verify link instead of the
+    # welcome. The welcome follows once they confirm the email (verify endpoint),
+    # which keeps bots — who never verify — out of our email and our counts.
+    await _issue_email_verification(user_id, email, user_doc["full_name"])
 
     return build_auth_response(user_doc, community_doc)
 
@@ -652,6 +817,8 @@ async def register_with_invite(payload: InviteRegistrationRequest):
         "google_picture": "",
         "password_hash": hash_password(payload.password),
         "role": invite_doc["role"],
+        # Invited relatives proved this email by receiving the invite at it.
+        "email_verified": True,
         "community_id": invite_doc["community_id"],
         "community_ids": [invite_doc["community_id"]],
         "auth_provider": "password",
@@ -731,6 +898,7 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
         "community_ids": [],
         "auth_provider": "password",
         "onboarding_completed": False,
+        "email_verified": False,
         "ga_client_id": payload.ga_client_id or "",
         "created_at": now_iso(),
     }
@@ -743,6 +911,9 @@ async def register_guest_account(payload: GuestAccountRegistrationRequest):
         ) from exc
 
     ga4.track_sign_up(user_doc["id"], method="guest", ga_client_id=payload.ga_client_id or "")
+
+    # Password signup starts unverified: send the verify link.
+    await _issue_email_verification(user_doc["id"], email, user_doc["full_name"])
 
     return build_auth_response(user_doc, None)
 
