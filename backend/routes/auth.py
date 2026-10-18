@@ -1,5 +1,6 @@
 """Authentication routes."""
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -603,6 +604,14 @@ async def bootstrap_community(payload: CommunityBootstrapRequest):
     # A host creating a community is Kindred's headline acquisition event.
     ga4.track_sign_up(user_id, method="bootstrap", ga_client_id=payload.ga_client_id or "")
 
+    # One-time welcome email. Fire-and-forget so a slow/failed send never blocks
+    # signup. Note: a bootstrap host's email is unverified, so this also reaches
+    # bot signups — gate behind email verification when that lands.
+    from email_service import send_account_welcome
+    asyncio.create_task(
+        send_account_welcome(email, user_doc["full_name"], community_doc["name"])
+    )
+
     return build_auth_response(user_doc, community_doc)
 
 
@@ -663,6 +672,15 @@ async def register_with_invite(payload: InviteRegistrationRequest):
     # Invited relatives are organic growth, not paid — tracking them separately
     # from `bootstrap` keeps paid CAC honest.
     ga4.track_sign_up(user_doc["id"], method="invite", ga_client_id=payload.ga_client_id or "")
+
+    # One-time welcome email. Invited relatives are already email-verified by the
+    # invite they received, so this path is bot-safe. Fire-and-forget.
+    from email_service import send_account_welcome
+    asyncio.create_task(
+        send_account_welcome(
+            email, user_doc["full_name"], (community_doc or {}).get("name")
+        )
+    )
 
     return build_auth_response(user_doc, community_doc)
 

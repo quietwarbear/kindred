@@ -89,6 +89,44 @@ async def send_subscription_welcome(email: str, plan_name: str, billing_cycle: s
     await _send_email(email, f"Welcome to Kindred {plan_name}!", _base_template("You're all set!", body))
 
 
+async def send_account_welcome(email: str, full_name: str, community_name: str | None = None) -> bool:
+    """One-time welcome email when someone first creates or joins a Kindred account.
+
+    Transactional and fire-and-forget (callers use asyncio.create_task), so it
+    never blocks or fails signup. NOTE: this fires on every new account,
+    including unverified ones — see docs. Invited relatives are already
+    email-verified by the invite they received; a host who bootstraps a family
+    is not, so a future email-verification gate should precede this for the
+    bootstrap path to avoid welcoming bot signups.
+    """
+    first = (full_name or "").strip().split(" ")[0] or "there"
+    family = (community_name or "").strip()
+    opener = (
+        f"welcome to Kindred — where <strong>{family}</strong> gathers and keeps its stories."
+        if family
+        else "welcome to Kindred — where your family gathers and keeps its stories."
+    )
+    body = f"""
+    <p style="font-size:16px;line-height:1.6;">Hi {first}, {opener}</p>
+    <p style="font-size:14px;line-height:1.6;color:#5a4a3a;">
+        Kindred is built for one thing: bringing your people together and keeping
+        what matters. Here's a good first move:
+    </p>
+    <div style="background:#f9f5f0;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="margin:0;font-size:14px;color:#5a4a3a;">
+            📅 <strong>Plan a gathering</strong> — set the date, even a rough one.<br>
+            ✉️ <strong>Invite the family</strong> — one link brings everyone in.<br>
+            📖 <strong>Keep the stories</strong> — photos, voices, and memories in one place.
+        </p>
+    </div>
+    <div style="text-align:center;margin:28px 0;">
+        <a href="{APP_URL}" style="background:#d4a574;color:#2d1810;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Open Kindred</a>
+    </div>
+    <p style="font-size:13px;line-height:1.6;color:#8b7355;">Glad you're here — let's bring everyone together.</p>
+    """
+    return await _send_email(email, "Welcome to Kindred", _base_template(f"Welcome, {first}", body))
+
+
 async def send_reunion_draft_copy(email: str, draft: dict) -> bool:
     """Send an organizer the draft they built before making an account.
 
