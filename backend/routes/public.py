@@ -51,6 +51,7 @@ from itinerary import (
     activity_response_open,
     activity_summaries,
     effective_response_choice,
+    can_view_activity_link,
     own_activity_responses,
     published_activities,
     replace_respondent_activity_responses,
@@ -399,6 +400,34 @@ async def secure_public_rsvp_submit(
 ):
     """Update an invitation using an Authorization header, never a request URL."""
     return await _public_rsvp_submit(_invitation_token(authorization), payload)
+
+
+@router.get("/rsvp/materials/{material_id}")
+async def secure_public_material_download(
+    material_id: str, authorization: str | None = Header(default=None)
+):
+    """K6: a guest downloads an activity file they answered "coming" for.
+
+    Same bearer invitation token as the RSVP view; never a URL token.
+    """
+    from routes.events import material_file_response
+
+    event, invite = await _find_event_and_invite(_invitation_token(authorization))
+    if not event or not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This invitation link is not valid.",
+        )
+    _identity, aliases = public_respondent_identity(invite)
+    own = own_activity_responses(event, aliases)
+
+    def allowed(activity: dict) -> bool:
+        if activity.get("visibility") != "published":
+            return False
+        my_status = str((own.get(activity.get("id", "")) or {}).get("status") or "")
+        return can_view_activity_link(my_status, privileged=False)
+
+    return await material_file_response(event, material_id, allowed=allowed)
 
 
 @router.post("/family-access-claim")

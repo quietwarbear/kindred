@@ -16,6 +16,7 @@ import {
   choicesApply,
   closedResponseMessage,
 } from "@/components/reunion/ActivityAccess";
+import { ActivityMaterials } from "@/components/reunion/ActivityMaterials";
 
 // Public, no-account RSVP page for https://heykindred.org/rsvp#token.
 // Fragments stay out of HTTP request URLs; API authentication uses a header.
@@ -329,6 +330,7 @@ export const PublicRSVPPage = () => {
                       </span>
                     </p>
                     <ActivityAccess activity={activity} className="mt-1 text-emerald-900" />
+                    <ActivityMaterials activity={activity} className="mt-2 bg-white/60" token={token} />
                     <p className="mt-1 text-xs text-emerald-800">
                       {formatMoment(activity.start_at, activity.timezone, { weekday: "short", hour: "numeric", minute: "2-digit" })}
                       {" · "}{activity.attendance?.coming || 0} coming · {activity.attendance?.maybe || 0} maybe
@@ -423,6 +425,7 @@ export const PublicRSVPPage = () => {
                       {activity.description ? <p className="mt-3 text-sm leading-6 text-slate-600">{activity.description}</p> : null}
                       {activity.notes ? <p className="mt-2 text-sm text-slate-700"><strong>Know before you go:</strong> {activity.notes}</p> : null}
                       <ActivityAccess activity={activity} className="mt-2" />
+                      <ActivityMaterials activity={activity} className="mt-2" token={token} />
                       {activity.rsvp_deadline ? (
                         <p className="mt-2 text-xs text-slate-500">
                           Activity response deadline: {formatMoment(activity.rsvp_deadline, activity.timezone, {

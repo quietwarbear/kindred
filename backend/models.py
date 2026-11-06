@@ -225,8 +225,16 @@ class AgendaItemRequest(BaseModel):
     response_choices: list[str] = Field(default_factory=list, max_length=20)
     attendance_requested: bool = True
     notes: str = ""
+    # K6. None (older clients) keeps the saved supply list on update.
+    supply_list: str | None = Field(default=None, max_length=4000)
     visibility: Literal["draft", "published"] = "draft"
     featured: bool = False
+
+
+class ActivityMaterialUploadRequest(BaseModel):
+    name: str = Field(default="", max_length=255)
+    # A data URL or bare base64; the cap is checked again after decoding.
+    data_url: str = Field(min_length=1, max_length=7_000_100)
 
 
 class ActivityRSVPRequest(BaseModel):

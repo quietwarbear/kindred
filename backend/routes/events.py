@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from courtyard_helpers import (
@@ -12,7 +12,15 @@ from courtyard_helpers import (
     build_recurring_dates,
     build_role_suggestions,
 )
+from activity_materials import (
+    MAX_MATERIALS_PER_ACTIVITY,
+    MAX_MATERIALS_PER_EVENT,
+    find_material,
+    material_download_headers,
+    validate_material_upload,
+)
 from db import (
+    activity_material_files_collection,
     events_collection,
     invitation_delivery_outbox_collection,
     users_collection,
@@ -49,7 +57,9 @@ from itinerary import (
     activity_choice_summaries,
     activity_response_open,
     activity_summaries,
+    can_view_activity_link,
     canonical_activity_responses,
+    is_event_link_privileged,
     local_day_key,
     normalize_activity,
     overlap_pairs,
@@ -67,6 +77,7 @@ from rsvp_integrity import (
     member_invite_aliases,
 )
 from models import (
+    ActivityMaterialUploadRequest,
     ActivityRSVPRequest,
     AgendaItemRequest,
     ChecklistItemRequest,
@@ -537,6 +548,7 @@ async def delete_event(
     ensure_minimum_role(current_user, "organizer")
     await get_event_for_user(event_id, current_user)
     await events_collection.delete_one({"id": event_id})
+    await activity_material_files_collection.delete_many({"event_id": event_id})
     return {"ok": True}
 
 
@@ -1347,6 +1359,8 @@ async def update_agenda_activity(
         )
     replacement["revision_history"] = history[-20:]
     replacement["updated_at"] = now_iso()
+    if payload.supply_list is None:
+        replacement["supply_list"] = existing.get("supply_list", "")
     agenda = [replacement if item.get("id") == activity_id else item for item in agenda]
     agenda.sort(
         key=lambda item: (
@@ -1476,6 +1490,11 @@ async def delete_agenda_activity(
             for item in event_doc.get("agenda", [])
             if item.get("id") != activity_id
         ]
+        event_doc["activity_materials"] = [
+            row
+            for row in event_doc.get("activity_materials") or []
+            if row.get("activity_id") != activity_id
+        ]
     event_doc["activity_rsvp_summaries"] = activity_summaries(event_doc)
     await events_collection.update_one(
         {"id": event_id},
@@ -1483,12 +1502,199 @@ async def delete_agenda_activity(
             "$set": {
                 "agenda": event_doc.get("agenda", []),
                 "activity_rsvp_summaries": event_doc["activity_rsvp_summaries"],
-            }
+            },
+            **(
+                {}
+                if response_count
+                else {"$pull": {"activity_materials": {"activity_id": activity_id}}}
+            ),
         },
     )
+    if not response_count:
+        await activity_material_files_collection.delete_many(
+            {"event_id": event_id, "activity_id": activity_id}
+        )
     return serialize_event_for_user(
         _event_with_activity_summaries(event_doc), current_user
     )
+
+
+def _find_activity(event_doc: dict[str, Any], activity_id: str) -> dict[str, Any]:
+    activity = next(
+        (item for item in event_doc.get("agenda", []) if item.get("id") == activity_id),
+        None,
+    )
+    if not activity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Itinerary activity not found.",
+        )
+    return activity
+
+
+@router.post("/events/{event_id}/agenda/{activity_id}/materials", response_model=EventPublic)
+async def add_activity_material(
+    event_id: str,
+    activity_id: str,
+    payload: ActivityMaterialUploadRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """K6: attach a PDF or image to one activity (organizers only)."""
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    _find_activity(event_doc, activity_id)
+    existing = [
+        row
+        for row in event_doc.get("activity_materials") or []
+        if row.get("activity_id") == activity_id
+    ]
+    if len(existing) >= MAX_MATERIALS_PER_ACTIVITY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "materials_limit",
+                "message": f"An activity can hold up to {MAX_MATERIALS_PER_ACTIVITY} files.",
+            },
+        )
+    data, mime_type, name = validate_material_upload(payload.name, payload.data_url)
+    material = {
+        "id": str(uuid.uuid4()),
+        "activity_id": activity_id,
+        "name": name,
+        "mime_type": mime_type,
+        "size": len(data),
+        "uploaded_by": current_user.get("id", ""),
+        "created_at": now_iso(),
+    }
+    # Store the bytes first: metadata that points at nothing would show a
+    # file nobody can open, while orphaned bytes are only wasted space.
+    await activity_material_files_collection.insert_one(
+        {
+            "id": material["id"],
+            "event_id": event_id,
+            "activity_id": activity_id,
+            "mime_type": mime_type,
+            "data": data,
+            "created_at": material["created_at"],
+        }
+    )
+    result = await events_collection.update_one(
+        {
+            "id": event_id,
+            "agenda.id": activity_id,
+            # Event-wide cap, enforced atomically.
+            f"activity_materials.{MAX_MATERIALS_PER_EVENT - 1}": {"$exists": False},
+        },
+        {"$push": {"activity_materials": material}},
+    )
+    if not result.modified_count:
+        await activity_material_files_collection.delete_one({"id": material["id"]})
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "materials_limit",
+                "message": f"An event can hold up to {MAX_MATERIALS_PER_EVENT} files.",
+            },
+        )
+    event_doc["activity_materials"] = [
+        *(event_doc.get("activity_materials") or []),
+        material,
+    ]
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
+
+
+@router.delete(
+    "/events/{event_id}/agenda/{activity_id}/materials/{material_id}",
+    response_model=EventPublic,
+)
+async def delete_activity_material(
+    event_id: str,
+    activity_id: str,
+    material_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    ensure_minimum_role(current_user, "organizer")
+    event_doc = await get_event_for_user(event_id, current_user)
+    material = find_material(event_doc, material_id)
+    if not material or material.get("activity_id") != activity_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found."
+        )
+    await events_collection.update_one(
+        {"id": event_id},
+        {"$pull": {"activity_materials": {"id": material_id}}},
+    )
+    await activity_material_files_collection.delete_one(
+        {"id": material_id, "event_id": event_id}
+    )
+    event_doc["activity_materials"] = [
+        row
+        for row in event_doc.get("activity_materials") or []
+        if row.get("id") != material_id
+    ]
+    return serialize_event_for_user(
+        _event_with_activity_summaries(event_doc), current_user
+    )
+
+
+async def material_file_response(
+    event_doc: dict[str, Any], material_id: str, *, allowed
+) -> Response:
+    """Return the file if ``allowed(activity)`` is true, otherwise 404.
+
+    One 404 for "no such file" and "not for you", so the endpoint never
+    confirms that a withheld file exists.
+    """
+    not_found = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+    material = find_material(event_doc, material_id)
+    if not material:
+        raise not_found
+    activity = next(
+        (
+            item
+            for item in event_doc.get("agenda", [])
+            if item.get("id") == material.get("activity_id")
+        ),
+        None,
+    )
+    if not activity or not allowed(activity):
+        raise not_found
+    stored = await activity_material_files_collection.find_one(
+        {"id": material_id, "event_id": event_doc.get("id")}, {"_id": 0}
+    )
+    if not stored or not stored.get("data"):
+        raise not_found
+    return Response(
+        content=bytes(stored["data"]),
+        media_type=material.get("mime_type") or "application/octet-stream",
+        headers=material_download_headers(str(material.get("name") or "material")),
+    )
+
+
+@router.get("/events/{event_id}/materials/{material_id}")
+async def download_activity_material(
+    event_id: str,
+    material_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """K6: organizers, the planning team, and people coming to the activity."""
+    event_doc = await get_event_for_user(event_id, current_user)
+    if current_user.get("role") in {"host", "organizer"}:
+        return await material_file_response(
+            event_doc, material_id, allowed=lambda _activity: True
+        )
+    privileged = is_event_link_privileged(event_doc, current_user)
+    own = own_activity_responses(event_doc, member_invite_aliases(event_doc, current_user))
+
+    def allowed(activity: dict[str, Any]) -> bool:
+        if activity.get("visibility") != "published":
+            return False
+        my_status = str((own.get(activity.get("id", "")) or {}).get("status") or "")
+        return can_view_activity_link(my_status, privileged=privileged)
+
+    return await material_file_response(event_doc, material_id, allowed=allowed)
 
 
 @router.post("/events/{event_id}/activity-rsvp")

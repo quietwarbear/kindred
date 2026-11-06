@@ -23,6 +23,7 @@ import {
   choicesApply,
   closedResponseMessage,
 } from "@/components/reunion/ActivityAccess";
+import { ActivityMaterials } from "@/components/reunion/ActivityMaterials";
 import { trackReunionEvent } from "@/lib/analytics";
 import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 import { toast } from "@/components/ui/sonner";
@@ -408,6 +409,7 @@ export const ReunionAttendeeHubPage = ({ session }) => {
                         {activity.description ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{activity.description}</p> : null}
                         {activity.notes ? <p className="mt-2 text-sm"><strong>Know before you go:</strong> {activity.notes}</p> : null}
                         <ActivityAccess activity={activity} className="mt-3" />
+                        <ActivityMaterials activity={activity} className="mt-3" eventId={eventId} token={session.token} />
                         {activity.attendance_requested ? (
                           <>
                           <div className="mt-4 flex flex-wrap gap-2">
