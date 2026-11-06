@@ -26,6 +26,7 @@ from db import (
     registrant_hook_deliveries_collection,
     registrant_hooks_collection,
     registrant_import_flags_collection,
+    activity_material_files_collection,
     reunion_recaps_collection,
     sso_codes_collection,
     users_collection,
@@ -469,6 +470,14 @@ async def ensure_indexes():
     )
     await registrant_hook_deliveries_collection.create_index(
         [("replay_digest", ASCENDING)], name="registrant_hook_replay_once", unique=True
+    )
+    # K6: material bytes are looked up by id and removed by event or activity.
+    await activity_material_files_collection.create_index(
+        [("id", ASCENDING)], name="activity_material_file_id", unique=True
+    )
+    await activity_material_files_collection.create_index(
+        [("event_id", ASCENDING), ("activity_id", ASCENDING)],
+        name="activity_material_files_by_activity",
     )
     # K5: unique per-recipient message keys (what stops two cron calls on two
     # replicas from sending the same reminder) and one opt-out per address.

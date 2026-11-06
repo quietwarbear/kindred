@@ -13,6 +13,7 @@ from typing import Any
 from event_privacy import rsvp_summary
 from itinerary import (
     activity_link_fields,
+    activity_material_fields,
     activity_response_open,
     activity_summaries,
     is_event_link_privileged,
@@ -194,6 +195,9 @@ def build_attendee_hub(
                 "venue_detail": str(activity.get("venue_detail") or ""),
                 "map_url": str(activity.get("map_url") or ""),
                 **activity_link_fields(activity, my_status, privileged=privileged),
+                **activity_material_fields(
+                    event, activity, my_status, privileged=privileged
+                ),
                 "location_tba": bool(activity.get("location_tba", False)),
                 "capacity": activity.get("capacity"),
                 "rsvp_deadline": str(activity.get("rsvp_deadline") or ""),

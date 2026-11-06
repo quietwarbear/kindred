@@ -12,6 +12,8 @@ from typing import Any
 from itinerary import (
     activity_choice_summaries,
     activity_link_fields,
+    activity_material_fields,
+    activity_material_files,
     activity_response_open,
     activity_summaries,
     is_event_link_privileged,
@@ -22,6 +24,7 @@ from rsvp_integrity import member_invite_aliases, public_respondent_identity
 
 ORGANIZER_ROLES = {"host", "organizer"}
 SENSITIVE_EVENT_FIELDS = {
+    "activity_materials",
     "activity_rsvps",
     "attendee_hub_reviewed_by",
     "attendees",
@@ -85,6 +88,9 @@ def serialize_event_for_user(
     if user.get("role") in ORGANIZER_ROLES:
         view.pop("holiday_pilot_confirmations", None)
         view.pop("holiday_setup_revision", None)
+        for item in view.get("agenda") or []:
+            item["materials"] = activity_material_files(event, str(item.get("id") or ""))
+        view.pop("activity_materials", None)
         return view
 
     user_id = user.get("id", "")
@@ -114,11 +120,13 @@ def serialize_event_for_user(
     view["agenda"] = []
     for source in published_activities(event):
         activity = deepcopy(source)
+        my_status = view["my_activity_responses"].get(source.get("id", ""), "")
         activity.update(
-            activity_link_fields(
-                source,
-                view["my_activity_responses"].get(source.get("id", ""), ""),
-                privileged=privileged,
+            activity_link_fields(source, my_status, privileged=privileged)
+        )
+        activity.update(
+            activity_material_fields(
+                event, source, my_status, privileged=privileged
             )
         )
         activity["response_open"] = activity_response_open(
@@ -204,6 +212,9 @@ def serialize_event_for_guest(
                 "map_url": activity.get("map_url", ""),
                 # Guests are never privileged: the link follows their own answer.
                 **activity_link_fields(activity, my_status, privileged=False),
+                **activity_material_fields(
+                    event, activity, my_status, privileged=False
+                ),
                 "location_tba": bool(activity.get("location_tba", False)),
                 "capacity": activity.get("capacity"),
                 "rsvp_deadline": activity.get("rsvp_deadline", ""),

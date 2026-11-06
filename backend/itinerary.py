@@ -28,6 +28,12 @@ CHOICE_STATUSES = {"coming", "maybe"}
 # "coming" for that activity.
 VIRTUAL_LINK_WITHHELD_NOTICE = "Link shared with registered attendees."
 
+# K6 per-activity materials: a supply list on the activity, plus files whose
+# metadata lives on the event (``activity_materials``) and whose bytes live in
+# their own collection. Both follow the same rule as the virtual link.
+MATERIALS_WITHHELD_NOTICE = "Materials shared with registered attendees."
+MAX_SUPPLY_LIST_LENGTH = 4000
+
 
 def normalize_response_choices(value: Any) -> list[str]:
     """Return trimmed, de-duplicated, bounded organizer choice labels."""
@@ -158,6 +164,55 @@ def activity_link_fields(
     }
 
 
+def activity_material_files(
+    event: dict[str, Any], activity_id: str
+) -> list[dict[str, Any]]:
+    """Return the safe file metadata for one activity, oldest first."""
+    rows = [
+        row
+        for row in event.get("activity_materials") or []
+        if row.get("activity_id") == activity_id and row.get("id")
+    ]
+    rows.sort(key=lambda row: str(row.get("created_at") or ""))
+    return [
+        {
+            "id": str(row.get("id")),
+            "name": str(row.get("name") or "file"),
+            "mime_type": str(row.get("mime_type") or ""),
+            "size": int(row.get("size") or 0),
+            "created_at": str(row.get("created_at") or ""),
+        }
+        for row in rows
+    ]
+
+
+def activity_material_fields(
+    event: dict[str, Any],
+    activity: dict[str, Any],
+    my_status: str,
+    *,
+    privileged: bool,
+) -> dict[str, Any]:
+    """Return the supply list and files a given viewer may see for one activity."""
+    supply_list = str(activity.get("supply_list") or "")
+    files = activity_material_files(event, str(activity.get("id") or ""))
+    if not (supply_list or files) or can_view_activity_link(
+        my_status, privileged=privileged
+    ):
+        return {
+            "supply_list": supply_list,
+            "materials": files,
+            "materials_withheld": False,
+            "materials_notice": "",
+        }
+    return {
+        "supply_list": "",
+        "materials": [],
+        "materials_withheld": True,
+        "materials_notice": MATERIALS_WITHHELD_NOTICE,
+    }
+
+
 def is_event_link_privileged(event: dict[str, Any], user: dict[str, Any]) -> bool:
     """Organizers and the event's planning team see every activity link."""
     if user.get("role") in {"host", "organizer"}:
@@ -234,6 +289,9 @@ def normalize_activity(source: dict[str, Any], *, activity_id: str) -> dict[str,
         "response_choices": normalize_response_choices(source.get("response_choices")),
         "attendance_requested": bool(source.get("attendance_requested", True)),
         "notes": str(source.get("notes") or "").strip()[:2000],
+        "supply_list": str(source.get("supply_list") or "").strip()[
+            :MAX_SUPPLY_LIST_LENGTH
+        ],
         "visibility": source.get("visibility") if source.get("visibility") in {"draft", "published", "archived"} else "draft",
         "featured": bool(source.get("featured", False)),
         "created_at": str(source.get("created_at") or ""),
