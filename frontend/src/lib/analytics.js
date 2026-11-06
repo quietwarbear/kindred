@@ -1,5 +1,5 @@
+import { Capacitor } from "@capacitor/core";
 import posthog from "posthog-js";
-import { trackTikTokEvent } from "@/lib/tiktokEvents";
 
 // Shared Ubuntu Markets PostHog project (EU). phc_ tokens are public
 // client-side tokens. Every event carries product: "kindred" so the one
@@ -122,7 +122,16 @@ const META_STANDARD_EVENTS = {
 // live in /rsvp/<token> paths. So the Pixel is not merely silenced on
 // sensitive routes — it is never loaded there, because even the script
 // request would carry that URL to Meta as a Referer.
-const metaPixelForbidden = () => analyticsSuppressed() || isSensitiveContentRoute();
+//
+// The Pixel is web-only. Inside the iOS/Android app it would count as
+// cross-app tracking (App Store "Data Used to Track You", Play advertising
+// ID), and the native app declares none — so it never loads there, even if a
+// pixel id was present at build time.
+const metaPixelForbidden = () => (
+  analyticsSuppressed()
+  || isSensitiveContentRoute()
+  || Capacitor.isNativePlatform()
+);
 
 function loadMetaPixel() {
   if (!META_PIXEL_ID || typeof window === "undefined") return;
@@ -148,20 +157,6 @@ function loadMetaPixel() {
   /* eslint-enable */
   window.fbq("init", META_PIXEL_ID);
   window.fbq("track", "PageView");
-}
-
-// Native apps only: the same activation moment Meta counts as a registration.
-// Subscribe is sent from revenuecat.js, where the native purchase completes.
-const TIKTOK_STANDARD_EVENTS = {
-  community_activated: "Registration",
-};
-
-// Event NAME only, exactly like forwardToMeta. No-op on the web.
-function forwardToTikTok(name) {
-  const standard = TIKTOK_STANDARD_EVENTS[name];
-  if (!standard) return;
-  if (analyticsSuppressed()) return;
-  trackTikTokEvent(standard);
 }
 
 // Event NAME only — never properties. Everything this app tracks may carry
@@ -438,7 +433,6 @@ const SAFE_REUNION_PROPERTY_KEYS = new Set([
 export function trackReunionEvent(name, properties = {}) {
   if (analyticsSuppressed() || !REUNION_EVENTS.includes(name)) return;
   forwardToMeta(name);
-  forwardToTikTok(name);
   if (FAMILY_ACTIVATION_EVENTS.has(name)) {
     posthog.capture(name, safeFamilyActivationProperties(properties));
     return;

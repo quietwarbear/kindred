@@ -126,11 +126,11 @@ function isHonorBrowserAdTimeout(event) {
   );
 }
 
-// In-app browsers beyond Meta's — TikTok's and various iOS/Android webviews —
+// In-app browsers beyond Meta's — other social apps' and various iOS/Android webviews —
 // inject their own bridge scripts. These signatures reference APIs that live
 // only in those host webviews (Kindred's own code never calls TTRCCallbacks
 // or window.webkit.messageHandlers), so they are third-party, not ours.
-// TTRCCallbacks is TikTok-only and safe to drop on the message alone; the
+// TTRCCallbacks is an injected in-app-browser callback, safe to drop on the message alone; the
 // webkit/sendDataToNative bridge is kept only when NO real Kindred bundle
 // frame is present, so a genuine Capacitor bridge failure would still reach us.
 function isThirdPartyWebviewBridgeNoise(event) {

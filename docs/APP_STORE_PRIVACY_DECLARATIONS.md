@@ -30,6 +30,8 @@ Answer **Yes, data is collected**.
 
 ### Tracking
 
+**Native app, from 3.1.5 (Nov 2026): answer “No, we do not track.”** The TikTok Business SDK (added Oct 2026) was removed with its App Tracking Transparency prompt (`NSUserTrackingUsageDescription`), and the Android build no longer pulls in the advertising-ID permission. The Meta Pixel is web-only and is blocked inside the native app (`frontend/src/lib/analytics.js`); GA4/GTM never load in the native WebView (its hostname is `localhost`, which `public/index.html` excludes). `frontend/src/lib/nativeTrackingFree.test.js` fails if a tracking SDK or the ATT prompt is added back. The notes below remain true for the website.
+
 - **Name, email, community content, purchases:** select **Not used for tracking** based on current code.
 - **Usage Data / identifiers collected by Google Analytics, GTM, and PostHog:** production/legal confirmation required. If any data is combined with third-party data for targeted advertising, ad measurement, data-broker sharing, or cross-company tracking under Apple's definition, mark the relevant categories as **used for tracking** and ensure ATT/consent compliance.
 - The code states no ads and no sale of personal information, but GTM can load additional tags. Inspect the live GTM container before answering “No” to tracking.
