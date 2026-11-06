@@ -47,3 +47,6 @@ polls_collection = db.polls
 subscriptions_collection = db.subscriptions
 sso_codes_collection = db.sso_codes
 care_circles_collection = db.care_circles
+registrant_hooks_collection = db.registrant_hooks
+registrant_hook_deliveries_collection = db.registrant_hook_deliveries
+registrant_import_flags_collection = db.registrant_import_flags
