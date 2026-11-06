@@ -50,3 +50,7 @@ care_circles_collection = db.care_circles
 registrant_hooks_collection = db.registrant_hooks
 registrant_hook_deliveries_collection = db.registrant_hook_deliveries
 registrant_import_flags_collection = db.registrant_import_flags
+# K5 organizer messages: one outbox row per recipient per announcement or
+# scheduled reminder (unique dedupe_key), and per-event email opt-outs.
+event_message_outbox_collection = db.event_message_outbox
+event_message_opt_outs_collection = db.event_message_opt_outs

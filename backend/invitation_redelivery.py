@@ -122,6 +122,12 @@ class DeliveryEnvelope:
     idempotency_key: str
     operation_id: str
     target_id: str
+    # Optional display name shown before the configured, verified sender
+    # address. The address itself never changes. Empty keeps the configured
+    # sender exactly as it is.
+    from_name: str = ""
+    # Optional Reply-To address (for example the organizer's own email).
+    reply_to: str = ""
 
     def __repr__(self) -> str:
         return (

@@ -13,6 +13,7 @@ import { GatheringAgenda } from "@/components/gatherings/GatheringAgenda";
 import { GatheringChecklist } from "@/components/gatherings/GatheringChecklist";
 import { GatheringInvites } from "@/components/gatherings/GatheringInvites";
 import { RegistrantImport } from "@/components/gatherings/RegistrantImport";
+import { EventMessaging } from "@/components/gatherings/EventMessaging";
 import { HolidayPilotReadiness } from "@/components/gatherings/HolidayPilotReadiness";
 import { GatheringPotluck } from "@/components/gatherings/GatheringPotluck";
 import { GatheringRoles } from "@/components/gatherings/GatheringRoles";
@@ -723,6 +724,9 @@ export const GatheringsPage = ({ token, user }) => {
                 <GatheringInvites event={activeEvent} members={members} onUpdate={mergeEvent} token={token} />
                 {canCreate ? (
                   <RegistrantImport event={activeEvent} onUpdate={mergeEvent} token={token} />
+                ) : null}
+                {canCreate ? (
+                  <EventMessaging event={activeEvent} token={token} />
                 ) : null}
                 <GatheringRoles event={activeEvent} onUpdate={mergeEvent} token={token} />
                 <GatheringAgenda canCreate={canCreate} event={activeEvent} onUpdate={mergeEvent} token={token} />

@@ -606,6 +606,30 @@ class AnnouncementCreateRequest(BaseModel):
     scope: str = "courtyard"
     subyard_id: str = ""
     attachments: list[FileAttachmentPayload] = Field(default_factory=list)
+    # K5 targeting. Without event_id this stays a community announcement.
+    event_id: str = ""
+    audience: Literal["everyone", "day", "activity"] = "everyone"
+    day: str = Field(default="", max_length=10)
+    activity_id: str = ""
+    # In-app is always on. Older clients send nothing and get in-app only.
+    channels: list[Literal["email", "push"]] = Field(default_factory=list, max_length=2)
+
+
+class EventMessagingSettingsRequest(BaseModel):
+    sender_name: str = Field(default="", max_length=120)
+    reply_to_user_id: str = ""
+    reminders_enabled: bool = True
+    default_reminder_offsets_minutes: list[int] = Field(
+        default_factory=lambda: [1440, 60], max_length=4
+    )
+    # Per-activity override; an empty list turns that activity's reminders off.
+    activity_reminder_offsets_minutes: dict[str, list[int]] = Field(default_factory=dict)
+
+
+class AnnouncementAudienceRequest(BaseModel):
+    audience: Literal["everyone", "day", "activity"] = "everyone"
+    day: str = Field(default="", max_length=10)
+    activity_id: str = ""
 
 
 class ChatMessageCreateRequest(BaseModel):

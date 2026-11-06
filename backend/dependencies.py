@@ -383,6 +383,7 @@ async def log_notification_event(
     description: str,
     related_id: str = "",
     audience_scope: str = "community",
+    recipient_user_ids: list[str] | None = None,
 ):
     event_doc = {
         "id": str(uuid.uuid4()),
@@ -396,6 +397,8 @@ async def log_notification_event(
         "read_by_user_ids": [],
         "created_at": now_iso(),
     }
+    if recipient_user_ids is not None:
+        event_doc["recipient_user_ids"] = list(recipient_user_ids)
     await notification_events_collection.insert_one(event_doc.copy())
 
 

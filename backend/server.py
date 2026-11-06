@@ -8,8 +8,10 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse, JSONResponse
 from family_space_activation import public_community_display_name
 
+from event_messaging import ensure_indexes as ensure_event_message_indexes
 from db import (
     client,
+    db,
     communities_collection,
     events_collection,
     family_access_requests_collection,
@@ -36,6 +38,7 @@ from routes.care import router as care_router
 from routes.community import router as community_router
 from routes.digest import router as digest_router
 from routes.events import router as events_router
+from routes.event_messages import router as event_messages_router
 from routes.federation import router as federation_router
 from routes.finance import router as finance_router
 from routes.family_space import router as family_space_router
@@ -131,6 +134,7 @@ app.include_router(community_router)
 app.include_router(communications_router)
 app.include_router(digest_router)
 app.include_router(events_router)
+app.include_router(event_messages_router)
 app.include_router(federation_router)
 app.include_router(finance_router)
 app.include_router(family_space_router)
@@ -466,6 +470,9 @@ async def ensure_indexes():
     await registrant_hook_deliveries_collection.create_index(
         [("replay_digest", ASCENDING)], name="registrant_hook_replay_once", unique=True
     )
+    # K5: unique per-recipient message keys (what stops two cron calls on two
+    # replicas from sending the same reminder) and one opt-out per address.
+    await ensure_event_message_indexes(db)
     try:
         await registrant_hook_deliveries_collection.create_index(
             "received_at_dt", expireAfterSeconds=86_400, name="registrant_hook_replay_ttl"
