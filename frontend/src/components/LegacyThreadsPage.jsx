@@ -146,7 +146,8 @@ export const LegacyThreadsPage = ({ token, user }) => {
       const res = await apiRequest("/federation/jump", { method: "POST", token, data: { target: "legacy_table" } });
       window.open(res.url, "_blank", "noopener");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Couldn't open Legacy Table.");
+      const detail = error.response?.data?.detail;
+      toast.error((typeof detail === "string" ? detail : detail?.message) || "Couldn't open Legacy Table.");
     }
   };
 
@@ -175,8 +176,12 @@ export const LegacyThreadsPage = ({ token, user }) => {
       const resumableStates = new Set(["grant_ready", "payload_retrieved", "destination_pending", "destination_accepted"]);
       if (!result?.url || !resumableStates.has(result.status)) throw new Error("transfer_unavailable");
       window.location.assign(result.url);
-    } catch {
-      toast.error("The private transfer could not start. Your Kindred recipe is unchanged.");
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.error_code === "email_not_verified"
+          ? "Verify your email first, then try again. Your Kindred recipe is unchanged."
+          : "The private transfer could not start. Your Kindred recipe is unchanged."
+      );
       setTransferBusy(false);
     }
   };

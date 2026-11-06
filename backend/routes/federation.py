@@ -39,6 +39,20 @@ class JumpRequest(BaseModel):
     target: str
 
 
+# Providers that prove the person owns the address. A sibling app signs the
+# person into whichever account holds this email, so an address nobody has
+# proved must never travel: anyone could sign up here with someone else's
+# email and land in their account on Legacy Table or Ile Ubuntu.
+VERIFIED_SIGN_IN_PROVIDERS = frozenset({"google", "apple"})
+
+
+def email_proven(user: dict[str, Any]) -> bool:
+    """True only when this account has shown it owns its email address."""
+    if user.get("email_verified") is True:
+        return True
+    return user.get("auth_provider") in VERIFIED_SIGN_IN_PROVIDERS
+
+
 def _target_config(target: str) -> tuple[dict[str, Any], str, str]:
     cfg = TARGETS.get(target)
     if not cfg:
@@ -76,6 +90,14 @@ async def federation_jump(
 
 async def mint_sso_code(target: str, current_user: dict[str, Any]) -> tuple[str, str]:
     """Mint one destination code without returning or logging identity fields."""
+    if not email_proven(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "email_not_verified",
+                "message": "Verify your email to open your account in another Ubuntu Markets app.",
+            },
+        )
     cfg, api_origin, web_origin = _target_config(target)
     secret = os.environ.get("UBUNTU_SSO_SECRET", "")
     email = current_user.get("email", "")
