@@ -48,8 +48,10 @@ from organizer_command_center import invitation_is_active
 from push_sender import maybe_notify
 from itinerary import (
     ACTIVITY_RESPONSES,
+    activity_response_open,
     activity_summaries,
-    parse_local_datetime,
+    effective_response_choice,
+    own_activity_responses,
     published_activities,
     replace_respondent_activity_responses,
 )
@@ -69,6 +71,9 @@ class PublicRSVPRequest(BaseModel):
     activity_responses: dict[str, Literal["coming", "not-coming", "maybe"]] = Field(
         default_factory=dict
     )
+    # Organizer-defined option per activity (e.g. "In person" / "Remote").
+    # An activity missing here keeps its previously saved choice.
+    activity_choices: dict[str, str] = Field(default_factory=dict)
 
 
 async def _find_event_and_invite(token: str):
@@ -249,32 +254,53 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
                 },
             )
 
-        existing_own_responses = {
-            response.get("activity_id"): response.get("status")
-            for response in current_event.get("activity_rsvps", [])
-            if response.get("respondent_id") in respondent_aliases
-        }
+        existing_own_rows = own_activity_responses(current_event, respondent_aliases)
+        invalid_choice_ids = [
+            activity_id
+            for activity_id in payload.activity_choices
+            if activity_id not in payload.activity_responses
+        ]
+        resolved_choices: dict[str, str] = {}
+        kept_closed_ids: set[str] = set()
         for activity_id, response in payload.activity_responses.items():
             activity = published_by_id[activity_id]
-            deadline_value = activity.get("rsvp_deadline", "")
-            deadline = parse_local_datetime(
-                deadline_value,
-                activity.get("timezone") or current_event.get("timezone", "UTC"),
-            )
-            if deadline_value and (
-                not deadline
-                or (
-                    datetime.now(timezone.utc) > deadline
-                    and existing_own_responses.get(activity_id) != response
-                )
+            previous = existing_own_rows.get(activity_id) or {}
+            previous_choice = str(previous.get("choice") or "")
+            submitted_choice = payload.activity_choices.get(activity_id)
+            # K8: closed at the RSVP deadline, or at the activity's end. The
+            # form resubmits every answer, so an unchanged answer is kept as
+            # saved; any change is refused.
+            if not activity_response_open(
+                activity, current_event.get("timezone", "UTC")
             ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "code": "activity_rsvp_closed",
-                        "message": "One or more activities are not accepting RSVP changes.",
-                    },
+                same_choice = submitted_choice is None or (
+                    " ".join(submitted_choice.split()).casefold()
+                    == previous_choice.casefold()
                 )
+                if previous.get("status") != response or not same_choice:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "code": "activity_rsvp_closed",
+                            "message": "One or more activities are not accepting RSVP changes.",
+                        },
+                    )
+                kept_closed_ids.add(activity_id)
+                continue
+            try:
+                resolved_choices[activity_id] = effective_response_choice(
+                    activity, response, submitted_choice, previous_choice
+                )
+            except ValueError:
+                invalid_choice_ids.append(activity_id)
+        if invalid_choice_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_response_choice",
+                    "message": "One or more activity options are unavailable.",
+                },
+            )
 
         replacement_activity_responses = [
             {
@@ -283,11 +309,13 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
                 "respondent_type": "member" if resolved_member_id else "public-invite",
                 "display_name": current_invite.get("invitee_name", "Invited guest"),
                 "status": response_status,
+                "choice": resolved_choices[activity_id],
                 "party_size": max(1, payload.guests + 1),
                 "updated_at": now_iso(),
                 "via": "public-link",
             }
             for activity_id, response_status in payload.activity_responses.items()
+            if activity_id not in kept_closed_ids
         ]
         activity_responses = replace_respondent_activity_responses(
             current_event.get("activity_rsvps", []),

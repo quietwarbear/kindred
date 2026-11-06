@@ -7,12 +7,15 @@ never expose invitation records or named RSVP data to ordinary members.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from itinerary import (
+    activity_choice_summaries,
+    activity_link_fields,
+    activity_response_open,
     activity_summaries,
-    parse_local_datetime,
+    is_event_link_privileged,
+    own_activity_responses,
     published_activities,
 )
 from rsvp_integrity import member_invite_aliases, public_respondent_identity
@@ -78,6 +81,7 @@ def serialize_event_for_user(
     """Return a detached event view appropriate for the authenticated role."""
     view = deepcopy(event)
     view["rsvp_summary"] = rsvp_summary(event)
+    view["activity_choice_summaries"] = activity_choice_summaries(event)
     if user.get("role") in ORGANIZER_ROLES:
         view.pop("holiday_pilot_confirmations", None)
         view.pop("holiday_setup_revision", None)
@@ -97,12 +101,30 @@ def serialize_event_for_user(
     )
     view["my_rsvp_status"] = (own_overall or {}).get("status", "")
     view["my_rsvp_guests"] = max(0, int((own_overall or {}).get("guests", 0) or 0))
+    own_rows = own_activity_responses(event, aliases)
     view["my_activity_responses"] = {
-        response.get("activity_id", ""): response.get("status", "")
-        for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") in aliases and response.get("activity_id")
+        activity_id: row.get("status", "") for activity_id, row in own_rows.items()
     }
-    view["agenda"] = deepcopy(published_activities(event))
+    view["my_activity_choices"] = {
+        activity_id: str(row.get("choice") or "")
+        for activity_id, row in own_rows.items()
+        if row.get("choice")
+    }
+    privileged = is_event_link_privileged(event, user)
+    view["agenda"] = []
+    for source in published_activities(event):
+        activity = deepcopy(source)
+        activity.update(
+            activity_link_fields(
+                source,
+                view["my_activity_responses"].get(source.get("id", ""), ""),
+                privileged=privileged,
+            )
+        )
+        activity["response_open"] = activity_response_open(
+            source, event.get("timezone", "UTC")
+        )
+        view["agenda"].append(activity)
     published_ids = {
         activity.get("id") for activity in view["agenda"] if activity.get("id")
     }
@@ -161,22 +183,13 @@ def serialize_event_for_guest(
     fmt = event.get("gathering_format", "in-person")
     summaries = activity_summaries(event)
     _invite_identity, respondent_aliases = public_respondent_identity(invite)
-    own_activity_responses = {
-        response.get("activity_id", ""): response.get("status", "")
-        for response in event.get("activity_rsvps", [])
-        if response.get("respondent_id") in respondent_aliases
-    }
+    own_rows = own_activity_responses(event, respondent_aliases)
     activities = []
     for activity in published_activities(event):
         activity_id = activity.get("id", "")
-        deadline = parse_local_datetime(
-            activity.get("rsvp_deadline", ""),
-            activity.get("timezone") or event.get("timezone", "UTC"),
-        )
-        deadline_value = activity.get("rsvp_deadline", "")
-        response_open = not deadline_value or bool(
-            deadline and datetime.now(timezone.utc) <= deadline
-        )
+        own_row = own_rows.get(activity_id) or {}
+        my_status = str(own_row.get("status") or "no-response")
+        response_open = activity_response_open(activity, event.get("timezone", "UTC"))
         activities.append(
             {
                 "id": activity_id,
@@ -189,18 +202,21 @@ def serialize_event_for_guest(
                 "venue_address": activity.get("venue_address", ""),
                 "venue_detail": activity.get("venue_detail", ""),
                 "map_url": activity.get("map_url", ""),
-                "virtual_link": activity.get("virtual_link", ""),
+                # Guests are never privileged: the link follows their own answer.
+                **activity_link_fields(activity, my_status, privileged=False),
                 "location_tba": bool(activity.get("location_tba", False)),
                 "capacity": activity.get("capacity"),
                 "rsvp_deadline": activity.get("rsvp_deadline", ""),
                 "response_open": response_open,
+                "response_choices": list(activity.get("response_choices") or []),
                 "attendance_requested": bool(
                     activity.get("attendance_requested", True)
                 ),
                 "notes": activity.get("notes", ""),
                 "featured": bool(activity.get("featured", False)),
                 "attendance": summaries.get(activity_id, {}),
-                "my_response": own_activity_responses.get(activity_id, "no-response"),
+                "my_response": my_status,
+                "my_choice": str(own_row.get("choice") or ""),
             }
         )
     return {

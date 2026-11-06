@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { trackReunionEvent } from "@/lib/analytics";
 import { dayKeyAtTimezone, groupActivitiesByDay } from "@/lib/itinerary";
+import { choiceCountsLabel } from "@/components/reunion/ActivityAccess";
 
 export const ReunionOperations = ({ event, operations }) => {
   const [activityFilter, setActivityFilter] = useState("all");
@@ -150,15 +151,21 @@ export const ReunionOperations = ({ event, operations }) => {
                       {summary.coming || 0} coming · {summary.maybe || 0} maybe · {summary.no_response || 0} no response
                     </p>
                   </div>
+                  {choiceCountsLabel(operations.activity_choice_summaries?.[activity.id]) ? (
+                    <p className="mt-1 text-sm text-muted-foreground" data-testid={`operations-choice-counts-${activity.id}`}>
+                      Coming by option — {choiceCountsLabel(operations.activity_choice_summaries[activity.id])}
+                    </p>
+                  ) : null}
                   {roster.length ? (
                     <div className="mt-3 overflow-x-auto">
                       <table className="w-full text-left text-sm">
-                        <thead><tr><th className="pb-2">Attendee</th><th className="pb-2">Response</th><th className="pb-2">Party</th><th className="pb-2">Updated</th></tr></thead>
+                        <thead><tr><th className="pb-2">Attendee</th><th className="pb-2">Response</th>{activity.response_choices?.length ? <th className="pb-2">Option</th> : null}<th className="pb-2">Party</th><th className="pb-2">Updated</th></tr></thead>
                         <tbody>
                           {roster.map((person) => (
                             <tr className="border-t border-border" key={person.row_key}>
                               <td className="py-2">{person.display_name}</td>
                               <td>{person.status}</td>
+                              {activity.response_choices?.length ? <td>{person.choice || "—"}</td> : null}
                               <td>{person.party_size}</td>
                               <td>{person.updated_at ? new Date(person.updated_at).toLocaleString() : "—"}</td>
                             </tr>

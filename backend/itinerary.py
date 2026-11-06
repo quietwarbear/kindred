@@ -17,6 +17,154 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 ACTIVITY_RESPONSES = {"coming", "not-coming", "maybe"}
 OVERALL_RESPONSES = {"going", "some", "maybe", "not-going"}
 
+# Organizer-defined attendance options per activity (for example "In person"
+# and "Remote"). A choice is stored on the response row, never on the activity.
+MAX_RESPONSE_CHOICES = 6
+MAX_RESPONSE_CHOICE_LENGTH = 60
+# Statuses that may carry a choice. "not-coming" never does.
+CHOICE_STATUSES = {"coming", "maybe"}
+
+# Shown in place of an activity's virtual link to anyone who has not answered
+# "coming" for that activity.
+VIRTUAL_LINK_WITHHELD_NOTICE = "Link shared with registered attendees."
+
+
+def normalize_response_choices(value: Any) -> list[str]:
+    """Return trimmed, de-duplicated, bounded organizer choice labels."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    choices: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        label = " ".join(str(item or "").split())[:MAX_RESPONSE_CHOICE_LENGTH]
+        key = label.casefold()
+        if not label or key in seen:
+            continue
+        seen.add(key)
+        choices.append(label)
+        if len(choices) >= MAX_RESPONSE_CHOICES:
+            break
+    return choices
+
+
+def resolve_response_choice(
+    activity: dict[str, Any], status: str, choice: Any
+) -> str:
+    """Validate one submitted choice against the activity's current options.
+
+    Returns the canonical label ("" when no choice applies). Raises
+    ``ValueError`` when a choice is supplied that the activity does not offer.
+    """
+    label = " ".join(str(choice or "").split())
+    if not label or status not in CHOICE_STATUSES:
+        return ""
+    for option in activity.get("response_choices") or []:
+        if option.casefold() == label.casefold():
+            return option
+    raise ValueError("invalid_response_choice")
+
+
+def effective_response_choice(
+    activity: dict[str, Any],
+    status: str,
+    submitted: str | None,
+    previous: str = "",
+) -> str:
+    """Resolve the choice to store for one response.
+
+    ``submitted=None`` means the client did not send a choice (an older app
+    build): keep the previous one if it is still offered, else drop it. An
+    explicitly submitted choice must be offered, or ``ValueError`` is raised.
+    """
+    if submitted is None:
+        try:
+            return resolve_response_choice(activity, status, previous)
+        except ValueError:
+            return ""
+    return resolve_response_choice(activity, status, submitted)
+
+
+def activity_response_close_at(
+    activity: dict[str, Any], event_timezone: str = "UTC"
+) -> tuple[datetime | None, bool]:
+    """Return ``(close_at, invalid)`` for an activity's response window.
+
+    The organizer's RSVP deadline wins. Without one, responses close when the
+    activity ends. ``invalid`` is true only when an explicit deadline cannot be
+    parsed, which callers treat as closed (fail closed, as before).
+    """
+    timezone_name = activity.get("timezone") or event_timezone or "UTC"
+    deadline_value = str(activity.get("rsvp_deadline") or "")
+    if deadline_value:
+        deadline = parse_local_datetime(deadline_value, timezone_name)
+        return deadline, deadline is None
+    end_value = str(activity.get("end_at") or "")
+    if end_value:
+        return parse_local_datetime(end_value, timezone_name), False
+    return None, False
+
+
+def activity_response_open(
+    activity: dict[str, Any],
+    event_timezone: str = "UTC",
+    *,
+    now: datetime | None = None,
+) -> bool:
+    close_at, invalid = activity_response_close_at(activity, event_timezone)
+    if invalid:
+        return False
+    if close_at is None:
+        return True
+    current = now or datetime.now(datetime_timezone.utc)
+    return current <= close_at
+
+
+def own_activity_responses(
+    event: dict[str, Any], aliases: set[str]
+) -> dict[str, dict[str, Any]]:
+    """Return the respondent's latest response row per activity."""
+    latest: dict[str, dict[str, Any]] = {}
+    for row in event.get("activity_rsvps", []):
+        activity_id = row.get("activity_id")
+        if not activity_id or row.get("respondent_id") not in aliases:
+            continue
+        existing = latest.get(activity_id)
+        if not existing or str(row.get("updated_at") or "") >= str(
+            existing.get("updated_at") or ""
+        ):
+            latest[activity_id] = row
+    return latest
+
+
+def can_view_activity_link(my_status: str, *, privileged: bool) -> bool:
+    return privileged or my_status == "coming"
+
+
+def activity_link_fields(
+    activity: dict[str, Any], my_status: str, *, privileged: bool
+) -> dict[str, Any]:
+    """Return the virtual-link fields a given viewer may see for one activity."""
+    link = str(activity.get("virtual_link") or "")
+    if not link or can_view_activity_link(my_status, privileged=privileged):
+        return {
+            "virtual_link": link,
+            "virtual_link_withheld": False,
+            "virtual_link_notice": "",
+        }
+    return {
+        "virtual_link": "",
+        "virtual_link_withheld": True,
+        "virtual_link_notice": VIRTUAL_LINK_WITHHELD_NOTICE,
+    }
+
+
+def is_event_link_privileged(event: dict[str, Any], user: dict[str, Any]) -> bool:
+    """Organizers and the event's planning team see every activity link."""
+    if user.get("role") in {"host", "organizer"}:
+        return True
+    user_id = user.get("id")
+    return bool(user_id) and user_id in (event.get("planning_team_member_ids") or [])
+
 
 def safe_roster_row_key(scope_id: str, respondent_id: str) -> str:
     """Return a stable UI key without exposing member IDs or invite tokens."""
@@ -83,6 +231,7 @@ def normalize_activity(source: dict[str, Any], *, activity_id: str) -> dict[str,
         "location_tba": bool(source.get("location_tba", False)),
         "capacity": max(1, capacity) if capacity is not None else None,
         "rsvp_deadline": str(source.get("rsvp_deadline") or "").strip(),
+        "response_choices": normalize_response_choices(source.get("response_choices")),
         "attendance_requested": bool(source.get("attendance_requested", True)),
         "notes": str(source.get("notes") or "").strip()[:2000],
         "visibility": source.get("visibility") if source.get("visibility") in {"draft", "published", "archived"} else "draft",
@@ -186,6 +335,37 @@ def activity_summaries(event: dict[str, Any]) -> dict[str, dict[str, int]]:
         for activity in event.get("agenda", [])
         if activity.get("id")
     }
+
+
+def activity_choice_summaries(event: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Count coming/maybe respondents per organizer choice, per activity.
+
+    Only choices the activity currently offers are counted; a response whose
+    choice was later removed by the organizer falls into ``unspecified``.
+    """
+    responses = canonical_activity_responses(event)
+    result: dict[str, dict[str, Any]] = {}
+    for activity in event.get("agenda", []):
+        activity_id = activity.get("id")
+        choices = list(activity.get("response_choices") or [])
+        if not activity_id or not choices:
+            continue
+        counts = {
+            label: {"coming": 0, "maybe": 0, "party_size": 0} for label in choices
+        }
+        unspecified = {"coming": 0, "maybe": 0, "party_size": 0}
+        for row in responses:
+            if row.get("activity_id") != activity_id:
+                continue
+            status = row.get("status")
+            if status not in CHOICE_STATUSES:
+                continue
+            bucket = counts.get(str(row.get("choice") or ""), unspecified)
+            bucket[status] += 1
+            if status == "coming":
+                bucket["party_size"] += max(1, int(row.get("party_size", 1) or 1))
+        result[activity_id] = {"choices": counts, "unspecified": unspecified}
+    return result
 
 
 def derive_overall_suggestion(

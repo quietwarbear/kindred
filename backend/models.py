@@ -221,6 +221,8 @@ class AgendaItemRequest(BaseModel):
     location_tba: bool = False
     capacity: int | None = None
     rsvp_deadline: str = ""
+    # Organizer-defined attendance options, e.g. ["In person", "Remote"].
+    response_choices: list[str] = Field(default_factory=list, max_length=20)
     attendance_requested: bool = True
     notes: str = ""
     visibility: Literal["draft", "published"] = "draft"
@@ -231,6 +233,10 @@ class ActivityRSVPRequest(BaseModel):
     activity_id: str = Field(min_length=1)
     status: Literal["coming", "not-coming", "maybe"]
     party_size: int = Field(default=1, ge=1, le=51)
+    # One of the activity's response_choices; ignored for "not-coming".
+    # Omitted (None) keeps the previously saved choice, so older clients that
+    # do not know about choices never erase one.
+    choice: str | None = Field(default=None, max_length=120)
 
 
 class VolunteerSlotRequest(BaseModel):
@@ -367,6 +373,8 @@ class EventPublic(BaseModel):
     my_rsvp_status: str = ""
     my_rsvp_guests: int = 0
     my_activity_responses: dict[str, str] = Field(default_factory=dict)
+    my_activity_choices: dict[str, str] = Field(default_factory=dict)
+    activity_choice_summaries: dict[str, dict[str, Any]] = Field(default_factory=dict)
     volunteer_slots: list[dict[str, Any]] = Field(default_factory=list)
     potluck_items: list[dict[str, Any]] = Field(default_factory=list)
     meeting_link: str = ""

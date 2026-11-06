@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
+import {
+  ActivityAccess,
+  ActivityChoicePicker,
+  choicesApply,
+  closedResponseMessage,
+} from "@/components/reunion/ActivityAccess";
 import { trackReunionEvent } from "@/lib/analytics";
 import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 import { toast } from "@/components/ui/sonner";
@@ -183,13 +189,15 @@ export const ReunionAttendeeHubPage = ({ session }) => {
     );
   };
 
-  const saveActivity = (activityId, status) => {
+  const saveActivity = (activityId, status, choice) => {
     setBusy(`activity:${activityId}`);
+    const data = { activity_id: activityId, status, party_size: 1 };
+    if (choice !== undefined) data.choice = choice;
     refreshAfter(
       () => apiRequest(`/events/${eventId}/activity-rsvp`, {
         method: "POST",
         token: session.token,
-        data: { activity_id: activityId, status, party_size: 1 },
+        data,
       }),
       "Activity response saved."
     );
@@ -399,7 +407,9 @@ export const ReunionAttendeeHubPage = ({ session }) => {
                         </div>
                         {activity.description ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{activity.description}</p> : null}
                         {activity.notes ? <p className="mt-2 text-sm"><strong>Know before you go:</strong> {activity.notes}</p> : null}
+                        <ActivityAccess activity={activity} className="mt-3" />
                         {activity.attendance_requested ? (
+                          <>
                           <div className="mt-4 flex flex-wrap gap-2">
                             {ACTIVITY_OPTIONS.map(([value, label]) => (
                               <Button
@@ -415,6 +425,15 @@ export const ReunionAttendeeHubPage = ({ session }) => {
                               </Button>
                             ))}
                           </div>
+                          <ActivityChoicePicker
+                            activity={activity}
+                            disabled={!online || !activity.response_open || busy === `activity:${activity.id}`}
+                            onChange={(choice) => saveActivity(activity.id, activity.my_response, choice)}
+                            status={activity.my_response}
+                            value={choicesApply(activity, activity.my_response) ? activity.my_choice || "" : ""}
+                          />
+                          {!activity.response_open ? <p className="mt-2 text-sm text-amber-700">{closedResponseMessage(activity)}</p> : null}
+                          </>
                         ) : <p className="mt-3 text-xs text-muted-foreground">No separate response requested.</p>}
                       </article>
                     ))}
