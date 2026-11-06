@@ -161,6 +161,20 @@ class CommunityPublic(BaseModel):
         "legacy_unchanged"
     )
     lifecycle_revision: int = 0
+    # K3: organizer-chosen group wording, always resolved (default "family").
+    group_label: dict[str, str] = Field(
+        default_factory=lambda: {
+            "preset": "family",
+            "singular": "family",
+            "plural": "families",
+        }
+    )
+
+
+class GroupLabelUpdateRequest(BaseModel):
+    preset: str = Field(min_length=1, max_length=32)
+    singular: str = Field(default="", max_length=64)
+    plural: str = Field(default="", max_length=64)
 
 
 class UserPublic(BaseModel):

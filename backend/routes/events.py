@@ -38,6 +38,7 @@ from holiday_pilot import (
     HOLIDAY_PILOT_CONFIRMATION_CODES,
     build_holiday_pilot_readiness,
 )
+from group_wording import wording_for_community_id
 from dependencies import (
     build_invite_reminders_for_user,
     ensure_minimum_role,
@@ -48,7 +49,7 @@ from dependencies import (
     log_notification_event,
     normalize_email,
     now_iso,
-    GATHERING_TEMPLATES,
+    gathering_templates_for,
     visible_event_query_for_user,
 )
 from ai_gathering import generate_gathering_plan
@@ -170,8 +171,8 @@ def _event_invite_message(event_doc: dict[str, Any], rsvp_link: str) -> str:
 
 @router.get("/gatherings/templates")
 async def gathering_templates(current_user: dict[str, Any] = Depends(get_current_user)):
-    _ = current_user
-    return {"templates": GATHERING_TEMPLATES}
+    words = await wording_for_community_id(current_user.get("community_id"))
+    return {"templates": gathering_templates_for(words)}
 
 
 @router.post("/gatherings/{event_id}/send-reminders")

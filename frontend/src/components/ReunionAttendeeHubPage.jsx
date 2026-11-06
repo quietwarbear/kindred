@@ -27,6 +27,7 @@ import { ActivityMaterials } from "@/components/reunion/ActivityMaterials";
 import { trackReunionEvent } from "@/lib/analytics";
 import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const OVERALL_OPTIONS = [
   ["going", "I’m coming"],
@@ -42,11 +43,11 @@ const ACTIVITY_OPTIONS = [
 ];
 
 const ACTION_COPY = {
-  respond_to_reunion: ["Tell the family if you’re coming", "Save your overall reunion response."],
+  respond_to_reunion: ["Tell the {group} if you’re coming", "Save your overall reunion response."],
   complete_activity_responses: ["Choose your activities", "Finish the open activity responses on your itinerary."],
   choose_contribution: ["Choose one way to help", "Claim an open dish or volunteer role if it works for you."],
   review_itinerary: ["Review the reunion plan", "Look through the published schedule and mark it reviewed."],
-  share_a_memory: ["Keep one family story", "Add an optional story to your private Kindred community."],
+  share_a_memory: ["Keep one {group} story", "Add an optional story to your private Kindred community."],
   reunion_plan_complete: ["You’re ready for the reunion", "Your response, plans, and optional story are in one place."],
 };
 
@@ -71,6 +72,7 @@ const stableOperationKey = (kind, eventId, itemId) => {
 };
 
 export const ReunionAttendeeHubPage = ({ session }) => {
+  const gw = useGroupWording();
   const { eventId } = useParams();
   const [hub, setHub] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -283,7 +285,7 @@ export const ReunionAttendeeHubPage = ({ session }) => {
   }
 
   const gathering = hub.gathering;
-  const [actionTitle, actionCopy] = ACTION_COPY[hub.next_action.code] || ACTION_COPY.reunion_plan_complete;
+  const [actionTitle, actionCopy] = (ACTION_COPY[hub.next_action.code] || ACTION_COPY.reunion_plan_complete).map(gw.fill);
 
   return (
     <div
@@ -315,9 +317,9 @@ export const ReunionAttendeeHubPage = ({ session }) => {
               <p className="eyebrow-text">After the reunion</p>
               <h2 className="mt-2 font-display text-3xl">The reunion has concluded</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {hub.recap.state === "published"
-                  ? "Revisit the published itinerary, your participation, safe family totals, and the existing memory capsule."
-                  : "The organizers are preparing the private family recap. Your existing memories remain available."}
+                {gw.fill(hub.recap.state === "published"
+                  ? "Revisit the published itinerary, your participation, safe {group} totals, and the existing memory capsule."
+                  : "The organizers are preparing the private {group} recap. Your existing memories remain available.")}
               </p>
             </div>
             {hub.recap.state === "published" ? (
@@ -520,7 +522,7 @@ export const ReunionAttendeeHubPage = ({ session }) => {
           <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-700" />
           <h2 className="mt-3 font-display text-3xl">Your plans stay yours</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            This hub shows your responses, safe family totals, published reunion details, and your own commitments. It does not show private travel, planning notes, budgets, draft activities, invitation links, or anyone else’s named response.
+            This hub shows your responses, safe {gw.noun} totals, published reunion details, and your own commitments. It does not show private travel, planning notes, budgets, draft activities, invitation links, or anyone else’s named response.
           </p>
         </section>
       </main>

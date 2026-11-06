@@ -35,6 +35,7 @@ import { CourtyardDetailPage } from "@/components/CourtyardDetailPage";
 import { apiRequest } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { isStandalone, setupInstallPrompt, triggerInstall } from "@/lib/sw-register";
+import { useGroupWording } from "@/lib/groupWording";
 
 const ROLE_ORDER = { member: 1, organizer: 2, host: 3 };
 
@@ -55,7 +56,7 @@ const navItems = [
   { label: "Kinship Map", path: "/kinship-map", module: "kinship" },
   { label: "Polls", path: "/polls", module: "polls" },
   { label: "Funds & Travel", path: "/funds-travel", module: "funds" },
-  { label: "Family activation", path: "/family/activate", category: "family_activation", minimumRole: "organizer" },
+  { label: "{Group} activation", path: "/family/activate", category: "family_activation", minimumRole: "organizer" },
   { label: "Community Setup", path: "/setup", minimumRole: "organizer" },
   { label: "Subscription", path: "/subscription", minimumRole: "host" },
   { label: "Pilot cohort", path: "/pilot-cohort", adminOnly: true },
@@ -63,6 +64,7 @@ const navItems = [
 ];
 
 export const AppShell = ({ token, user, community, onLogout, onSessionRefresh }) => {
+  const gw = useGroupWording();
   const { resolvedTheme, setTheme } = useTheme();
   const location = useLocation();
   const [unreadSummary, setUnreadSummary] = useState({ announcements_unread: 0, chat_unread: 0, total_unread: 0 });
@@ -186,7 +188,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
       to={item.path}
     >
       <span className="flex items-center justify-between gap-3">
-        <span>{item.label}</span>
+        <span>{gw.fill(item.label)}</span>
         {item.path === "/courtyards" && unreadSummary.total_unread > 0 ? (
           <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary" data-testid="nav-link-courtyards-unread-badge">
             {unreadSummary.total_unread}
@@ -198,7 +200,7 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
 
   const sidebarContent = (
     <>
-            <nav aria-label="Family tools" className="order-first grid gap-2 lg:hidden" data-testid="mobile-navigation">
+            <nav aria-label={gw.fill("{Group} tools")} className="order-first grid gap-2 lg:hidden" data-testid="mobile-navigation">
               {visibleNavItems.map(navLink)}
             </nav>
             <div className="space-y-3">
@@ -338,13 +340,13 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
           </div>
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
-              <Button aria-label="Open family menu" className="rounded-full" data-testid="mobile-menu-toggle" size="sm" variant="outline">
+              <Button aria-label={gw.fill("Open {group} menu")} className="rounded-full" data-testid="mobile-menu-toggle" size="sm" variant="outline">
                 <Menu className="h-4 w-4" aria-hidden="true" />
               </Button>
             </SheetTrigger>
             <SheetContent className="flex w-[min(90vw,24rem)] flex-col gap-6 overflow-y-auto pt-[calc(env(safe-area-inset-top,0px)+3rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] [&>button]:top-[calc(env(safe-area-inset-top,0px)+1rem)]" data-testid="mobile-menu-drawer">
-              <SheetTitle className="sr-only">Kindred family menu</SheetTitle>
-              <SheetDescription className="sr-only">Choose a family tool or manage your account.</SheetDescription>
+              <SheetTitle className="sr-only">Kindred {gw.noun} menu</SheetTitle>
+              <SheetDescription className="sr-only">Choose a {gw.noun} tool or manage your account.</SheetDescription>
               {sidebarContent}
             </SheetContent>
           </Sheet>
@@ -360,10 +362,10 @@ export const AppShell = ({ token, user, community, onLogout, onSessionRefresh })
               <div>
                 <p className="eyebrow-text">Where your circles gather and grow.</p>
                 <h2 className="font-display text-3xl text-foreground sm:text-4xl" data-testid="shell-header-title">
-                  Your family space, without the noise.
+                  Your {gw.noun} space, without the noise.
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  Start with what matters today. Open the menu for your family tools.
+                  Start with what matters today. Open the menu for your {gw.noun} tools.
                 </p>
               </div>
               <div className="soft-panel flex items-center gap-3 self-start" data-testid="shell-value-pill">

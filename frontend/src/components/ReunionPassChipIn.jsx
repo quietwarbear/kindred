@@ -8,6 +8,7 @@ import { gaClientId, trackReunionEvent } from "@/lib/analytics";
 import { formatPrice } from "@/lib/pricing";
 import { isNative } from "@/lib/native-bridge";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const WEB_PURCHASES_ENABLED = Boolean(process.env.REACT_APP_REVENUECAT_WEB_KEY);
 const MIN_CHIP_IN_DOLLARS = 5;
@@ -25,6 +26,7 @@ const MIN_CHIP_IN_DOLLARS = 5;
  * app, and the app stays silent about the pass by decision.
  */
 export const ReunionPassChipIn = ({ token, variant = "full" }) => {
+  const gw = useGroupWording();
   const [status, setStatus] = useState(null);
   const [amount, setAmount] = useState("");
   const [sending, setSending] = useState(false);
@@ -91,10 +93,10 @@ export const ReunionPassChipIn = ({ token, variant = "full" }) => {
           <h2 className="mt-2 font-display text-2xl text-foreground">
             {pledged
               ? `${formatPrice(remainingDollars)} to go`
-              : "Chip in for the family's pass"}
+              : gw.fill("Chip in for the {group's} pass")}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            The pass covers your whole family for twelve months, with no member
+            The pass covers your whole {gw.noun} for twelve months, with no member
             limit. Anyone can put money toward it — {status.can_buy
               ? "and as host you can also buy it outright."
               : "your host holds it once it's funded."}
@@ -130,7 +132,7 @@ export const ReunionPassChipIn = ({ token, variant = "full" }) => {
           </form>
 
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            You'll never be charged more than the family still needs. This funds
+            You'll never be charged more than the {gw.noun} still needs. This funds
             this gathering — it doesn't start a plan of your own.
           </p>
         </div>

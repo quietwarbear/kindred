@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ShareInviteDialog } from "@/components/ShareInviteDialog";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const initialSubyardForm = {
   name: "",
@@ -37,6 +38,7 @@ const initialAnnouncementForm = {
 };
 
 export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
+  const gw = useGroupWording();
   const navigate = useNavigate();
   const initialCommunicationLoadRef = useRef(false);
   const [structure, setStructure] = useState(null);
@@ -350,7 +352,7 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
       <section className="archival-card">
         <p className="eyebrow-text">Courtyard / Subyard Structure</p>
         <h2 className="mt-3 font-display text-3xl text-foreground sm:text-4xl" data-testid="courtyards-page-title">
-          Modular spaces for the full family network and the teams inside it.
+          Modular spaces for the full {gw.noun} network and the teams inside it.
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base" data-testid="courtyards-page-copy">
           Shape the parent courtyard, create subyards like cousins groups or elders councils, assign roles, and track kinship relationships that help with smarter invitations and more grounded memory-keeping.
@@ -416,7 +418,7 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
             <Network className="h-5 w-5 text-primary" />
             <div>
               <p className="eyebrow-text">Role Assignments</p>
-              <h3 className="mt-2 font-display text-3xl text-foreground">Permission-aware family roles</h3>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Permission-aware {gw.noun} roles</h3>
             </div>
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -554,7 +556,7 @@ export const CourtyardsPage = ({ token, user, onCommunicationsViewed }) => {
                 <span className="field-label">Scope</span>
                 <select className="field-input w-full" data-testid="courtyard-kinship-scope-select" onChange={(e) => setKinshipForm((current) => ({ ...current, relationship_scope: e.target.value }))} value={kinshipForm.relationship_scope}>
                   <option value="blood">Blood</option>
-                  <option value="chosen">Chosen family</option>
+                  <option value="chosen">{/* group-wording: allow — kinship or partner-product term */}Chosen family</option>
                   <option value="mentor">Mentor</option>
                   <option value="neighbor">Neighbor</option>
                   <option value="honorary elder">Honorary elder</option>

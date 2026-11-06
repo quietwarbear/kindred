@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from db import payments_collection, subscriptions_collection
 from dependencies import ensure_minimum_role, get_current_user, now_iso
+from group_wording import wording_for_community_id
 from reunion_pass_ledger import (
     CHIP_IN_PACKAGE_ID,
     MIN_CHIP_IN_CENTS,
@@ -81,7 +82,7 @@ async def create_reunion_pass_checkout(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This family already holds a Reunion Pass.",
+            detail=f"This {(await wording_for_community_id(community_id)).noun} already holds a Reunion Pass.",
         )
 
     origin = (payload.origin_url or "").rstrip("/") or os.environ.get("APP_URL", "")
@@ -189,13 +190,13 @@ async def chip_in_to_reunion_pass(
     if not community_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Join a family before chipping in.",
+            detail="Join a Kindred space before chipping in.",
         )
 
     if await active_pass_for(subscriptions_collection, community_id, REUNION_PASS_PLAN_ID):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This family already holds a Reunion Pass.",
+            detail=f"This {(await wording_for_community_id(community_id)).noun} already holds a Reunion Pass.",
         )
 
     remaining = remaining_cents(
@@ -233,7 +234,7 @@ async def chip_in_to_reunion_pass(
                         "unit_amount": amount_cents,
                         "product_data": {
                             "name": f"Toward the {REUNION_PASS['name']}",
-                            "description": "A contribution to your family's Reunion Pass.",
+                            "description": f"A contribution to your {(await wording_for_community_id(community_id)).possessive} Reunion Pass.",
                         },
                     },
                     "quantity": 1,

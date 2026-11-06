@@ -3,6 +3,7 @@ import { AlertTriangle, CircleUserRound, Crown, DatabaseZap, FileText, LockKeyho
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { GroupWordingSettings } from "@/components/GroupWordingSettings";
 import { PlanUpgradeCard } from "@/components/PlanUpgradeCard";
 import { Input } from "@/components/ui/input";
 import { requiresPasswordForAccountDeletion } from "@/lib/accountDeletion";
@@ -395,6 +396,8 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
           </div>
         </article>
       </section>
+
+      <GroupWordingSettings onSessionRefresh={onSessionRefresh} token={token} user={user} />
 
       {user?.role === "host" ? <PlanUpgradeCard token={token} variant="settings" /> : null}
 

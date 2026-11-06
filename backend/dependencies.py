@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from courtyard_helpers import countdown_days, years_since
+from group_wording import group_label_for_community
 from db import (
     communities_collection,
     notification_events_collection,
@@ -155,7 +156,7 @@ GATHERING_TEMPLATES = [
     {
         "id": "reunion",
         "label": "Reunion",
-        "description": "Family-wide gathering with roll call, shared meals, and memory capture.",
+        "description": "{Noun}-wide gathering with roll call, shared meals, and memory capture.",
         "roles": ["organizer", "historian", "treasurer", "communications lead"],
     },
     {
@@ -179,7 +180,7 @@ GATHERING_TEMPLATES = [
                 {"title": "Setup", "needed_count": 1},
                 {"title": "Cleanup", "needed_count": 1},
             ],
-            "recipe_prompt": "Optionally preserve a family recipe or food tradition.",
+            "recipe_prompt": "Optionally preserve a {noun} recipe or food tradition.",
         },
     },
     {
@@ -207,6 +208,21 @@ GATHERING_TEMPLATES = [
         "roles": ["organizer", "historian", "contributor"],
     },
 ]
+
+
+def gathering_templates_for(words: Any) -> list[dict[str, Any]]:
+    """GATHERING_TEMPLATES with the community's group word filled in (K3)."""
+
+    def fill(value: Any) -> Any:
+        if isinstance(value, str):
+            return value.replace("{Noun}", words.Noun).replace("{noun}", words.noun)
+        if isinstance(value, list):
+            return [fill(item) for item in value]
+        if isinstance(value, dict):
+            return {key: fill(item) for key, item in value.items()}
+        return value
+
+    return fill(deepcopy(GATHERING_TEMPLATES))
 
 
 def now_iso() -> str:
@@ -266,6 +282,7 @@ def build_auth_response(
         community_safe["lifecycle_revision"] = max(
             0, int(community_safe.get("lifecycle_revision", 0) or 0)
         )
+        community_safe["group_label"] = group_label_for_community(community_safe)
     return {"token": token, "user": user_safe, "community": community_safe}
 
 
