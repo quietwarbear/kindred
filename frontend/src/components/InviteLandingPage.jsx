@@ -48,7 +48,7 @@ export const InviteLandingPage = () => {
               Open in app
             </a>
             {attempted && (
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-xs text-slate-600">
                 Didn't open? Install the app below, then tap this link again.
               </p>
             )}

@@ -89,7 +89,7 @@ def _reminder_html(event: dict[str, Any], rsvp_link: str) -> str:
     where = html.escape(str(event.get("location") or "Location shared inside"))
     link = html.escape(rsvp_link, quote=True)
     return (
-        '<!doctype html><html><body style="font-family:-apple-system,Segoe UI,'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body style="font-family:-apple-system,Segoe UI,'
         'Roboto,sans-serif;background:#f9f5f0;margin:0;padding:32px;">'
         '<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;'
         'padding:32px;">'
@@ -101,7 +101,7 @@ def _reminder_html(event: dict[str, Any], rsvp_link: str) -> str:
         f'<a href="{link}" style="display:inline-block;background:#9A3412;color:#fff;'
         'border-radius:999px;padding:12px 28px;text-decoration:none;font-weight:600;">'
         "Let them know</a>"
-        '<p style="color:#9a8a7a;font-size:12px;margin:20px 0 0;">This private link '
+        '<p style="color:#6b5b4b;font-size:12px;margin:20px 0 0;">This private link '
         "is just for you. Please don't forward it.</p>"
         "</div></body></html>"
     )
@@ -118,7 +118,7 @@ def _invitation_html(event: dict[str, Any], rsvp_link: str) -> str:
     where = html.escape(str(event.get("location") or "Location shared inside"))
     link = html.escape(rsvp_link, quote=True)
     return (
-        '<!doctype html><html><body style="font-family:-apple-system,Segoe UI,'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body style="font-family:-apple-system,Segoe UI,'
         'Roboto,sans-serif;background:#f9f5f0;margin:0;padding:32px;">'
         '<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;'
         'padding:32px;">'
@@ -128,7 +128,7 @@ def _invitation_html(event: dict[str, Any], rsvp_link: str) -> str:
         f'<a href="{link}" style="display:inline-block;background:#9A3412;color:#fff;'
         'border-radius:999px;padding:12px 28px;text-decoration:none;font-weight:600;">'
         "View & RSVP</a>"
-        '<p style="color:#9a8a7a;font-size:12px;margin:20px 0 0;">This private link '
+        '<p style="color:#6b5b4b;font-size:12px;margin:20px 0 0;">This private link '
         "is just for you. Please don't forward it.</p>"
         "</div></body></html>"
     )

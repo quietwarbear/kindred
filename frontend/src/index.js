@@ -6,8 +6,10 @@ import { registerServiceWorker } from "@/lib/sw-register";
 import { initializeRevenueCat } from "@/lib/revenuecat";
 import { initAnalytics } from "@/lib/analytics";
 import { initSentry } from "@/lib/sentry";
+import { applyNativeTextScale } from "@/lib/textScale";
 
 initSentry();
+applyNativeTextScale();
 registerServiceWorker();
 initAnalytics();
 

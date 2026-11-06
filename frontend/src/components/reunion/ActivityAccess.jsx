@@ -41,7 +41,9 @@ export const ActivityChoicePicker = ({ activity, status, value, onChange, disabl
   if (!choicesApply(activity, status)) return null;
   return (
     <fieldset className="mt-3" data-testid={`activity-choices-${activity.id}`}>
-      <legend className="text-sm font-semibold">How will you join?</legend>
+      <legend className="text-sm font-semibold">
+        How will you join?<span className="sr-only"> ({activity.title})</span>
+      </legend>
       <div className="mt-2 flex flex-wrap gap-2">
         {activity.response_choices.map((choice) => (
           <button

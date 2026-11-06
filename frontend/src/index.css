@@ -81,6 +81,13 @@ code {
         scroll-behavior: smooth;
     }
 
+    /* Native iOS: follow the system text size (Dynamic Type), including the
+       larger accessibility sizes. Tailwind sizes are rem, so everything
+       scales from this root size. body keeps its own font-family. */
+    html.native-ios {
+        font: -apple-system-body;
+    }
+
     body {
         @apply bg-background text-foreground;
         background-image:
@@ -220,5 +227,22 @@ code {
 
     .field-textarea {
         @apply min-h-[120px] rounded-2xl border-input bg-background/80 px-4 py-3 text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring;
+    }
+}
+
+/* Respect the system "Reduce Motion" setting: no smooth scrolling, no
+   animated transitions. */
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
 }
