@@ -33,6 +33,7 @@ import {
   choicesApply,
   closedResponseMessage,
 } from "@/components/reunion/ActivityAccess";
+import { ActivityMaterials } from "@/components/reunion/ActivityMaterials";
 
 export const parseResponseChoices = (text) => {
   const seen = new Set();
@@ -67,6 +68,7 @@ const activityDraft = (event, source = {}) => {
     response_choices_text: (source.response_choices || []).join(", "),
     attendance_requested: source.attendance_requested !== false,
     notes: source.notes || "",
+    supply_list: source.supply_list || "",
     visibility: source.visibility === "published" ? "published" : "draft",
     featured: Boolean(source.featured),
   };
@@ -229,6 +231,10 @@ const ActivityForm = ({ event, initial, onCancel, onSaved, token, activityId = "
         <label className="sm:col-span-2">
           <span className="field-label">Dress, transportation, accessibility, or what to bring</span>
           <Textarea maxLength={2000} onChange={(eventChange) => update("notes", eventChange.target.value)} value={form.notes} />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="field-label">Supply list <span className="font-normal">(optional — shown only to people coming to this activity)</span></span>
+          <Textarea data-testid="itinerary-supply-list-input" maxLength={4000} onChange={(eventChange) => update("supply_list", eventChange.target.value)} value={form.supply_list} />
         </label>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -428,6 +434,7 @@ export const ReunionItinerary = ({ event, token, canCreate, onUpdate }) => {
                         {activity.description ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{activity.description}</p> : null}
                         {activity.notes ? <p className="mt-2 text-sm"><strong>Know before you go:</strong> {activity.notes}</p> : null}
                         <ActivityAccess activity={activity} className="mt-2" />
+                        <ActivityMaterials activity={activity} canManage={canCreate} className="mt-3" eventId={event.id} onUpdate={onUpdate} token={token} />
                       </div>
                       <div className="min-w-32 text-sm">
                         <p className="flex items-center gap-2 font-semibold"><Users className="h-4 w-4" /> Who’s coming?</p>

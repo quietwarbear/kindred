@@ -63,6 +63,7 @@ def member_projection(
     responses: list[dict[str, Any]],
     eligible_user_ids: set[str],
     organizer: bool = False,
+    group_noun: str = "family",
 ) -> dict[str, Any]:
     own = next((item for item in responses if item.get("user_id") == viewer_id), None)
     state = proposal.get("state") if proposal.get("state") in PROPOSAL_STATES else "conflict"
@@ -85,7 +86,7 @@ def member_projection(
         result["organizer_note"] = str(proposal.get("organizer_note") or "")
     if organizer:
         result.update({
-            "proposer_display_name": str(proposal.get("proposer_display_name") or "Former family member"),
+            "proposer_display_name": str(proposal.get("proposer_display_name") or f"Former {group_noun} member"),
             "organizer_note": str(proposal.get("organizer_note") or ""),
             "moderation_reason": str(proposal.get("moderation_reason") or ""),
             "proposer_tombstone": bool(proposal.get("proposer_tombstone")),

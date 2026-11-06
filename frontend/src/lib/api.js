@@ -20,6 +20,19 @@ export const apiRequest = async (path, { method = "GET", data, token, params, he
   return response.data;
 };
 
+// Binary download with the same bearer auth (never a token in the URL).
+export const apiBlobRequest = async (path, { token, timeout = 60000 } = {}) => {
+  const response = await axios({
+    method: "GET",
+    url: `${API_URL}${path}`,
+    responseType: "blob",
+    timeout,
+    withCredentials: true,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  return response.data;
+};
+
 // FastAPI/Pydantic 422 responses put an ARRAY of {type, loc, msg, ...} objects
 // in `detail`. Passing that straight to a React child (e.g. toast.error)
 // crashes with "Objects are not valid as a React child" (KINDRED-FRONTEND-Q).

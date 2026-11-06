@@ -45,7 +45,15 @@ from dependencies import (
 )
 from event_privacy import serialize_event_for_user
 from memory_privacy import visible_memory_query_for_user
+from group_wording import (
+    MAX_LABEL_LENGTH,
+    PRESETS,
+    GroupLabelError,
+    group_label_for_community,
+    validate_group_label,
+)
 from models import (
+    GroupLabelUpdateRequest,
     DashboardOverview,
     InviteCreateRequest,
     InvitePublic,
@@ -82,6 +90,41 @@ async def set_community_modules(
         {"id": current_user["community_id"]}, {"$set": {"modules": enabled}}
     )
     return {"enabled": enabled, "catalog": MODULE_CATALOG}
+
+
+@router.get("/community/group-label")
+async def get_community_group_label(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """The word this space uses for its people (K3). Readable by every member."""
+    community = await get_community_for_user(current_user)
+    return {
+        "group_label": group_label_for_community(community),
+        "presets": [
+            {"preset": key, "singular": one, "plural": many}
+            for key, (one, many) in PRESETS.items()
+        ],
+        "max_length": MAX_LABEL_LENGTH,
+    }
+
+
+@router.put("/community/group-label")
+async def set_community_group_label(
+    payload: GroupLabelUpdateRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Organizers (and the host) choose the word; members cannot change it."""
+    ensure_minimum_role(current_user, "organizer")
+    try:
+        label = validate_group_label(payload.preset, payload.singular, payload.plural)
+    except GroupLabelError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await communities_collection.update_one(
+        {"id": current_user["community_id"]}, {"$set": {"group_label": label}}
+    )
+    return {"group_label": label}
 
 
 @router.get("/community/members")

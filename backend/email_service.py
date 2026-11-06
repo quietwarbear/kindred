@@ -105,7 +105,12 @@ async def send_verify_email(email: str, full_name: str, verify_url: str) -> bool
     return await _send_email(email, "Verify your email for Kindred", _base_template("Confirm your email", body))
 
 
-async def send_account_welcome(email: str, full_name: str, community_name: str | None = None) -> bool:
+async def send_account_welcome(
+    email: str,
+    full_name: str,
+    community_name: str | None = None,
+    group_label: dict | None = None,
+) -> bool:
     """One-time welcome email when someone first creates or joins a Kindred account.
 
     Transactional and fire-and-forget (callers use asyncio.create_task), so it
@@ -115,12 +120,15 @@ async def send_account_welcome(email: str, full_name: str, community_name: str |
     is not, so a future email-verification gate should precede this for the
     bootstrap path to avoid welcoming bot signups.
     """
+    from group_wording import wording
+
+    words = wording(group_label)
     first = (full_name or "").strip().split(" ")[0] or "there"
-    family = (community_name or "").strip()
+    space = (community_name or "").strip()
     opener = (
-        f"welcome to Kindred — where <strong>{family}</strong> gathers and keeps its stories."
-        if family
-        else "welcome to Kindred — where your family gathers and keeps its stories."
+        f"welcome to Kindred — where <strong>{space}</strong> gathers and keeps its stories."
+        if space
+        else f"welcome to Kindred — where your {words.noun} gathers and keeps its stories."
     )
     body = f"""
     <p style="font-size:16px;line-height:1.6;">Hi {first}, {opener}</p>
@@ -131,7 +139,7 @@ async def send_account_welcome(email: str, full_name: str, community_name: str |
     <div style="background:#f9f5f0;border-radius:8px;padding:16px 20px;margin:20px 0;">
         <p style="margin:0;font-size:14px;color:#5a4a3a;">
             📅 <strong>Plan a gathering</strong> — set the date, even a rough one.<br>
-            ✉️ <strong>Invite the family</strong> — one link brings everyone in.<br>
+            ✉️ <strong>Invite the {words.noun}</strong> — one link brings everyone in.<br>
             📖 <strong>Keep the stories</strong> — photos, voices, and memories in one place.
         </p>
     </div>

@@ -7,7 +7,7 @@ import re
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pymongo.errors import DuplicateKeyError
 
 from db import (
@@ -34,6 +34,8 @@ from models import (
     ReminderPreflightRequest,
 )
 from organizer_command_center import (
+    activity_roster,
+    activity_roster_csv,
     build_command_center,
     canonical_response_summary,
 )
@@ -180,6 +182,43 @@ async def command_center(
     )
     result["recap"] = {"completion_state": reunion_completion(event)["state"]}
     return result
+
+
+@router.get("/events/{event_id}/activity-roster")
+async def organizer_activity_roster(
+    event_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """K7: who is coming to each activity, one row per registered person."""
+    event = await _organizer_reunion(event_id, current_user)
+    context = await _command_center_context(event, current_user)
+    return activity_roster(event, member_ids_by_email=context["member_ids_by_email"])
+
+
+@router.get("/events/{event_id}/activity-roster.csv")
+async def organizer_activity_roster_csv(
+    event_id: str,
+    activity_id: str = Query(default="", max_length=128),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    event = await _organizer_reunion(event_id, current_user)
+    context = await _command_center_context(event, current_user)
+    roster = activity_roster(event, member_ids_by_email=context["member_ids_by_email"])
+    if activity_id and not any(a["id"] == activity_id for a in roster["activities"]):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary activity not found."
+        )
+    # UTF-8 BOM so spreadsheet apps read accented names correctly.
+    body = "\ufeff" + activity_roster_csv(roster, activity_id)
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="activity-roster.csv"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/events/{event_id}/guest-preview")

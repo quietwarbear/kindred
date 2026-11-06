@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { apiRequest } from "@/lib/api";
+import { CapsuleExport } from "@/components/reunion/CapsuleExport";
 import { trackReunionEvent } from "@/lib/analytics";
 import { zonedDateTimeToEpoch } from "@/lib/itinerary";
+import { useGroupWording } from "@/lib/groupWording";
 
 const ACTION_COPY = {
   share_first_memory: [
@@ -27,7 +29,7 @@ const ACTION_COPY = {
     "Your draft is visible only to you until you publish it.",
   ],
   review_reunion_memories: [
-    "Revisit the family stories",
+    "Revisit the {group} stories",
     "Read what the community has preserved, then mark the capsule reviewed.",
   ],
   reunion_capsule_complete: [
@@ -61,6 +63,7 @@ const clearOperationKey = (kind, eventId) => {
 };
 
 export const ReunionMemoryCapsulePage = ({ session }) => {
+  const gw = useGroupWording();
   const { eventId } = useParams();
   const [capsule, setCapsule] = useState(null);
   const [story, setStory] = useState("");
@@ -244,8 +247,8 @@ export const ReunionMemoryCapsulePage = ({ session }) => {
     );
   }
 
-  const [actionTitle, actionCopy] = ACTION_COPY[capsule.next_action.code]
-    || ACTION_COPY.reunion_capsule_complete;
+  const [actionTitle, actionCopy] = (ACTION_COPY[capsule.next_action.code]
+    || ACTION_COPY.reunion_capsule_complete).map(gw.fill);
 
   return (
     <div
@@ -275,6 +278,9 @@ export const ReunionMemoryCapsulePage = ({ session }) => {
             <p className="mt-3 rounded-xl bg-stone-100 px-4 py-3 text-sm text-stone-800" role="status">
               Your contribution is withdrawn and no longer appears in this capsule.
             </p>
+          ) : null}
+          {["host", "organizer"].includes(session.user?.role) ? (
+            <CapsuleExport eventId={eventId} title={capsule.reunion.title} token={session.token} />
           ) : null}
         </header>
 
@@ -344,7 +350,7 @@ export const ReunionMemoryCapsulePage = ({ session }) => {
 
         <section className="archival-card">
           <p className="eyebrow-text">Community stories</p>
-          <h2 className="mt-2 font-display text-3xl">What the family chose to keep</h2>
+          <h2 className="mt-2 font-display text-3xl">What the {gw.noun} chose to keep</h2>
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             {capsule.memories.map((memory) => (
               <article className="soft-panel" key={memory.id}>

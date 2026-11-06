@@ -20,14 +20,17 @@ import { GatheringVolunteers } from "@/components/gatherings/GatheringVolunteers
 import { ReunionInvitePreview } from "@/components/ReunionStartPage";
 import { ReunionItinerary } from "@/components/reunion/ReunionItinerary";
 import { ReunionOperations } from "@/components/reunion/ReunionOperations";
+import { ActivityRoster } from "@/components/reunion/ActivityRoster";
 import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { clearReunionDraft } from "@/lib/reunionDraft";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const activationKey = (eventId) => `kindred-reunion-activated:${eventId}`;
 
 export const ReunionActivationPage = ({ session }) => {
+  const gw = useGroupWording();
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [members, setMembers] = useState([]);
@@ -182,7 +185,7 @@ export const ReunionActivationPage = ({ session }) => {
     end_date: String(event.end_at || "").slice(0, 10),
     timezone: event.timezone || "UTC",
     multiday_enabled: Boolean(event.end_at && String(event.end_at).slice(0, 10) !== String(event.start_at).slice(0, 10)),
-    organizer_name: event.created_by_name || session.user?.full_name || "your family organizer",
+    organizer_name: event.created_by_name || session.user?.full_name || gw.fill("your {group} organizer"),
     location: event.location,
   };
 
@@ -244,6 +247,8 @@ export const ReunionActivationPage = ({ session }) => {
 
         <ReunionOperations event={event} operations={operations} />
 
+        <ActivityRoster eventId={eventId} refreshKey={operations} token={session.token} />
+
         <section className="grid gap-6 xl:grid-cols-2">
           <GatheringChecklist canCreate event={event} onUpdate={updateEvent} token={session.token} />
           <GatheringInvites event={event} members={members} onUpdate={updateEvent} token={session.token} />
@@ -256,12 +261,12 @@ export const ReunionActivationPage = ({ session }) => {
             <MessageCircleHeart className="mt-1 h-5 w-5 text-primary" />
             <div className="flex-1">
               <p className="eyebrow-text">Keep the stories</p>
-              <h2 className="mt-2 font-display text-3xl">What family story should every younger cousin know?</h2>
+              <h2 className="mt-2 font-display text-3xl">What {gw.noun} story should every younger cousin know?</h2>
               <p className="mt-3 text-sm leading-7 text-muted-foreground">
                 Start with a short note. Photos, voice recordings, and fuller profiles can come later.
               </p>
               <form className="mt-5 space-y-3" onSubmit={saveMemory}>
-                <label className="sr-only" htmlFor="reunion-memory-answer">Family story</label>
+                <label className="sr-only" htmlFor="reunion-memory-answer">{gw.Noun} story</label>
                 <Textarea
                   className="field-textarea"
                   data-testid="reunion-memory-answer"
@@ -284,7 +289,7 @@ export const ReunionActivationPage = ({ session }) => {
           <div className="flex items-start gap-3">
             <LockKeyhole className="mt-1 h-5 w-5 text-primary" />
             <div>
-              <p className="font-semibold">Family-space setup can wait.</p>
+              <p className="font-semibold">{gw.fill("{Group}-space setup can wait.")}</p>
               <p className="mt-1 text-sm text-muted-foreground">Name the permanent space, enrich profiles, choose modules, and create subyards after the first shared action.</p>
             </div>
           </div>

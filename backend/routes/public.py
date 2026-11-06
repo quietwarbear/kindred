@@ -37,12 +37,14 @@ from db import (
     users_collection,
 )
 from dependencies import now_iso
+from duplicate_merge import resolve_merged_invite
 from event_privacy import serialize_event_for_guest
 from family_space_activation import (
     ACTIVE,
     community_lifecycle_state,
     public_community_display_name,
 )
+from group_wording import group_label_for_community
 from guest_family_access import invitation_relationship_fingerprint
 from organizer_command_center import invitation_is_active
 from push_sender import maybe_notify
@@ -51,6 +53,7 @@ from itinerary import (
     activity_response_open,
     activity_summaries,
     effective_response_choice,
+    can_view_activity_link,
     own_activity_responses,
     published_activities,
     replace_respondent_activity_responses,
@@ -83,6 +86,10 @@ async def _find_event_and_invite(token: str):
     invite = next(
         (i for i in event.get("event_invites", []) if i.get("id") == token), None
     )
+    if invite and invite.get("merged_into"):
+        # K9: an organizer merged this person into another invitation. Their
+        # old link keeps working and opens the record that now holds them.
+        invite = resolve_merged_invite(event, invite)
     if invite and invite.get("invite_source") == "member":
         member_id = invite.get("member_id", "")
         if not member_id and invite.get("email"):
@@ -154,10 +161,11 @@ async def _public_rsvp_view(token: str):
         await _mark_invitation_opened(event["id"], token)
     community = await communities_collection.find_one(
         {"id": event.get("community_id")},
-        {"_id": 0, "name": 1, "lifecycle_state": 1},
+        {"_id": 0, "name": 1, "lifecycle_state": 1, "group_label": 1},
     )
     view = _public_view(event, invite)
     view["community_name"] = public_community_display_name(community)
+    view["group_label"] = group_label_for_community(community)
     view["family_access_available"] = bool(
         event.get("event_template") == "reunion"
         and invite.get("invite_source") == "guest"
@@ -183,6 +191,8 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This invitation link is not valid.",
         )
+    # K9: a merged link answers on the invitation it was merged into.
+    token = str(invite.get("id") or token)
     resolved_member_id = invite.get("member_id", "")
     if (
         not resolved_member_id
@@ -399,6 +409,34 @@ async def secure_public_rsvp_submit(
 ):
     """Update an invitation using an Authorization header, never a request URL."""
     return await _public_rsvp_submit(_invitation_token(authorization), payload)
+
+
+@router.get("/rsvp/materials/{material_id}")
+async def secure_public_material_download(
+    material_id: str, authorization: str | None = Header(default=None)
+):
+    """K6: a guest downloads an activity file they answered "coming" for.
+
+    Same bearer invitation token as the RSVP view; never a URL token.
+    """
+    from routes.events import material_file_response
+
+    event, invite = await _find_event_and_invite(_invitation_token(authorization))
+    if not event or not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This invitation link is not valid.",
+        )
+    _identity, aliases = public_respondent_identity(invite)
+    own = own_activity_responses(event, aliases)
+
+    def allowed(activity: dict) -> bool:
+        if activity.get("visibility") != "published":
+            return False
+        my_status = str((own.get(activity.get("id", "")) or {}).get("status") or "")
+        return can_view_activity_link(my_status, privileged=False)
+
+    return await material_file_response(event, material_id, allowed=allowed)
 
 
 @router.post("/family-access-claim")

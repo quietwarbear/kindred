@@ -13,6 +13,7 @@ import { GatheringAgenda } from "@/components/gatherings/GatheringAgenda";
 import { GatheringChecklist } from "@/components/gatherings/GatheringChecklist";
 import { GatheringInvites } from "@/components/gatherings/GatheringInvites";
 import { RegistrantImport } from "@/components/gatherings/RegistrantImport";
+import { DuplicateReview } from "@/components/gatherings/DuplicateReview";
 import { EventMessaging } from "@/components/gatherings/EventMessaging";
 import { HolidayPilotReadiness } from "@/components/gatherings/HolidayPilotReadiness";
 import { GatheringPotluck } from "@/components/gatherings/GatheringPotluck";
@@ -20,6 +21,7 @@ import { GatheringRoles } from "@/components/gatherings/GatheringRoles";
 import { GatheringRsvp } from "@/components/gatherings/GatheringRsvp";
 import { GatheringTravel } from "@/components/gatherings/GatheringTravel";
 import { GatheringVolunteers } from "@/components/gatherings/GatheringVolunteers";
+import { useGroupWording } from "@/lib/groupWording";
 
 const initialEventForm = {
   title: "",
@@ -53,6 +55,7 @@ const retrySafeRequestId = () => {
 };
 
 export const GatheringsPage = ({ token, user }) => {
+  const gw = useGroupWording();
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [subyards, setSubyards] = useState([]);
@@ -360,7 +363,7 @@ export const GatheringsPage = ({ token, user }) => {
             <p className="eyebrow-text">✨ Plan with the Ubuntu Guide</p>
             <p className="mt-1 text-sm text-muted-foreground">Describe it in a sentence — the steward drafts the whole gathering (agenda, volunteers, potluck), and it all saves when you create.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Input className="field-input flex-1" data-testid="gatherings-ai-prompt" onChange={(e) => setAiPrompt(e.target.value)} placeholder="e.g. Our August family reunion in Oakland, about 40 people" value={aiPrompt} />
+              <Input className="field-input flex-1" data-testid="gatherings-ai-prompt" onChange={(e) => setAiPrompt(e.target.value)} placeholder={gw.fill("e.g. Our August {group} reunion in Oakland, about 40 people")} value={aiPrompt} />
               <Button className="rounded-full" data-testid="gatherings-ai-plan-btn" disabled={planning} onClick={planWithAI} type="button">
                 {planning ? "Planning…" : "Draft it"}
               </Button>
@@ -723,7 +726,10 @@ export const GatheringsPage = ({ token, user }) => {
                 <GatheringRsvp event={activeEvent} onUpdate={mergeEvent} token={token} />
                 <GatheringInvites event={activeEvent} members={members} onUpdate={mergeEvent} token={token} />
                 {canCreate ? (
-                  <RegistrantImport event={activeEvent} onUpdate={mergeEvent} token={token} />
+                  <>
+                    <RegistrantImport event={activeEvent} onUpdate={mergeEvent} token={token} />
+                    <DuplicateReview event={activeEvent} onUpdate={mergeEvent} token={token} />
+                  </>
                 ) : null}
                 {canCreate ? (
                   <EventMessaging event={activeEvent} token={token} />

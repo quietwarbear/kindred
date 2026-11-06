@@ -2,12 +2,14 @@ import { ArrowRight, CalendarCheck, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/pricing";
+import { useGroupWording } from "@/lib/groupWording";
 
 // The pass sits BESIDE the tier ladder, not in it (decision 2026-09-23), so
 // it gets its own card rather than a sixth column. A reunion is a project
 // with an end date; the ladder sells months. This is the reunion-shaped door,
 // and it has to read as a different kind of thing at a glance.
 export const ReunionPassCard = ({ pass, onChoose }) => {
+  const gw = useGroupWording();
   if (!pass) return null;
 
   return (
@@ -54,7 +56,7 @@ export const ReunionPassCard = ({ pass, onChoose }) => {
           )}
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
             One payment. It does not renew — after twelve months it simply ends,
-            and your family space stays readable.
+            and your {gw.noun} space stays readable.
           </p>
         </div>
       </div>

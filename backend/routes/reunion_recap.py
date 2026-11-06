@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from group_wording import wording_for_community_id
 from db import (
     client,
     communities_collection,
@@ -311,6 +312,7 @@ async def _publish_notification(event: dict[str, Any], operation_hash: str) -> N
         {"_id": 0, "id": 1},
     ).to_list(2000)
     recipients = [item["id"] for item in users if item.get("id")]
+    words = await wording_for_community_id(event["community_id"])
     notification_id = f"reunion-recap:{operation_hash[:32]}"
     await notification_events_collection.update_one(
         {"id": notification_id},
@@ -320,7 +322,7 @@ async def _publish_notification(event: dict[str, Any], operation_hash: str) -> N
             "actor_name": "Kindred",
             "event_type": "reunion-recap-published",
             "title": "The private reunion recap is ready",
-            "description": "Review the reunion and continue preserving family memories in Kindred.",
+            "description": f"Review the reunion and continue preserving {words.noun} memories in Kindred.",
             "related_id": event["id"],
             "audience_scope": "user",
             "recipient_user_ids": recipients,

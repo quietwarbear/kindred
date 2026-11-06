@@ -25,6 +25,7 @@ import { SSOHandoffPage } from "@/components/SSOHandoffPage";
 import { SupportPage } from "@/components/SupportPage";
 import { TermsOfServicePage } from "@/components/TermsOfServicePage";
 import { apiRequest } from "@/lib/api";
+import { GroupWordingProvider } from "@/lib/groupWording";
 import { identifyUser, resetAnalytics } from "@/lib/analytics";
 import { configureStatusBar, getPlatform, registerPush, setupAppListeners, isNative } from "@/lib/native-bridge";
 import { publicUrl } from "@/config/publicIdentity";
@@ -289,6 +290,7 @@ function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <div className="App min-h-screen bg-background text-foreground">
+        <GroupWordingProvider label={session?.community?.group_label}>
         <BrowserRouter>
           <Routes>
             <Route element={isNative() ? session?.token ? <Navigate replace to={session.user?.community_id ? "/home" : "/reunion/start"} /> : <NativeWelcomePage /> : <LandingPage isAuthenticated={Boolean(session?.token)} />} path="/" />
@@ -351,6 +353,7 @@ function App() {
             />
           </Routes>
         </BrowserRouter>
+        </GroupWordingProvider>
         <Toaster position="top-right" richColors />
       </div>
     </ThemeProvider>

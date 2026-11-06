@@ -13,6 +13,7 @@ from typing import Any
 from event_privacy import rsvp_summary
 from itinerary import (
     activity_link_fields,
+    activity_material_fields,
     activity_response_open,
     activity_summaries,
     is_event_link_privileged,
@@ -159,8 +160,12 @@ def build_attendee_hub(
     user: dict[str, Any],
     *,
     has_memory: bool,
+    group_noun: str = "family",
 ) -> dict[str, Any]:
-    """Build the complete attendee-safe projection for one visible event."""
+    """Build the complete attendee-safe projection for one visible event.
+
+    ``group_noun`` is the community's chosen word (K3, ``group_wording``).
+    """
     aliases = member_invite_aliases(event, user)
     own_overall = _latest_matching(
         event.get("rsvp_records", []),
@@ -190,6 +195,9 @@ def build_attendee_hub(
                 "venue_detail": str(activity.get("venue_detail") or ""),
                 "map_url": str(activity.get("map_url") or ""),
                 **activity_link_fields(activity, my_status, privileged=privileged),
+                **activity_material_fields(
+                    event, activity, my_status, privileged=privileged
+                ),
                 "location_tba": bool(activity.get("location_tba", False)),
                 "capacity": activity.get("capacity"),
                 "rsvp_deadline": str(activity.get("rsvp_deadline") or ""),
@@ -239,7 +247,7 @@ def build_attendee_hub(
             "available": True,
             "code": "reunion_story",
             "title": "Keep one story from this reunion",
-            "question": "What is one family story you want everyone to remember?",
+            "question": f"What is one {group_noun} story you want everyone to remember?",
             "sharing_boundary": (
                 "Your story is saved to this private Kindred community. "
                 "It is not published to the open web."

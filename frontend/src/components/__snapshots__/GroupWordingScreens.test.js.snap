@@ -1,0 +1,7 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Today Today when it cannot load, with a custom label 1`] = `"Open your village spaceThe Today summary isn’t available for your current village access. Your village data was not changed. Open village activity or gatherings to continue.Open village activityOpen gatherings"`;
+
+exports[`Today member Today with a congregation label 1`] = `"Congregation TodayShare your reunion responseLet the congregation know your own plans without exposing anyone else’s response.Complete my RSVP One clear next stepBuilt from your current role and only the private congregation information you may access.After thatA few things close behindRespond to a congregation gathering ideaRespond privatelyCheck your congregation access statusCheck statusRecent changesWhat changed privatelyMark changes readSomething changed in your private congregation space.A congregation gathering pulse is open."`;
+
+exports[`plan card a member of a free-plan space during Keep The Record 1`] = `"Keep The RecordYour congregation isn’t entered yetKeep The Record is for subscriber congregations, and yours is on the free Seedling plan. Only your host can change the plan — but you can help pay for it."`;

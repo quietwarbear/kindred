@@ -4,6 +4,9 @@ Organizer routes (every one needs an organizer or host of the event's community)
 - POST /api/events/{event_id}/registrants/import          CSV text -> report
 - GET  /api/events/{event_id}/registrants/flags           possible duplicates
 - POST /api/events/{event_id}/registrants/flags/{id}/resolve
+- GET  /api/events/{event_id}/duplicates                  K9 existing duplicates
+- POST /api/events/{event_id}/duplicates/merge
+- POST /api/events/{event_id}/duplicates/{pair_key}/dismiss
 - GET  /api/events/{event_id}/registrants/webhook         URL + secret
 - POST /api/events/{event_id}/registrants/webhook/rotate  create or rotate secret
 
@@ -70,6 +73,7 @@ from registrant_webhook import (
     replay_digest,
     verify_signature,
 )
+from duplicate_merge import MergeError, dismiss_pair, merge_invitations, possible_duplicates
 from rsvp_integrity import RSVPWriteConflict, compare_and_swap_event
 
 logger = logging.getLogger(__name__)
@@ -79,6 +83,11 @@ router = APIRouter(prefix="/api", tags=["Registrant import"])
 class RegistrantCSVImportRequest(BaseModel):
     csv_text: str = Field(default="", max_length=MAX_CSV_BYTES)
     send_invitations: bool = False
+
+
+class DuplicateMergeRequest(BaseModel):
+    keep_invite_id: str = Field(min_length=1, max_length=128)
+    merge_invite_id: str = Field(min_length=1, max_length=128)
 
 
 class RegistrantFlagResolveRequest(BaseModel):
@@ -548,3 +557,93 @@ async def inbound_registrant_webhook(hook_id: str, request: Request):
         # Let the sender retry the same signed request after a server fault.
         await registrant_hook_deliveries_collection.delete_one({"replay_digest": digest})
         raise
+
+
+# ---------------------------------------------------------------------------
+# Organizer: duplicates that already exist (K9, second half)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/events/{event_id}/duplicates")
+async def list_possible_duplicates(
+    event_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    event = await _organizer_event(event_id, current_user)
+    return {"pairs": possible_duplicates(event)}
+
+
+@router.post("/events/{event_id}/duplicates/merge")
+async def merge_duplicate_people(
+    event_id: str,
+    payload: DuplicateMergeRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Keep one invitation; move the other's answers, account link and email to it."""
+    await _organizer_event(event_id, current_user)
+    report: dict[str, Any] = {}
+
+    def mutate(current: dict[str, Any]) -> dict[str, Any]:
+        updates, result = merge_invitations(
+            current,
+            keep_invite_id=payload.keep_invite_id,
+            merge_invite_id=payload.merge_invite_id,
+            actor_id=current_user.get("id", ""),
+            now=now_iso(),
+        )
+        report.update(result)
+        return updates
+
+    try:
+        event = await compare_and_swap_event(
+            events_collection,
+            {"id": event_id, "community_id": current_user["community_id"]},
+            mutate,
+        )
+    except MergeError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "rsvp_write_conflict", "message": str(exc)},
+        ) from exc
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    # Import flags that pointed at the merged person now point at the kept one.
+    await registrant_import_flags_collection.update_many(
+        {"event_id": event_id, "matched_invite_id": payload.merge_invite_id},
+        {"$set": {"matched_invite_id": payload.keep_invite_id}},
+    )
+    logger.info(
+        "duplicate_merge event=%s moved_event=%s moved_activity=%s",
+        event_id,
+        report.get("moved_event_answers"),
+        report.get("moved_activity_answers"),
+    )
+    return {"merge": report, "pairs": possible_duplicates(event)}
+
+
+@router.post("/events/{event_id}/duplicates/{pair_key}/dismiss")
+async def dismiss_possible_duplicate(
+    event_id: str,
+    pair_key: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """The organizer says these are two different people; don't raise it again."""
+    event = await _organizer_event(event_id, current_user)
+    if pair_key not in {pair["pair_key"] for pair in possible_duplicates(event)}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pair not found.")
+    try:
+        event = await compare_and_swap_event(
+            events_collection,
+            {"id": event_id, "community_id": current_user["community_id"]},
+            lambda current: dismiss_pair(current, pair_key),
+        )
+    except RSVPWriteConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "rsvp_write_conflict", "message": str(exc)},
+        ) from exc
+    return {"pairs": possible_duplicates(event or {})}
