@@ -123,7 +123,7 @@ export const NotificationPanel = ({ token }) => {
           )}
           {unreadCount > 0 && (
             <span
-              className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
+              className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[0.625rem] font-bold text-primary-foreground"
               data-testid="notification-unread-badge"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
@@ -164,7 +164,7 @@ export const NotificationPanel = ({ token }) => {
             <div className="px-4 py-8 text-center" data-testid="notification-empty-state">
               <Bell className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">No notifications yet</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Activity from your circle will show up here
               </p>
             </div>
@@ -191,13 +191,13 @@ export const NotificationPanel = ({ token }) => {
                   </p>
                   <div className="mt-1.5 flex items-center gap-2">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wider ${
                         EVENT_TYPE_COLORS[item.event_type] || "bg-muted text-muted-foreground"
                       }`}
                     >
                       {EVENT_TYPE_LABELS[item.event_type] || item.event_type}
                     </span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Clock className="h-2.5 w-2.5" />
                       {formatDateTime(item.created_at)}
                     </span>

@@ -19,7 +19,7 @@ import {
 } from "@/lib/eventMessaging";
 
 const fieldClass =
-  "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+  "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 const OffsetPicker = ({ offsets, onChange, testId }) => (
   <div className="flex flex-wrap gap-2" data-testid={testId}>

@@ -356,8 +356,8 @@ export const ReunionAttendeeHubPage = ({ session }) => {
 
         <section className="archival-card" id="respond_to_reunion">
           <p className="eyebrow-text">Your response</p>
-          <h2 className="mt-2 font-display text-3xl">Will you be there?</h2>
-          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          <h2 className="mt-2 font-display text-3xl" id="hub-overall-heading">Will you be there?</h2>
+          <div aria-labelledby="hub-overall-heading" className="mt-5 grid gap-2 sm:grid-cols-2" role="group">
             {OVERALL_OPTIONS.map(([value, label]) => (
               <button
                 aria-pressed={overall === value}
@@ -410,7 +410,7 @@ export const ReunionAttendeeHubPage = ({ session }) => {
                         <ActivityAccess activity={activity} className="mt-3" />
                         {activity.attendance_requested ? (
                           <>
-                          <div className="mt-4 flex flex-wrap gap-2">
+                          <div aria-label={`Your response for ${activity.title}`} className="mt-4 flex flex-wrap gap-2" role="group">
                             {ACTIVITY_OPTIONS.map(([value, label]) => (
                               <Button
                                 aria-pressed={activity.my_response === value}
@@ -488,11 +488,11 @@ export const ReunionAttendeeHubPage = ({ session }) => {
         <section className="archival-card" id="share_a_memory">
           <p className="eyebrow-text">Optional memory prompt</p>
           <h2 className="mt-2 font-display text-3xl">{hub.memory_prompt.title}</h2>
-          <p className="mt-3 text-sm text-muted-foreground">{hub.memory_prompt.question}</p>
+          <p className="mt-3 text-sm text-muted-foreground" id="hub-memory-question">{hub.memory_prompt.question}</p>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">{hub.memory_prompt.sharing_boundary}</p>
           {hub.memory_prompt.completed ? (
             <div className="mt-5">
-              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Your reunion story is saved.</p>
+              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700" role="status"><CheckCircle2 className="h-4 w-4" /> Your reunion story is saved.</p>
               <Button asChild className="mt-4" variant="outline">
                 <Link to={hub.memory_prompt.capsule_path || `/reunion/memories/${eventId}`}>
                   Open the private reunion capsule
@@ -501,7 +501,7 @@ export const ReunionAttendeeHubPage = ({ session }) => {
             </div>
           ) : (
             <>
-              <Textarea className="mt-5" maxLength={4000} onChange={(event) => setStory(event.target.value)} rows={5} value={story} />
+              <Textarea aria-labelledby="hub-memory-question" className="mt-5" maxLength={4000} onChange={(event) => setStory(event.target.value)} rows={5} value={story} />
               <Button className="mt-4" disabled={!online || !story.trim() || busy === "memory"} onClick={saveStory} type="button">
                 {busy === "memory" ? "Saving…" : "Save this story"}
               </Button>

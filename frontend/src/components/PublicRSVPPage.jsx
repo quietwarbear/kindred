@@ -101,6 +101,11 @@ export const PublicRSVPPage = () => {
   const openedTracked = useRef(false);
   const itineraryTracked = useRef(false);
   const loadRequestId = useRef(0);
+  // Each step swaps the whole form. Move focus to the new step's heading so
+  // keyboard and screen reader users land where the content changed, instead
+  // of on <body> after the button they pressed disappears.
+  const stepHeadingRef = useRef(null);
+  const stepRendered = useRef(false);
 
   useEffect(() => {
     const refreshToken = () => {
@@ -110,6 +115,14 @@ export const PublicRSVPPage = () => {
     window.addEventListener("hashchange", refreshToken);
     return () => window.removeEventListener("hashchange", refreshToken);
   }, [legacyToken]);
+
+  useEffect(() => {
+    if (!stepRendered.current) {
+      stepRendered.current = true;
+      return;
+    }
+    stepHeadingRef.current?.focus();
+  }, [step, saved]);
 
   const load = useCallback(async () => {
     const requestId = loadRequestId.current + 1;
@@ -264,7 +277,7 @@ export const PublicRSVPPage = () => {
     </div>
   );
 
-  if (loading) return shell(<p className="text-xl text-slate-600">Loading your invitation…</p>);
+  if (loading) return shell(<p className="text-xl text-slate-600" role="status">Loading your invitation…</p>);
 
   if (error && !data) {
     return shell(
@@ -279,7 +292,7 @@ export const PublicRSVPPage = () => {
 
   return shell(
     <>
-      {data?.invitee_name ? <p className="mb-1 text-lg text-slate-500">Hello {data.invitee_name},</p> : null}
+      {data?.invitee_name ? <p className="mb-1 text-lg text-slate-600">Hello {data.invitee_name},</p> : null}
       <h1 className="mb-2 text-3xl font-semibold text-slate-900">You’re invited</h1>
       {data?.invited_by_name ? (
         <p className="mb-5 text-base text-rose-700">
@@ -304,9 +317,10 @@ export const PublicRSVPPage = () => {
       </section>
 
       {!saved ? (
-        <div className="mb-6 flex justify-center gap-2" aria-label={`Step ${step} of 3`}>
+        <div className="mb-6 flex justify-center gap-2">
+          <p aria-live="polite" className="sr-only">Step {step} of 3</p>
           {[1, 2, 3].map((number) => (
-            <span className={`h-2 w-12 rounded-full ${step >= number ? "bg-rose-600" : "bg-slate-200"}`} key={number} />
+            <span aria-hidden="true" className={`h-2 w-12 rounded-full ${step >= number ? "bg-rose-600" : "bg-slate-200"}`} key={number} />
           ))}
         </div>
       ) : null}
@@ -314,7 +328,7 @@ export const PublicRSVPPage = () => {
       {saved ? (
         <section className="rounded-2xl bg-emerald-50 px-5 py-6" data-testid="public-rsvp-confirmation">
           <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-700" />
-          <h2 className="mt-3 text-xl font-semibold text-emerald-900">Your event response is saved.</h2>
+          <h2 className="mt-3 text-xl font-semibold text-emerald-900 focus:outline-none" ref={stepHeadingRef} tabIndex={-1}>Your event response is saved.</h2>
           <div className="mx-auto mt-4 max-w-xl rounded-xl bg-white/70 p-4 text-left text-sm text-emerald-950">
             <p><strong>Overall:</strong> {OVERALL_OPTIONS.find((option) => option.value === overall)?.label}</p>
             {activities.length ? (
@@ -358,13 +372,13 @@ export const PublicRSVPPage = () => {
           >
             {continuing ? "Opening secure sign in…" : "Ask to join the family space"}
           </button>
-          <p className="mt-3 text-xs text-slate-500">Your RSVP is already saved and does not depend on this choice.</p>
+          <p className="mt-3 text-xs text-slate-600">Your RSVP is already saved and does not depend on this choice.</p>
         </section>
       ) : null}
 
       {!saved && step === 1 ? (
         <fieldset data-testid="public-rsvp-options">
-          <legend className="text-xl font-semibold text-slate-900">Will you join the event?</legend>
+          <legend className="text-xl font-semibold text-slate-900 focus:outline-none" ref={stepHeadingRef} tabIndex={-1}>Will you join the event?</legend>
           <p className="mt-2 text-sm text-slate-600">You can still choose individual activities next.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {OVERALL_OPTIONS.map((option) => (
@@ -389,7 +403,7 @@ export const PublicRSVPPage = () => {
 
       {!saved && step === 2 ? (
         <section className="text-left" data-testid="public-rsvp-itinerary">
-          <h2 className="text-center text-2xl font-semibold text-slate-900">Tell us which activities you’re joining</h2>
+          <h2 className="text-center text-2xl font-semibold text-slate-900 focus:outline-none" ref={stepHeadingRef} tabIndex={-1}>Tell us which activities you’re joining</h2>
           <p className="mt-2 text-center text-sm text-slate-600">One schedule, one final submission. You can change it later.</p>
           <div className="mt-6 space-y-8">
             {Object.entries(groupedActivities).map(([day, dayActivities]) => (
@@ -424,7 +438,7 @@ export const PublicRSVPPage = () => {
                       {activity.notes ? <p className="mt-2 text-sm text-slate-700"><strong>Know before you go:</strong> {activity.notes}</p> : null}
                       <ActivityAccess activity={activity} className="mt-2" />
                       {activity.rsvp_deadline ? (
-                        <p className="mt-2 text-xs text-slate-500">
+                        <p className="mt-2 text-xs text-slate-600">
                           Activity response deadline: {formatMoment(activity.rsvp_deadline, activity.timezone, {
                             month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
                           })}
@@ -456,7 +470,7 @@ export const PublicRSVPPage = () => {
                           />
                           {!activity.response_open ? <p className="mt-2 text-sm text-amber-800">{closedResponseMessage(activity)}</p> : null}
                         </fieldset>
-                      ) : <p className="mt-4 text-sm text-slate-500">No separate attendance response requested.</p>}
+                      ) : <p className="mt-4 text-sm text-slate-600">No separate attendance response requested.</p>}
                     </article>
                   ))}
                 </div>
@@ -472,13 +486,13 @@ export const PublicRSVPPage = () => {
 
       {!saved && step === 3 ? (
         <section data-testid="public-rsvp-summary">
-          <h2 className="text-2xl font-semibold text-slate-900">Review your response</h2>
+          <h2 className="text-2xl font-semibold text-slate-900 focus:outline-none" ref={stepHeadingRef} tabIndex={-1}>Review your response</h2>
           <div className="mx-auto mt-5 max-w-xl rounded-2xl bg-slate-50 p-5 text-left">
             <p><strong>Overall:</strong> {OVERALL_OPTIONS.find((option) => option.value === overall)?.label}</p>
             {activities.length ? <p className="mt-2"><strong>Activities:</strong> {comingCount} coming · {Object.values(activityResponses).filter((value) => value === "maybe").length} maybe · {Object.values(activityResponses).filter((value) => value === "not-coming").length} not coming</p> : null}
             <label className="mt-4 block">
               <span className="font-semibold">Additional people in your party</span>
-              <input className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2" min={0} onChange={(event) => setGuests(event.target.value)} type="number" value={guests} />
+              <input className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2" inputMode="numeric" min={0} onChange={(event) => setGuests(event.target.value)} type="number" value={guests} />
             </label>
           </div>
           {comingCount > 0 && overall !== "going" && overall !== "some" ? (
@@ -492,7 +506,7 @@ export const PublicRSVPPage = () => {
               <button className="mt-2 font-semibold underline" onClick={() => setOverall("not-going")} type="button">Yes, update overall response</button>
             </div>
           ) : null}
-          {error ? <p className="mt-4 text-base text-rose-600">{error}</p> : null}
+          {error ? <p className="mt-4 text-base text-rose-700" role="alert">{error}</p> : null}
           <div className="mt-6 flex justify-center gap-3">
             <button className="rounded-full border border-slate-300 px-5 py-3 font-semibold text-slate-800" onClick={() => setStep(activities.length ? 2 : 1)} type="button">Back</button>
             <button className="rounded-full bg-rose-600 px-6 py-3 font-semibold text-white disabled:opacity-50" data-testid="public-rsvp-submit" disabled={saving || !overall} onClick={submit} type="button">
@@ -509,7 +523,7 @@ export const PublicRSVPPage = () => {
         </p>
       </section>
 
-      <div className="mt-5 text-sm text-slate-500">
+      <div className="mt-5 text-sm text-slate-600">
         <p>No account or app is required to respond. Already part of a Kindred community?</p>
         <a
           className="mt-2 inline-flex font-semibold text-rose-700 underline"
@@ -520,7 +534,7 @@ export const PublicRSVPPage = () => {
           Sign in to Kindred
         </a>
         <span className="mx-2">·</span>
-        <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app</a>
+        <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app<span className="sr-only"> (opens in a new tab)</span></a>
         <p className="mt-2 text-xs leading-5">Shared event memories require an account and approved family access; organizers can also use a separate private invitation. This RSVP link cannot open or add to the family’s memory capsule, and an account alone does not grant community access. A guest request remains private and requires organizer approval.</p>
       </div>
     </>

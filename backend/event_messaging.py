@@ -619,7 +619,7 @@ def sender_domain_verified() -> bool:
 
 def _page(inner: str) -> str:
     return (
-        '<!doctype html><html><body style="font-family:-apple-system,Segoe UI,'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body style="font-family:-apple-system,Segoe UI,'
         'Roboto,sans-serif;background:#f9f5f0;margin:0;padding:32px;">'
         '<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;'
         f'padding:32px;">{inner}</div></body></html>'
@@ -630,9 +630,9 @@ def _footer(unsubscribe_url: str, sender_name: str) -> str:
     who = html.escape(sender_name or "the organizer")
     link = html.escape(unsubscribe_url, quote=True)
     return (
-        '<p style="color:#9a8a7a;font-size:12px;line-height:18px;margin:24px 0 0;">'
+        '<p style="color:#6b5b4b;font-size:12px;line-height:18px;margin:24px 0 0;">'
         f"Sent by {who} through Kindred. Reply to this email to reach them. "
-        f'<a href="{link}" style="color:#9a8a7a;">Stop emails about this event</a>.</p>'
+        f'<a href="{link}" style="color:#6b5b4b;">Stop emails about this event</a>.</p>'
     )
 
 
