@@ -26,6 +26,27 @@ import {
   runOfShow,
 } from "@/lib/itinerary";
 import { toast } from "@/components/ui/sonner";
+import {
+  ActivityAccess,
+  ActivityChoicePicker,
+  choiceCountsLabel,
+  choicesApply,
+  closedResponseMessage,
+} from "@/components/reunion/ActivityAccess";
+
+export const parseResponseChoices = (text) => {
+  const seen = new Set();
+  return String(text || "")
+    .split(",")
+    .map((item) => item.trim().replace(/\s+/g, " ").slice(0, 60))
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (!item || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+};
 
 const activityDraft = (event, source = {}) => {
   const date = String(source.start_at || event.start_at || "").slice(0, 10);
@@ -43,6 +64,7 @@ const activityDraft = (event, source = {}) => {
     location_tba: Boolean(source.location_tba),
     capacity: source.capacity || "",
     rsvp_deadline: source.rsvp_deadline || "",
+    response_choices_text: (source.response_choices || []).join(", "),
     attendance_requested: source.attendance_requested !== false,
     notes: source.notes || "",
     visibility: source.visibility === "published" ? "published" : "draft",
@@ -103,10 +125,11 @@ const ActivityForm = ({ event, initial, onCancel, onSaved, token, activityId = "
         {
           method: activityId ? "PUT" : "POST",
           token,
-          data: {
-            ...form,
+          data: (({ response_choices_text: choicesText, ...rest }) => ({
+            ...rest,
             capacity: form.capacity ? Number(form.capacity) : null,
-          },
+            response_choices: parseResponseChoices(choicesText),
+          }))(form),
         }
       );
       onSaved(payload);
@@ -162,7 +185,7 @@ const ActivityForm = ({ event, initial, onCancel, onSaved, token, activityId = "
           <Input list="itinerary-timezones" onChange={(eventChange) => update("timezone", eventChange.target.value)} placeholder={`Inherits ${event.timezone || "UTC"}`} value={form.timezone} />
         </label>
         <label>
-          <span className="field-label">RSVP deadline <span className="font-normal">(optional)</span></span>
+          <span className="field-label">RSVP deadline <span className="font-normal">(optional — otherwise responses close when the activity ends)</span></span>
           <Input onChange={(eventChange) => update("rsvp_deadline", eventChange.target.value)} type="datetime-local" value={form.rsvp_deadline} />
         </label>
         <datalist id="itinerary-timezones">
@@ -191,6 +214,10 @@ const ActivityForm = ({ event, initial, onCancel, onSaved, token, activityId = "
         <label>
           <span className="field-label">Capacity <span className="font-normal">(optional)</span></span>
           <Input min={1} onChange={(eventChange) => update("capacity", eventChange.target.value)} type="number" value={form.capacity} />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="field-label">Ways to attend <span className="font-normal">(optional, separated by commas — e.g. In person, Remote)</span></span>
+          <Input data-testid="itinerary-choices-input" maxLength={400} onChange={(eventChange) => update("response_choices_text", eventChange.target.value)} placeholder="In person, Remote" value={form.response_choices_text} />
         </label>
         <label>
           <span className="field-label">Invitee visibility</span>
@@ -233,6 +260,9 @@ export const ReunionItinerary = ({ event, token, canCreate, onUpdate }) => {
   const [editingId, setEditingId] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
   const [localResponses, setLocalResponses] = useState({});
+  const [localChoices, setLocalChoices] = useState({});
+  const savedResponses = { ...(event.my_activity_responses || {}), ...localResponses };
+  const savedChoices = { ...(event.my_activity_choices || {}), ...localChoices };
   const viewedTracked = useRef(false);
   const groups = useMemo(() => groupActivitiesByDay(event), [event]);
   const overlapIds = useMemo(
@@ -298,21 +328,24 @@ export const ReunionItinerary = ({ event, token, canCreate, onUpdate }) => {
     }
   };
 
-  const rsvp = async (activity, response) => {
+  const rsvp = async (activity, response, choice) => {
     try {
+      const data = { activity_id: activity.id, status: response, party_size: 1 };
+      if (choice !== undefined) data.choice = choice;
       const payload = await apiRequest(`/events/${event.id}/activity-rsvp`, {
         method: "POST",
         token,
-        data: { activity_id: activity.id, status: response, party_size: 1 },
+        data,
       });
       setLocalResponses((current) => ({ ...current, [activity.id]: response }));
+      if (choice !== undefined) setLocalChoices((current) => ({ ...current, [activity.id]: choice }));
       onUpdate(payload);
       trackReunionEvent("activity_rsvp_updated", {
         response_category: response,
         actor_type: "invitee",
       });
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Unable to update this activity response.");
+      toast.error(apiErrorMessage(error, "Unable to update this activity response."));
     }
   };
 
@@ -394,12 +427,16 @@ export const ReunionItinerary = ({ event, token, canCreate, onUpdate }) => {
                         </p>
                         {activity.description ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{activity.description}</p> : null}
                         {activity.notes ? <p className="mt-2 text-sm"><strong>Know before you go:</strong> {activity.notes}</p> : null}
+                        <ActivityAccess activity={activity} className="mt-2" />
                       </div>
                       <div className="min-w-32 text-sm">
                         <p className="flex items-center gap-2 font-semibold"><Users className="h-4 w-4" /> Who’s coming?</p>
                         <p className="mt-2 text-muted-foreground">{summary.coming || 0} coming · {summary.maybe || 0} maybe</p>
                         <p className="text-muted-foreground">{summary.no_response || 0} no response</p>
                         {activity.capacity ? <p className={full ? "mt-1 font-semibold text-amber-600" : "mt-1 text-muted-foreground"}>{summary.party_size || 0}/{activity.capacity} places</p> : null}
+                        {canCreate && choiceCountsLabel(event.activity_choice_summaries?.[activity.id]) ? (
+                          <p className="mt-1 text-muted-foreground" data-testid={`itinerary-choice-counts-${activity.id}`}>{choiceCountsLabel(event.activity_choice_summaries[activity.id])}</p>
+                        ) : null}
                       </div>
                     </div>
 
@@ -413,17 +450,26 @@ export const ReunionItinerary = ({ event, token, canCreate, onUpdate }) => {
                             ["not-coming", "Not coming"],
                           ].map(([value, label]) => (
                             <Button
-                              aria-pressed={localResponses[activity.id] === value}
+                              aria-pressed={savedResponses[activity.id] === value}
+                              disabled={activity.response_open === false}
                               key={value}
                               onClick={() => rsvp(activity, value)}
                               size="sm"
                               type="button"
-                              variant={localResponses[activity.id] === value ? "default" : "outline"}
+                              variant={savedResponses[activity.id] === value ? "default" : "outline"}
                             >
                               {label}
                             </Button>
                           ))}
                         </div>
+                        <ActivityChoicePicker
+                          activity={activity}
+                          disabled={activity.response_open === false}
+                          onChange={(choice) => rsvp(activity, savedResponses[activity.id], choice)}
+                          status={savedResponses[activity.id]}
+                          value={choicesApply(activity, savedResponses[activity.id]) ? savedChoices[activity.id] || "" : ""}
+                        />
+                        {activity.response_open === false ? <p className="mt-2 text-sm text-amber-700">{closedResponseMessage(activity)}</p> : null}
                       </fieldset>
                     ) : null}
 

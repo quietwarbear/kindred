@@ -10,6 +10,12 @@ import {
 } from "@/lib/invitationTransport";
 import { dayKeyAtTimezone, runOfShow, zonedDateTimeToEpoch } from "@/lib/itinerary";
 import { saveGuestFamilyClaim } from "@/lib/guestFamilyAccess";
+import {
+  ActivityAccess,
+  ActivityChoicePicker,
+  choicesApply,
+  closedResponseMessage,
+} from "@/components/reunion/ActivityAccess";
 
 // Public, no-account RSVP page for https://heykindred.org/rsvp#token.
 // Fragments stay out of HTTP request URLs; API authentication uses a header.
@@ -28,6 +34,18 @@ const ACTIVITY_OPTIONS = [
   { value: "maybe", label: "Maybe" },
   { value: "not-coming", label: "Not coming" },
 ];
+
+// Send only the options the guest changed. An activity left out keeps its
+// saved option on the server; a cleared option is sent as "".
+export const changedActivityChoices = (activities, responses, choices, saved) => Object.fromEntries(
+  activities
+    .filter((activity) => activity.response_choices?.length && responses[activity.id])
+    .map((activity) => [
+      activity.id,
+      choicesApply(activity, responses[activity.id]) ? choices[activity.id] || "" : "",
+    ])
+    .filter(([activityId, choice]) => choice !== (saved[activityId] || ""))
+);
 
 const formatMoment = (value, timezone, options = {}) => {
   if (!value) return "";
@@ -77,6 +95,8 @@ export const PublicRSVPPage = () => {
   const [step, setStep] = useState(1);
   const [overall, setOverall] = useState("");
   const [activityResponses, setActivityResponses] = useState({});
+  const [activityChoices, setActivityChoices] = useState({});
+  const [savedChoices, setSavedChoices] = useState({});
   const [guests, setGuests] = useState(0);
   const openedTracked = useRef(false);
   const itineraryTracked = useRef(false);
@@ -112,6 +132,13 @@ export const PublicRSVPPage = () => {
           .filter((activity) => activity.my_response && activity.my_response !== "no-response")
           .map((activity) => [activity.id, activity.my_response])
       ));
+      const loadedChoices = Object.fromEntries(
+        (payload.gathering?.activities || [])
+          .filter((activity) => activity.my_choice)
+          .map((activity) => [activity.id, activity.my_choice])
+      );
+      setActivityChoices(loadedChoices);
+      setSavedChoices(loadedChoices);
     } catch {
       if (loadRequestId.current === requestId) {
         setError("We couldn't find this invitation. Ask whoever invited you for a fresh link.");
@@ -176,11 +203,17 @@ export const PublicRSVPPage = () => {
           status: overall,
           guests: Math.max(0, Number(guests) || 0),
           activity_responses: activityResponses,
+          activity_choices: changedActivityChoices(activities, activityResponses, activityChoices, savedChoices),
         }),
       });
       if (!response.ok) throw new Error("save failed");
       const payload = await response.json();
       setData(payload);
+      setSavedChoices(Object.fromEntries(
+        (payload.gathering?.activities || [])
+          .filter((activity) => activity.my_choice)
+          .map((activity) => [activity.id, activity.my_choice])
+      ));
       setSaved(true);
       if (payload?.gathering?.event_template === "reunion") {
         trackReunionEvent("rsvp_completed", {
@@ -290,8 +323,12 @@ export const PublicRSVPPage = () => {
                   <div className="border-t border-emerald-200 pt-2" key={activity.id}>
                     <p className="flex items-center justify-between gap-3">
                       <span>{activity.title}</span>
-                      <span className="font-semibold">{ACTIVITY_OPTIONS.find((option) => option.value === activityResponses[activity.id])?.label || "No response"}</span>
+                      <span className="font-semibold">
+                        {ACTIVITY_OPTIONS.find((option) => option.value === activityResponses[activity.id])?.label || "No response"}
+                        {choicesApply(activity, activityResponses[activity.id]) && activityChoices[activity.id] ? ` · ${activityChoices[activity.id]}` : ""}
+                      </span>
                     </p>
+                    <ActivityAccess activity={activity} className="mt-1 text-emerald-900" />
                     <p className="mt-1 text-xs text-emerald-800">
                       {formatMoment(activity.start_at, activity.timezone, { weekday: "short", hour: "numeric", minute: "2-digit" })}
                       {" · "}{activity.attendance?.coming || 0} coming · {activity.attendance?.maybe || 0} maybe
@@ -385,6 +422,7 @@ export const PublicRSVPPage = () => {
                       </div>
                       {activity.description ? <p className="mt-3 text-sm leading-6 text-slate-600">{activity.description}</p> : null}
                       {activity.notes ? <p className="mt-2 text-sm text-slate-700"><strong>Know before you go:</strong> {activity.notes}</p> : null}
+                      <ActivityAccess activity={activity} className="mt-2" />
                       {activity.rsvp_deadline ? (
                         <p className="mt-2 text-xs text-slate-500">
                           Activity response deadline: {formatMoment(activity.rsvp_deadline, activity.timezone, {
@@ -409,7 +447,14 @@ export const PublicRSVPPage = () => {
                               </button>
                             ))}
                           </div>
-                          {!activity.response_open ? <p className="mt-2 text-sm text-amber-800">This activity’s response deadline has passed. Your saved choice remains visible.</p> : null}
+                          <ActivityChoicePicker
+                            activity={activity}
+                            disabled={!activity.response_open}
+                            onChange={(choice) => setActivityChoices((current) => ({ ...current, [activity.id]: choice }))}
+                            status={activityResponses[activity.id]}
+                            value={choicesApply(activity, activityResponses[activity.id]) ? activityChoices[activity.id] || "" : ""}
+                          />
+                          {!activity.response_open ? <p className="mt-2 text-sm text-amber-800">{closedResponseMessage(activity)}</p> : null}
                         </fieldset>
                       ) : <p className="mt-4 text-sm text-slate-500">No separate attendance response requested.</p>}
                     </article>

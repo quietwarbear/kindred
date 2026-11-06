@@ -8,11 +8,17 @@ state, and private activity rows are excluded by construction.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from event_privacy import rsvp_summary
-from itinerary import activity_summaries, parse_local_datetime, published_activities
+from itinerary import (
+    activity_link_fields,
+    activity_response_open,
+    activity_summaries,
+    is_event_link_privileged,
+    own_activity_responses,
+    published_activities,
+)
 from rsvp_integrity import member_invite_aliases
 from reunion_recap import reunion_completion
 
@@ -37,14 +43,8 @@ def _latest_matching(
 
 
 def _response_open(activity: dict[str, Any], event: dict[str, Any]) -> bool:
-    deadline_value = activity.get("rsvp_deadline", "")
-    if not deadline_value:
-        return True
-    deadline = parse_local_datetime(
-        deadline_value,
-        activity.get("timezone") or event.get("timezone", "UTC"),
-    )
-    return bool(deadline and datetime.now(timezone.utc) <= deadline)
+    """Responses close at the RSVP deadline, or when the activity ends."""
+    return activity_response_open(activity, event.get("timezone", "UTC"))
 
 
 def _member_owns_potluck(
@@ -167,15 +167,14 @@ def build_attendee_hub(
         identity_key="user_id",
         aliases=aliases,
     )
-    own_activity = {
-        row.get("activity_id", ""): row.get("status", "")
-        for row in event.get("activity_rsvps", [])
-        if row.get("respondent_id") in aliases and row.get("activity_id")
-    }
+    own_activity = own_activity_responses(event, aliases)
+    privileged = is_event_link_privileged(event, user)
     summaries = activity_summaries(event)
     activities = []
     for activity in published_activities(event):
         activity_id = str(activity.get("id") or "")
+        own_row = own_activity.get(activity_id) or {}
+        my_status = str(own_row.get("status") or "no-response")
         activities.append(
             {
                 "id": activity_id,
@@ -190,18 +189,20 @@ def build_attendee_hub(
                 "venue_address": str(activity.get("venue_address") or ""),
                 "venue_detail": str(activity.get("venue_detail") or ""),
                 "map_url": str(activity.get("map_url") or ""),
-                "virtual_link": str(activity.get("virtual_link") or ""),
+                **activity_link_fields(activity, my_status, privileged=privileged),
                 "location_tba": bool(activity.get("location_tba", False)),
                 "capacity": activity.get("capacity"),
                 "rsvp_deadline": str(activity.get("rsvp_deadline") or ""),
                 "response_open": _response_open(activity, event),
+                "response_choices": list(activity.get("response_choices") or []),
                 "attendance_requested": bool(
                     activity.get("attendance_requested", True)
                 ),
                 "notes": str(activity.get("notes") or ""),
                 "featured": bool(activity.get("featured", False)),
                 "attendance": summaries.get(activity_id, {}),
-                "my_response": own_activity.get(activity_id, "no-response"),
+                "my_response": my_status,
+                "my_choice": str(own_row.get("choice") or ""),
             }
         )
 

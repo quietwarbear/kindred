@@ -2,7 +2,6 @@
 
 import os
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -47,13 +46,17 @@ from dependencies import (
 from ai_gathering import generate_gathering_plan
 from itinerary import (
     ACTIVITY_RESPONSES,
+    activity_choice_summaries,
+    activity_response_open,
     activity_summaries,
     canonical_activity_responses,
     local_day_key,
     normalize_activity,
     overlap_pairs,
+    own_activity_responses,
     parse_local_datetime,
     replace_respondent_activity_responses,
+    effective_response_choice,
     safe_roster_row_key,
     valid_timezone,
     validate_activity,
@@ -1517,12 +1520,8 @@ async def update_activity_rsvp(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Activity RSVP is unavailable.",
             )
-        deadline_value = activity.get("rsvp_deadline", "")
-        deadline = parse_local_datetime(
-            deadline_value,
-            activity.get("timezone") or event_doc.get("timezone", "UTC"),
-        )
-        if deadline_value and (not deadline or datetime.now(timezone.utc) > deadline):
+        # K8: responses close at the RSVP deadline, or at the activity's end.
+        if not activity_response_open(activity, event_doc.get("timezone", "UTC")):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -1530,17 +1529,36 @@ async def update_activity_rsvp(
                     "message": "This activity is not accepting RSVP changes.",
                 },
             )
+        aliases = member_invite_aliases(event_doc, current_user)
+        previous = own_activity_responses(event_doc, aliases).get(
+            payload.activity_id
+        ) or {}
+        try:
+            choice = effective_response_choice(
+                activity,
+                payload.status,
+                payload.choice,
+                str(previous.get("choice") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_response_choice",
+                    "message": "That option is not offered for this activity.",
+                },
+            ) from exc
         replacement = {
             "activity_id": payload.activity_id,
             "respondent_id": current_user["id"],
             "respondent_type": "member",
             "display_name": current_user["full_name"],
             "status": payload.status,
+            "choice": choice,
             "party_size": max(1, payload.party_size),
             "updated_at": now_iso(),
             "via": "authenticated",
         }
-        aliases = member_invite_aliases(event_doc, current_user)
         responses = replace_respondent_activity_responses(
             event_doc.get("activity_rsvps", []),
             current_user["id"],
@@ -1652,6 +1670,7 @@ async def reunion_operations(
                 ),
                 "display_name": response.get("display_name") or "Invited guest",
                 "status": response.get("status", "no-response"),
+                "choice": str(response.get("choice") or ""),
                 "party_size": max(1, int(response.get("party_size", 1) or 1)),
                 "updated_at": response.get("updated_at", ""),
             }
@@ -1690,6 +1709,7 @@ async def reunion_operations(
             for response in ("going", "some", "maybe", "not-going")
         },
         "activity_summaries": summaries,
+        "activity_choice_summaries": activity_choice_summaries(event_doc),
         "day_summaries": day_summaries,
         "activity_rosters": rosters,
         "overlaps": overlap_pairs(agenda, event_doc.get("timezone", "UTC")),
