@@ -1,16 +1,24 @@
-"""Deterministic, aggregate-only reunion command-center derivation.
+"""Deterministic reunion command-center derivation.
 
-This module intentionally contains no analytics or logging. Returned values are
-limited to counts, timestamps, categorical states, and stable action codes.
-Recipient-facing details remain in explicitly authorized invitation surfaces.
+This module intentionally contains no analytics or logging. The command
+center itself returns only counts, timestamps, categorical states, and stable
+action codes. The one exception is ``activity_roster`` (K7), the per-person
+list per activity, which only organizer-only routes may serve.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from itinerary import parse_local_datetime, published_activities, valid_timezone
+from itinerary import (
+    parse_local_datetime,
+    published_activities,
+    safe_roster_row_key,
+    valid_timezone,
+)
 
 RESPONSE_STATUSES = ("going", "some", "maybe", "not-going", "pending")
 INACTIVE_INVITATION_STATES = {
@@ -57,13 +65,18 @@ def invitation_is_active(
     return not expires_at or expires_at > now
 
 
-def canonical_response_summary(
+def _active_invite_identities(
     event: dict[str, Any],
     *,
     member_ids_by_email: dict[str, str] | None = None,
     now: datetime | None = None,
-) -> dict[str, Any]:
-    """Reconcile invitation and RSVP state without merging unrelated guests."""
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """Map response aliases to one identity per active invitation holder.
+
+    Returns ``(aliases, invite_by_identity)``. An invitation tied to a member
+    (directly or by email) shares one identity with that member's own answers;
+    any other invitation is its own identity, so unrelated guests never merge.
+    """
     member_ids_by_email = {
         _normalized_email(email): member_id
         for email, member_id in (member_ids_by_email or {}).items()
@@ -94,6 +107,19 @@ def canonical_response_summary(
             existing.get("created_at") or ""
         ):
             invite_by_identity[identity] = invite
+    return aliases, invite_by_identity
+
+
+def canonical_response_summary(
+    event: dict[str, Any],
+    *,
+    member_ids_by_email: dict[str, str] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Reconcile invitation and RSVP state without merging unrelated guests."""
+    aliases, invite_by_identity = _active_invite_identities(
+        event, member_ids_by_email=member_ids_by_email, now=now
+    )
 
     records_by_identity: dict[str, dict[str, Any]] = {}
     for record in event.get("rsvp_records", []):
@@ -392,9 +418,12 @@ def build_command_center(
         progress=progress,
         now=now,
     )
+    roster = activity_roster(event, member_ids_by_email=member_ids_by_email, now=now)
     return {
         "event_timezone": event.get("timezone", "UTC"),
         "next_action": action,
+        # K7: counts only; the per-person list is its own organizer route.
+        "activity_flags": {"ended_still_coming": roster["ended_still_coming"]},
         "responses": responses,
         "deadlines": deadlines,
         "progress": progress,
@@ -402,3 +431,203 @@ def build_command_center(
         "recent_changes": recent_changes[:8],
         "guest_preview_available": True,
     }
+
+
+# ---------------------------------------------------------------------------
+# K7: per-activity roster (organizer-only)
+# ---------------------------------------------------------------------------
+
+ROSTER_STATUSES = ("coming", "maybe", "not-coming", "no-response")
+ENDED_STILL_COMING = "ended_still_coming"
+
+
+def _activity_ended(
+    activity: dict[str, Any], event_timezone: str, now: datetime
+) -> bool:
+    """True once the activity's end (or start, if it has no end) has passed."""
+    timezone_name = activity.get("timezone") or event_timezone or "UTC"
+    for key in ("end_at", "start_at"):
+        value = str(activity.get(key) or "")
+        if value:
+            instant = parse_local_datetime(value, timezone_name)
+            return bool(instant and instant < now)
+    return False
+
+
+def _latest_activity_responses(
+    event: dict[str, Any], aliases: dict[str, str]
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Latest response per (activity, identity); unmatched respondents keep their own id."""
+    latest: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in event.get("activity_rsvps", []):
+        activity_id = str(row.get("activity_id") or "")
+        respondent_id = str(row.get("respondent_id") or "")
+        if not activity_id or not respondent_id:
+            continue
+        identity = aliases.get(respondent_id) or f"respondent:{respondent_id}"
+        key = (activity_id, identity)
+        existing = latest.get(key)
+        if not existing or str(row.get("updated_at") or "") >= str(
+            existing.get("updated_at") or ""
+        ):
+            latest[key] = row
+    return latest
+
+
+def activity_roster(
+    event: dict[str, Any],
+    *,
+    member_ids_by_email: dict[str, str] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Every registered person's answer for every activity, for organizers.
+
+    "Registered" means holding an active invitation to the event. Each
+    activity lists all of them, with "no-response" for anyone who has not
+    answered, plus anyone who answered without a current invitation
+    (``registered: false``). People still marked "coming" for an activity that
+    has already ended are flagged ``ended_still_coming``.
+
+    Like the existing operations roster, rows carry names only: no email
+    addresses, phone numbers, invitation tokens or private notes.
+    """
+    now = now or datetime.now(timezone.utc)
+    event_timezone = str(event.get("timezone") or "UTC")
+    aliases, invite_by_identity = _active_invite_identities(
+        event, member_ids_by_email=member_ids_by_email, now=now
+    )
+    latest = _latest_activity_responses(event, aliases)
+    agenda = sorted(
+        (
+            item
+            for item in event.get("agenda", [])
+            if item.get("id") and item.get("visibility") != "archived"
+        ),
+        key=lambda item: (str(item.get("start_at") or "9999"), str(item.get("title") or "")),
+    )
+
+    activities = []
+    ended_still_coming_total = 0
+    for activity in agenda:
+        activity_id = str(activity["id"])
+        ended = _activity_ended(activity, event_timezone, now)
+        identities = list(invite_by_identity)
+        identities.extend(
+            identity
+            for (row_activity, identity) in latest
+            if row_activity == activity_id and identity not in invite_by_identity
+        )
+        rows = []
+        for identity in identities:
+            invite = invite_by_identity.get(identity) or {}
+            response = latest.get((activity_id, identity)) or {}
+            status_value = str(response.get("status") or "no-response")
+            if status_value not in ROSTER_STATUSES:
+                status_value = "no-response"
+            answered = status_value != "no-response"
+            party_size = (
+                max(1, int(response.get("party_size", 1) or 1))
+                if status_value in {"coming", "maybe"}
+                else 0
+            )
+            flags = [ENDED_STILL_COMING] if ended and status_value == "coming" else []
+            rows.append(
+                {
+                    "row_key": safe_roster_row_key(activity_id, identity),
+                    "name": str(
+                        invite.get("invitee_name")
+                        or response.get("display_name")
+                        or "Invited guest"
+                    ),
+                    "registered": identity in invite_by_identity,
+                    "status": status_value,
+                    "choice": str(response.get("choice") or "") if answered else "",
+                    "party_size": party_size,
+                    "responded_at": str(response.get("updated_at") or "") if answered else "",
+                    "flags": flags,
+                }
+            )
+        order = {status: index for index, status in enumerate(ROSTER_STATUSES)}
+        rows.sort(key=lambda row: (order[row["status"]], row["name"].lower()))
+        counts = {status: 0 for status in ROSTER_STATUSES}
+        for row in rows:
+            counts[row["status"]] += 1
+        ended_still_coming = sum(1 for row in rows if row["flags"])
+        ended_still_coming_total += ended_still_coming
+        activities.append(
+            {
+                "id": activity_id,
+                "title": str(activity.get("title") or ""),
+                "start_at": str(activity.get("start_at") or ""),
+                "end_at": str(activity.get("end_at") or ""),
+                "timezone": str(activity.get("timezone") or event_timezone),
+                "visibility": str(activity.get("visibility") or "draft"),
+                "capacity": activity.get("capacity"),
+                "ended": ended,
+                "registered": len(invite_by_identity),
+                "counts": counts,
+                "expected_turnout": sum(
+                    row["party_size"] for row in rows if row["status"] == "coming"
+                ),
+                "possible_turnout": sum(
+                    row["party_size"] for row in rows if row["status"] in {"coming", "maybe"}
+                ),
+                "ended_still_coming": ended_still_coming,
+                "people": rows,
+            }
+        )
+    return {
+        "event_id": str(event.get("id") or ""),
+        "timezone": event_timezone,
+        "generated_at": now.isoformat(),
+        "registered": len(invite_by_identity),
+        "ended_still_coming": ended_still_coming_total,
+        "activities": activities,
+    }
+
+
+CSV_COLUMNS = (
+    "activity",
+    "activity_start",
+    "activity_ended",
+    "name",
+    "registered",
+    "status",
+    "choice",
+    "party_size",
+    "responded_at",
+    "flag",
+)
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value: Any) -> str:
+    """Neutralize spreadsheet formulas in organizer- and guest-entered text."""
+    text = str(value if value is not None else "")
+    return f"'{text}" if text.startswith(_FORMULA_PREFIXES) else text
+
+
+def activity_roster_csv(roster: dict[str, Any], activity_id: str = "") -> str:
+    """One row per person per activity; optionally a single activity."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(CSV_COLUMNS)
+    for activity in roster.get("activities", []):
+        if activity_id and activity["id"] != activity_id:
+            continue
+        for person in activity["people"]:
+            writer.writerow(
+                [
+                    _csv_cell(activity["title"]),
+                    _csv_cell(activity["start_at"]),
+                    "yes" if activity["ended"] else "no",
+                    _csv_cell(person["name"]),
+                    "yes" if person["registered"] else "no",
+                    person["status"],
+                    _csv_cell(person["choice"]),
+                    person["party_size"],
+                    _csv_cell(person["responded_at"]),
+                    _csv_cell(";".join(person["flags"])),
+                ]
+            )
+    return buffer.getvalue()
