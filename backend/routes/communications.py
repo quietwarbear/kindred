@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from db import (
     announcements_collection,
@@ -18,8 +18,10 @@ from dependencies import (
     get_chat_room_for_user,
     get_community_for_user,
     get_current_user,
+    get_event_for_user,
     get_notification_preferences_for_user,
     get_subyard_for_user,
+    hidden_event_ids_for_user,
     log_notification_event,
     notification_query_for_user,
     now_iso,
@@ -35,12 +37,37 @@ from models import (
 router = APIRouter(prefix="/api")
 
 
+async def announcement_visibility_query(
+    current_user: dict[str, Any], prefs: dict[str, Any]
+) -> dict[str, Any]:
+    """Announcements this user may see.
+
+    A targeted announcement (K5) is visible to its member recipients and to
+    organizers; community announcements stay visible to everyone. Nobody sees
+    one tied to an event hidden from them.
+    """
+    conditions: list[dict[str, Any]] = [{"community_id": current_user["community_id"]}]
+    if prefs.get("muted_announcement_scopes"):
+        conditions.append({"scope": {"$nin": prefs.get("muted_announcement_scopes", [])}})
+    if current_user.get("role") not in {"host", "organizer"}:
+        conditions.append(
+            {
+                "$or": [
+                    {"recipient_user_ids": {"$exists": False}},
+                    {"recipient_user_ids": current_user["id"]},
+                ]
+            }
+        )
+    hidden_ids = await hidden_event_ids_for_user(current_user)
+    if hidden_ids:
+        conditions.append({"event_id": {"$nin": hidden_ids}})
+    return conditions[0] if len(conditions) == 1 else {"$and": conditions}
+
+
 @router.get("/announcements")
 async def list_announcements(current_user: dict[str, Any] = Depends(get_current_user)):
     prefs = await get_notification_preferences_for_user(current_user)
-    base_query = {"community_id": current_user["community_id"]}
-    if prefs.get("muted_announcement_scopes"):
-        base_query["scope"] = {"$nin": prefs.get("muted_announcement_scopes", [])}
+    base_query = await announcement_visibility_query(current_user, prefs)
     unread_before_view = await announcements_collection.count_documents({
         **base_query,
         "read_by_ids": {"$ne": current_user["id"]},
@@ -49,13 +76,39 @@ async def list_announcements(current_user: dict[str, Any] = Depends(get_current_
         base_query,
         {"$addToSet": {"read_by_ids": current_user["id"]}},
     )
-    announcements = await announcements_collection.find(base_query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    announcements = await announcements_collection.find(
+        base_query, {"_id": 0, "recipient_user_ids": 0}
+    ).sort("created_at", -1).to_list(200)
     return {"announcements": announcements, "unread_before_view": unread_before_view}
 
 
 @router.post("/announcements")
-async def create_announcement(payload: AnnouncementCreateRequest, current_user: dict[str, Any] = Depends(get_current_user)):
+async def create_announcement(
+    payload: AnnouncementCreateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    from routes.event_messages import (
+        audience_label,
+        dispatch_announcement,
+        queue_announcement,
+        recipients_for,
+    )
+
     ensure_minimum_role(current_user, "organizer")
+    event_doc = None
+    if payload.event_id:
+        event_doc = await get_event_for_user(payload.event_id, current_user)
+    channels = sorted(set(payload.channels))
+    recipients: list[dict[str, str]] = []
+    if event_doc is not None or channels:
+        recipients = await recipients_for(
+            event_doc,
+            current_user["community_id"],
+            audience=payload.audience,
+            day=payload.day,
+            activity_id=payload.activity_id,
+        )
     subyard_name = ""
     if payload.scope == "subyard":
         if not payload.subyard_id:
@@ -78,16 +131,51 @@ async def create_announcement(payload: AnnouncementCreateRequest, current_user: 
         "created_by_name": current_user["full_name"],
         "created_at": now_iso(),
     }
+    if event_doc is not None:
+        member_ids = sorted({r["member_id"] for r in recipients if r.get("member_id")})
+        announcement_doc.update(
+            {
+                "event_id": event_doc["id"],
+                "event_title": event_doc.get("title", ""),
+                "audience": payload.audience,
+                "audience_day": payload.day if payload.audience == "day" else "",
+                "audience_activity_id": payload.activity_id if payload.audience == "activity" else "",
+                "audience_label": audience_label(event_doc, payload.audience, payload.day, payload.activity_id),
+                # Targeted: only these members (and organizers) see it in-app.
+                "recipient_user_ids": sorted({*member_ids, current_user["id"]}),
+                "recipient_count": len(recipients),
+            }
+        )
+    if channels:
+        announcement_doc["channels"] = channels
     await announcements_collection.insert_one(announcement_doc.copy())
-    await log_notification_event(
-        community_id=current_user["community_id"],
-        actor_name=current_user["full_name"],
-        event_type="announcement",
-        title=f"Announcement posted: {announcement_doc['title']}",
-        description=announcement_doc["body"],
-        related_id=announcement_doc["id"],
-        audience_scope=announcement_doc["scope"],
-    )
+    if event_doc is not None:
+        await log_notification_event(
+            community_id=current_user["community_id"],
+            actor_name=current_user["full_name"],
+            event_type="announcement",
+            title=f"Announcement posted: {announcement_doc['title']}",
+            description=announcement_doc["body"],
+            related_id=announcement_doc["id"],
+            audience_scope="user",
+            recipient_user_ids=announcement_doc["recipient_user_ids"],
+        )
+    else:
+        await log_notification_event(
+            community_id=current_user["community_id"],
+            actor_name=current_user["full_name"],
+            event_type="announcement",
+            title=f"Announcement posted: {announcement_doc['title']}",
+            description=announcement_doc["body"],
+            related_id=announcement_doc["id"],
+            audience_scope=announcement_doc["scope"],
+        )
+    if channels:
+        outbound = [r for r in recipients if r.get("member_id") != current_user["id"]]
+        queued = await queue_announcement(announcement_doc, outbound, channels)
+        announcement_doc["delivery_queued"] = queued["queued"]
+        background_tasks.add_task(dispatch_announcement, announcement_doc["id"])
+    announcement_doc.pop("recipient_user_ids", None)
     return announcement_doc
 
 
@@ -114,7 +202,12 @@ async def delete_announcement(announcement_id: str, current_user: dict[str, Any]
 
 @router.post("/announcements/{announcement_id}/comments")
 async def add_announcement_comment(announcement_id: str, payload: CommentRequest, current_user: dict[str, Any] = Depends(get_current_user)):
-    announcement_doc = await announcements_collection.find_one({"id": announcement_id, "community_id": current_user["community_id"]}, {"_id": 0})
+    visible = await announcement_visibility_query(
+        current_user, await get_notification_preferences_for_user(current_user)
+    )
+    announcement_doc = await announcements_collection.find_one(
+        {"$and": [visible, {"id": announcement_id}]}, {"_id": 0, "recipient_user_ids": 0}
+    )
     if not announcement_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Announcement not found.")
     comments = announcement_doc.get("comments", [])
@@ -256,10 +349,9 @@ async def comment_on_chat_message(room_id: str, message_id: str, payload: Commen
 @router.get("/communications/unread-summary", response_model=CommunicationUnreadSummary)
 async def communications_unread_summary(current_user: dict[str, Any] = Depends(get_current_user)):
     prefs = await get_notification_preferences_for_user(current_user)
+    visible = await announcement_visibility_query(current_user, prefs)
     announcements_unread = await announcements_collection.count_documents({
-        "community_id": current_user["community_id"],
-        "scope": {"$nin": prefs.get("muted_announcement_scopes", [])},
-        "read_by_ids": {"$ne": current_user["id"]},
+        "$and": [visible, {"read_by_ids": {"$ne": current_user["id"]}}],
     })
     rooms = await chat_rooms_collection.find({"community_id": current_user["community_id"]}, {"_id": 0, "messages": 1}).to_list(200)
     chat_unread = 0

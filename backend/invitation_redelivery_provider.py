@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from email.utils import parseaddr
+from email.utils import formataddr, parseaddr
 
 import dns.asyncresolver
 import dns.exception
@@ -40,6 +40,38 @@ RESEND_EXPECTED_MX = "feedback-smtp.us-east-1.amazonses.com"
 RESEND_EXPECTED_MX_PRIORITY = 10
 RESEND_EXPECTED_SPF = "v=spf1 include:amazonses.com ~all"
 DNS_TIMEOUT_SECONDS = 5.0
+MAX_DISPLAY_NAME_LENGTH = 64
+SAFE_REPLY_TO = re.compile(r"^[^@\s<>\"',;:()\[\]\\]{1,64}@[A-Za-z0-9.-]{1,253}$")
+
+
+def safe_display_name(value: str) -> str:
+    """Return a display name that cannot smuggle an address or a header.
+
+    Control characters, quotes, angle brackets and "@" are removed so a chosen
+    name can never read as a different sender address.
+    """
+    cleaned = "".join(
+        ch for ch in str(value or "") if ch.isprintable() and ch not in '"<>@\\'
+    )
+    return " ".join(cleaned.split())[:MAX_DISPLAY_NAME_LENGTH].strip()
+
+
+def compose_from_header(configured_from: str, display_name: str) -> str:
+    """Put ``display_name`` in front of the configured (verified) address."""
+    name = safe_display_name(display_name)
+    if not name:
+        return configured_from
+    _, address = parseaddr(configured_from)
+    if not address:
+        return configured_from
+    return formataddr((name, address))
+
+
+def safe_reply_to(value: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate or not SAFE_REPLY_TO.fullmatch(candidate):
+        return ""
+    return candidate
 
 
 class ResendInvitationDeliveryProvider(InvitationDeliveryProvider):
@@ -230,6 +262,20 @@ class ResendInvitationDeliveryProvider(InvitationDeliveryProvider):
             )
         return await self._dns_preflight(from_domain)
 
+    def _send_payload(self, envelope: DeliveryEnvelope) -> dict:
+        payload = {
+            "from": compose_from_header(
+                self._from_address, getattr(envelope, "from_name", "")
+            ),
+            "to": [envelope.recipient],
+            "subject": envelope.subject,
+            "html": envelope.html_body,
+        }
+        reply_to = safe_reply_to(getattr(envelope, "reply_to", ""))
+        if reply_to:
+            payload["reply_to"] = [reply_to]
+        return payload
+
     async def send(self, envelope: DeliveryEnvelope) -> ProviderReceipt:
         try:
             response = await self._request(
@@ -238,12 +284,7 @@ class ResendInvitationDeliveryProvider(InvitationDeliveryProvider):
                 headers=self._headers(
                     idempotency_key=envelope.idempotency_key,
                 ),
-                json={
-                    "from": self._from_address,
-                    "to": [envelope.recipient],
-                    "subject": envelope.subject,
-                    "html": envelope.html_body,
-                },
+                json=self._send_payload(envelope),
             )
         except httpx.TimeoutException:
             logger.warning(

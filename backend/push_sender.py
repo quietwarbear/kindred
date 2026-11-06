@@ -52,6 +52,10 @@ PUSH_TEMPLATES: dict[str, dict[str, str]] = {
         "title": "Gathering reminder",
         "body": "You have an upcoming gathering.",
     },
+    "announcement": {
+        "title": "New announcement",
+        "body": "An organizer shared an update with you.",
+    },
     "gathering_revealed": {
         "title": "A gathering was revealed",
         "body": "A surprise gathering was just revealed to your circle.",
