@@ -28,6 +28,8 @@ SENSITIVE_EVENT_FIELDS = {
     "assigned_roles",
     "checklist",
     "client_request_id",
+    "duplicate_dismissals",
+    "duplicate_merges",
     "event_invites",
     "event_role_assignments",
     "hidden_from_member_ids",

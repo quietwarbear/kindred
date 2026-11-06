@@ -37,6 +37,7 @@ from db import (
     users_collection,
 )
 from dependencies import now_iso
+from duplicate_merge import resolve_merged_invite
 from event_privacy import serialize_event_for_guest
 from family_space_activation import (
     ACTIVE,
@@ -83,6 +84,10 @@ async def _find_event_and_invite(token: str):
     invite = next(
         (i for i in event.get("event_invites", []) if i.get("id") == token), None
     )
+    if invite and invite.get("merged_into"):
+        # K9: an organizer merged this person into another invitation. Their
+        # old link keeps working and opens the record that now holds them.
+        invite = resolve_merged_invite(event, invite)
     if invite and invite.get("invite_source") == "member":
         member_id = invite.get("member_id", "")
         if not member_id and invite.get("email"):
@@ -183,6 +188,8 @@ async def _public_rsvp_submit(token: str, payload: PublicRSVPRequest):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This invitation link is not valid.",
         )
+    # K9: a merged link answers on the invitation it was merged into.
+    token = str(invite.get("id") or token)
     resolved_member_id = invite.get("member_id", "")
     if (
         not resolved_member_id

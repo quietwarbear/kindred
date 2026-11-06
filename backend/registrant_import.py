@@ -473,10 +473,28 @@ def apply_registrants(
     new_flags: list[dict[str, Any]] = []
     touched: list[str] = []
 
+    def holder(invite: dict[str, Any]) -> dict[str, Any] | None:
+        # K9: a merged invitation's person now lives on the invitation it was
+        # merged into.
+        seen: set[str] = set()
+        while invite is not None and invite.get("merged_into"):
+            if invite.get("id") in seen:
+                return None
+            seen.add(str(invite.get("id")))
+            invite = next((i for i in invites if i.get("id") == invite["merged_into"]), None)
+        return invite
+
     def by_email(email: str) -> dict[str, Any] | None:
-        return next(
-            (i for i in invites if normalize_import_email(i.get("email")) == email), None
+        found = next(
+            (
+                i
+                for i in invites
+                if normalize_import_email(i.get("email")) == email
+                or email in (i.get("alternate_emails") or [])
+            ),
+            None,
         )
+        return holder(found) if found is not None else None
 
     def by_name(name_key: str, email: str) -> dict[str, Any] | None:
         if not name_key:
@@ -485,7 +503,8 @@ def apply_registrants(
             (
                 i
                 for i in invites
-                if normalize_person_name(i.get("invitee_name")) == name_key
+                if not i.get("merged_into")
+                and normalize_person_name(i.get("invitee_name")) == name_key
                 and normalize_import_email(i.get("email")) != email
             ),
             None,
