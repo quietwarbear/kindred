@@ -54,5 +54,7 @@ registrant_import_flags_collection = db.registrant_import_flags
 # scheduled reminder (unique dedupe_key), and per-event email opt-outs.
 event_message_outbox_collection = db.event_message_outbox
 event_message_opt_outs_collection = db.event_message_opt_outs
+# X2: Ile Ubuntu connection keys, kept off the event document (credential).
+ile_ubuntu_handoff_connections_collection = db.ile_ubuntu_handoff_connections
 # K6 per-activity material bytes. Metadata is on the event document.
 activity_material_files_collection = db.activity_material_files

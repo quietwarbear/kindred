@@ -37,6 +37,8 @@ SENSITIVE_EVENT_FIELDS = {
     "event_role_assignments",
     "hidden_from_member_ids",
     "hidden_from_user_ids",
+    "ile_ubuntu_course_map",
+    "ile_ubuntu_handoff_last",
     "holiday_pilot_confirmations",
     "holiday_pilot_readiness",
     "holiday_setup_revision",

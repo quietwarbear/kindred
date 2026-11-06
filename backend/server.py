@@ -11,6 +11,7 @@ from family_space_activation import public_community_display_name
 from event_messaging import ensure_indexes as ensure_event_message_indexes
 from db import (
     client,
+    ile_ubuntu_handoff_connections_collection,
     db,
     communities_collection,
     events_collection,
@@ -52,6 +53,7 @@ from routes.pilot import router as pilot_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
 from routes.registrants import router as registrants_router
+from routes.ile_ubuntu_handoff import router as ile_ubuntu_handoff_router
 from routes.reunion_draft import router as reunion_draft_router
 from routes.reunion_pass import router as reunion_pass_router
 from routes.reunion_memories import router as reunion_memories_router
@@ -127,6 +129,7 @@ async def root():
 
 # Include all domain routers
 app.include_router(api_root)
+app.include_router(ile_ubuntu_handoff_router)
 app.include_router(activity_router)
 app.include_router(attendee_router)
 app.include_router(auth_router)
@@ -470,6 +473,10 @@ async def ensure_indexes():
     )
     await registrant_hook_deliveries_collection.create_index(
         [("replay_digest", ASCENDING)], name="registrant_hook_replay_once", unique=True
+    )
+    # X2: one Ile Ubuntu connection per event.
+    await ile_ubuntu_handoff_connections_collection.create_index(
+        [("event_id", ASCENDING)], name="ile_ubuntu_handoff_event", unique=True
     )
     # K6: material bytes are looked up by id and removed by event or activity.
     await activity_material_files_collection.create_index(
