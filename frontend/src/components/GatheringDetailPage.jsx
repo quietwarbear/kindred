@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/sonner";
 import { GatheringAgenda } from "@/components/gatherings/GatheringAgenda";
 import { GatheringChecklist } from "@/components/gatherings/GatheringChecklist";
 import { GatheringInvites } from "@/components/gatherings/GatheringInvites";
+import { RegistrantImport } from "@/components/gatherings/RegistrantImport";
 import { GatheringPotluck } from "@/components/gatherings/GatheringPotluck";
 import { GatheringRoles } from "@/components/gatherings/GatheringRoles";
 import { GatheringRsvp } from "@/components/gatherings/GatheringRsvp";
@@ -334,6 +335,9 @@ export const GatheringDetailPage = ({ token, user }) => {
         <GatheringChecklist canCreate={canCreate} event={event} onUpdate={mergeEvent} token={token} />
         {canCreate ? (
           <GatheringInvites event={event} members={members} onUpdate={mergeEvent} token={token} />
+        ) : null}
+        {canCreate ? (
+          <RegistrantImport event={event} onUpdate={mergeEvent} token={token} />
         ) : null}
         {canCreate ? (
           <GatheringRoles event={event} onUpdate={mergeEvent} token={token} />

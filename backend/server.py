@@ -21,6 +21,9 @@ from db import (
     invitation_redelivery_operations_collection,
     invites_collection,
     next_gathering_operations_collection,
+    registrant_hook_deliveries_collection,
+    registrant_hooks_collection,
+    registrant_import_flags_collection,
     reunion_recaps_collection,
     sso_codes_collection,
     users_collection,
@@ -44,6 +47,7 @@ from routes.organizer import router as organizer_router
 from routes.pilot import router as pilot_router
 from routes.polls import router as polls_router
 from routes.public import router as public_router
+from routes.registrants import router as registrants_router
 from routes.reunion_draft import router as reunion_draft_router
 from routes.reunion_pass import router as reunion_pass_router
 from routes.reunion_memories import router as reunion_memories_router
@@ -138,6 +142,7 @@ app.include_router(organizer_router)
 app.include_router(pilot_router)
 app.include_router(polls_router)
 app.include_router(public_router)
+app.include_router(registrants_router)
 app.include_router(reunion_draft_router)
 app.include_router(reunion_pass_router)
 app.include_router(reunion_memories_router)
@@ -444,6 +449,29 @@ async def ensure_indexes():
         unique=True,
         sparse=True,
     )
+    # K2 registrant import: one webhook per event, one flag per email per
+    # event, and a replay guard that forgets signatures after a day (the
+    # signature timestamp window is five minutes, so a day is generous).
+    await registrant_hooks_collection.create_index(
+        [("hook_id", ASCENDING)], name="registrant_hook_public_id", unique=True
+    )
+    await registrant_hooks_collection.create_index(
+        [("event_id", ASCENDING)], name="registrant_hook_one_per_event", unique=True
+    )
+    await registrant_import_flags_collection.create_index(
+        [("event_id", ASCENDING), ("email", ASCENDING)],
+        name="registrant_flag_one_per_email",
+        unique=True,
+    )
+    await registrant_hook_deliveries_collection.create_index(
+        [("replay_digest", ASCENDING)], name="registrant_hook_replay_once", unique=True
+    )
+    try:
+        await registrant_hook_deliveries_collection.create_index(
+            "received_at_dt", expireAfterSeconds=86_400, name="registrant_hook_replay_ttl"
+        )
+    except Exception as exc:  # never block boot on an index build
+        logging.warning("Could not create registrant replay TTL index: %s", exc)
 
 
 @app.on_event("shutdown")
