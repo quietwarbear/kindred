@@ -225,7 +225,7 @@ export const KinshipMapPage = ({ token }) => {
               <span className="text-xs font-semibold text-muted-foreground">Scope</span>
               <select className="field-input mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm" data-testid="kinship-scope" onChange={(e) => setForm((c) => ({ ...c, relationship_scope: e.target.value }))} value={form.relationship_scope}>
                 <option value="community">Community</option>
-                <option value="family">Family</option>
+                <option value="family">{/* group-wording: allow — kinship or partner-product term */}Family</option>
                 <option value="extended">Extended</option>
               </select>
             </label>

@@ -7,10 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const stateCopy = {
   submitted: "Private organizer review",
-  published: "Open family interest pulse",
+  published: "Open {group} interest pulse",
   declined: "Reviewed and closed",
   withdrawn: "Withdrawn",
   converted: "Moved into private planning",
@@ -19,7 +20,7 @@ const stateCopy = {
 };
 
 const typeCopy = {
-  family_reunion: "Family reunion",
+  family_reunion: "Family reunion", // group-wording: allow — kinship or partner-product term
   holiday: "Holiday gathering",
   milestone: "Milestone",
   day_trip: "Day trip",
@@ -48,16 +49,17 @@ const clearOperationKey = (kind, reference = "new") => {
 };
 
 const ProposalCard = ({ proposal, organizer, onAction, onInterest, onBeginConversion }) => {
+  const gw = useGroupWording();
   const aggregate = proposal.interest?.aggregate || {};
   return (
     <article className="archival-card space-y-5" data-testid={`proposal-card-${proposal.proposal_reference}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="eyebrow-text">{typeCopy[proposal.gathering_type] || typeCopy.other}</p>
-          <h2 className="mt-2 font-display text-2xl text-foreground">{proposal.working_title || "Former family proposal"}</h2>
+          <h2 className="mt-2 font-display text-2xl text-foreground">{proposal.working_title || gw.fill("Former {group} proposal")}</h2>
           {organizer ? <p className="mt-2 text-sm text-muted-foreground">Suggested by {proposal.proposer_display_name}</p> : null}
         </div>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{stateCopy[proposal.state] || "Unavailable"}</span>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{gw.fill(stateCopy[proposal.state] || "Unavailable")}</span>
       </div>
 
       {(proposal.broad_date_window || proposal.location_suggestion) ? (
@@ -82,7 +84,7 @@ const ProposalCard = ({ proposal, organizer, onAction, onInterest, onBeginConver
               <Button key={value} onClick={() => onInterest(proposal, value)} type="button" variant={proposal.interest?.my_response === value ? "default" : "outline"}>{label}</Button>
             ))}
           </div>
-          {proposal.interest?.my_response !== "none" ? <p className="text-xs text-muted-foreground">Your response: {responseCopy[proposal.interest.my_response]}. Individual family responses stay private.</p> : null}
+          {proposal.interest?.my_response !== "none" ? <p className="text-xs text-muted-foreground">Your response: {responseCopy[proposal.interest.my_response]}. Individual {gw.noun} responses stay private.</p> : null}
         </div>
       ) : null}
 
@@ -103,6 +105,7 @@ const ProposalCard = ({ proposal, organizer, onAction, onInterest, onBeginConver
 };
 
 export const GatheringProposalsPage = ({ token, user }) => {
+  const gw = useGroupWording();
   const organizer = ["host", "organizer"].includes(user?.role);
   const [proposals, setProposals] = useState([]);
   const [eligibleOrganizers, setEligibleOrganizers] = useState([]);
@@ -234,7 +237,7 @@ export const GatheringProposalsPage = ({ token, user }) => {
     <div className="space-y-6" data-ph-no-capture="true" data-testid="gathering-proposals-page">
       <section className="archival-card overflow-hidden">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div><p className="eyebrow-text">Private family continuity</p><h1 className="mt-2 font-display text-4xl text-foreground">What should we gather for next?</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Suggest a gathering privately. Organizers review it before the family sees an anonymous interest pulse.</p></div>
+          <div><p className="eyebrow-text">Private {gw.noun} continuity</p><h1 className="mt-2 font-display text-4xl text-foreground">What should we gather for next?</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Suggest a gathering privately. Organizers review it before the {gw.noun} sees an anonymous interest pulse.</p></div>
           <div className="soft-panel flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-primary" /><div><p className="text-sm font-semibold">{publishedCount} open pulse{publishedCount === 1 ? "" : "s"}</p><p className="text-xs text-muted-foreground">No named response roster</p></div></div>
         </div>
         <Button className="mt-5" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Close proposal form" : "Suggest a gathering"}</Button>
@@ -245,13 +248,13 @@ export const GatheringProposalsPage = ({ token, user }) => {
           <div><p className="eyebrow-text">Organizer-only until reviewed</p><h2 className="mt-2 font-display text-2xl">A short private suggestion</h2></div>
           <label className="text-sm font-semibold">Working title<Input className="mt-2" maxLength={120} onChange={(event) => setForm((current) => ({ ...current, working_title: event.target.value }))} value={form.working_title} /></label>
           <label className="text-sm font-semibold">Gathering type<select className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" onChange={(event) => setForm((current) => ({ ...current, gathering_type: event.target.value }))} value={form.gathering_type}>{Object.entries(typeCopy).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">Broad date window<Input className="mt-2" maxLength={80} onChange={(event) => setForm((current) => ({ ...current, broad_date_window: event.target.value }))} placeholder="For example, early summer" value={form.broad_date_window} /></label><label className="text-sm font-semibold">General location suggestion<Input className="mt-2" maxLength={120} onChange={(event) => setForm((current) => ({ ...current, location_suggestion: event.target.value }))} placeholder="For example, near the family home" value={form.location_suggestion} /></label></div>
+          <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">Broad date window<Input className="mt-2" maxLength={80} onChange={(event) => setForm((current) => ({ ...current, broad_date_window: event.target.value }))} placeholder="For example, early summer" value={form.broad_date_window} /></label><label className="text-sm font-semibold">General location suggestion<Input className="mt-2" maxLength={120} onChange={(event) => setForm((current) => ({ ...current, location_suggestion: event.target.value }))} placeholder={gw.fill("For example, near the {group} home")} value={form.location_suggestion} /></label></div>
           <label className="text-sm font-semibold">Private note to organizers<Textarea className="mt-2" maxLength={1000} onChange={(event) => setForm((current) => ({ ...current, organizer_note: event.target.value }))} rows={4} value={form.organizer_note} /></label>
           <Button disabled={busy === "submit" || !form.working_title.trim()} onClick={submit} type="button">Submit privately</Button>
         </section>
       ) : null}
 
-      {proposals.length ? <div className="space-y-4">{proposals.map((proposal) => <ProposalCard key={proposal.proposal_reference} onAction={action} onBeginConversion={beginConversion} onInterest={interest} organizer={organizer} proposal={proposal} />)}</div> : <section className="archival-card text-center"><CalendarHeart className="mx-auto h-8 w-8 text-primary" /><h2 className="mt-3 font-display text-2xl">No gathering proposals yet</h2><p className="mt-2 text-sm text-muted-foreground">The next family tradition can start with one thoughtful suggestion.</p></section>}
+      {proposals.length ? <div className="space-y-4">{proposals.map((proposal) => <ProposalCard key={proposal.proposal_reference} onAction={action} onBeginConversion={beginConversion} onInterest={interest} organizer={organizer} proposal={proposal} />)}</div> : <section className="archival-card text-center"><CalendarHeart className="mx-auto h-8 w-8 text-primary" /><h2 className="mt-3 font-display text-2xl">No gathering proposals yet</h2><p className="mt-2 text-sm text-muted-foreground">The next {gw.noun} tradition can start with one thoughtful suggestion.</p></section>}
 
       {organizer && conversionFor ? (
         <section className="archival-card space-y-5" data-testid="proposal-conversion-panel">

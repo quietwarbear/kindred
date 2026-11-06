@@ -25,6 +25,7 @@ from db import (
     users_collection,
 )
 from dependencies import ensure_minimum_role, get_current_user, now_iso
+from group_wording import wording_for_community_id
 from family_space_activation import ACTIVE, community_lifecycle_state
 from gathering_proposals import (
     DECLINE_REASONS,
@@ -120,7 +121,7 @@ def _validated_submission(payload: ProposalSubmission) -> dict[str, Any]:
 async def _active_actor(user: dict[str, Any], *, session=None) -> tuple[dict[str, Any], dict[str, Any]]:
     community_id = str(user.get("community_id") or "")
     if not community_id or user.get("role") not in _ACTIVE_ROLES:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     community = await communities_collection.find_one(
         {"id": community_id}, {"_id": 0, "id": 1, "lifecycle_state": 1}, session=session
     )
@@ -136,7 +137,7 @@ async def _active_actor(user: dict[str, Any], *, session=None) -> tuple[dict[str
         session=session,
     )
     if not actor or community_lifecycle_state(community or {}) != ACTIVE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     return actor, community
 
 
@@ -168,9 +169,10 @@ async def _responses(proposal_id: str, *, session=None) -> list[dict[str, Any]]:
 
 
 async def _project(proposal: dict[str, Any], user: dict[str, Any], *, organizer: bool = False) -> dict[str, Any]:
-    responses, eligible = await asyncio.gather(
+    responses, eligible, words = await asyncio.gather(
         _responses(proposal["id"]),
         _eligible_users(proposal["community_id"]),
+        wording_for_community_id(proposal["community_id"]),
     )
     return member_projection(
         proposal,
@@ -178,6 +180,7 @@ async def _project(proposal: dict[str, Any], user: dict[str, Any], *, organizer:
         responses=responses,
         eligible_user_ids={item["id"] for item in eligible},
         organizer=organizer,
+        group_noun=words.noun,
     )
 
 
@@ -252,7 +255,8 @@ async def submit_proposal(payload: ProposalSubmission, current_user: dict[str, A
         "public_reference": uuid.uuid4().hex,
         "community_id": actor["community_id"],
         "proposer_user_id": actor["id"],
-        "proposer_display_name": actor.get("full_name", "Family member"),
+        "proposer_display_name": actor.get("full_name")
+        or f"{(await wording_for_community_id(actor['community_id'])).Noun} member",
         **content,
         "state": "submitted",
         "revision": 0,
@@ -319,7 +323,7 @@ async def proposal_detail(proposal_reference: str, current_user: dict[str, Any] 
     actor, _ = await _active_actor(current_user)
     proposal = await _proposal_by_reference(proposal_reference, actor["community_id"])
     if not proposal or (proposal.get("state") != "published" and proposal.get("proposer_user_id") != actor["id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     return await _project(proposal, actor)
 
 
@@ -378,7 +382,7 @@ async def _organizer_proposal(reference: str, user: dict[str, Any]) -> tuple[dic
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organizer access required.")
     proposal = await _proposal_by_reference(reference, actor["community_id"])
     if not proposal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     return actor, proposal
 
 
@@ -389,7 +393,7 @@ async def withdraw_proposal(
     actor, _ = await _active_actor(current_user)
     proposal = await _proposal_by_reference(proposal_reference, actor["community_id"])
     if not proposal or proposal.get("proposer_user_id") != actor["id"]:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     updated = await _transition(
         proposal, actor, target="withdrawn", allowed={"submitted"}, expected_revision=payload.expected_revision,
         idempotency_key=payload.idempotency_key, action="withdraw",
@@ -408,10 +412,11 @@ async def publish_proposal(
         idempotency_key=payload.idempotency_key, action="publish",
     )
     eligible = await _eligible_users(updated["community_id"])
+    words = await wording_for_community_id(updated["community_id"])
     await _insert_notification(_notification(
         notification_id=f"gathering-proposal-published:{updated['id']}",
         community_id=updated["community_id"], event_type="gathering-proposal-published",
-        title="A private family interest pulse is ready",
+        title=f"A private {words.noun} interest pulse is ready",
         description="Share one private interest response in Kindred.",
         recipients=[item["id"] for item in eligible], related_id="",
     ))
@@ -463,7 +468,7 @@ async def record_interest(
     actor, _ = await _active_actor(current_user)
     proposal = await _proposal_by_reference(proposal_reference, actor["community_id"])
     if not proposal or proposal.get("state") != "published":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family proposal not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     operation_hash = _operation_hash(
         payload.idempotency_key, community_id=proposal["community_id"], actor_id=actor["id"], subject=proposal["id"]
     )
@@ -535,7 +540,7 @@ async def _conversion_preview(
         {"_id": 0, "id": 1, "full_name": 1, "role": 1}, session=session,
     )
     if not organizer:
-        raise _unprocessable("invalid_conversion_organizer", "Choose an active family organizer.")
+        raise _unprocessable("invalid_conversion_organizer", "Choose an active organizer.")
     try:
         preview = conversion_preview_value(
             title=selection.title, start_at=selection.start_at, end_at=selection.end_at,

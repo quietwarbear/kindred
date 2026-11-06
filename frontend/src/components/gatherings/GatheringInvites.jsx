@@ -9,6 +9,7 @@ import { uniqueGuestCount } from "@/lib/holidayPilot";
 import { trackReunionEvent } from "@/lib/analytics";
 import { fragmentInvitationUrl } from "@/lib/invitationTransport";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const initialInviteForm = { member_ids: [], guest_emails: "", note: "" };
 
@@ -103,6 +104,7 @@ const CopyRsvpLinkButton = ({ inviteId, isFirst, isReunion, onSignal }) => {
 };
 
 export const GatheringInvites = ({ event, token, members, onUpdate }) => {
+  const gw = useGroupWording();
   const [form, setForm] = useState(initialInviteForm);
   const [draftPreviewed, setDraftPreviewed] = useState(false);
   const isOrganizerDraft = event.publication_state === "organizer_draft";
@@ -264,7 +266,7 @@ export const GatheringInvites = ({ event, token, members, onUpdate }) => {
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4" data-testid="holiday-invitation-plan-preview">
             <p className="text-sm font-semibold text-foreground">Private invitation plan preview</p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {form.member_ids.length} family member {form.member_ids.length === 1 ? "invitation" : "invitations"} and {guestCount} guest {guestCount === 1 ? "invitation" : "invitations"}. Optional note: {form.note.trim() ? "included" : "not included"}.
+              {form.member_ids.length} {gw.noun} member {form.member_ids.length === 1 ? "invitation" : "invitations"} and {guestCount} guest {guestCount === 1 ? "invitation" : "invitations"}. Optional note: {form.note.trim() ? "included" : "not included"}.
             </p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">No links, credentials, notifications, or provider requests were created.</p>
           </div>

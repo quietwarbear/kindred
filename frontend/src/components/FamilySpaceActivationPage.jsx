@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const OPERATION_KEY = "kindred:family-space-activation-operation";
 
@@ -30,31 +31,31 @@ const stableOperationKey = () => {
 
 const ACTION_COPY = {
   activate_family_space: [
-    "Choose the name your family will keep",
-    "Your gathering has enough verified participation to open the enduring family space.",
+    "Choose the name your {group} will keep",
+    "Your gathering has enough verified participation to open the enduring {group} space.",
   ],
   create_reunion: [
     "Save the first gathering",
-    "A saved gathering is the foundation for this family space.",
+    "A saved gathering is the foundation for this {group} space.",
   ],
   collect_verified_invitation_evidence: [
-    "Let private invitations reach family",
+    "Let private invitations reach {group}",
     "An opened invitation, RSVP, or independently verified delivery counts. Copying a link does not.",
   ],
   receive_more_accepted_responses: [
     "Welcome a few more responses",
-    "The family space becomes ready after a gathering has meaningful accepted participation.",
+    "The {group} space becomes ready after a gathering has meaningful accepted participation.",
   ],
   invite_non_host_participation: [
-    "Invite one family contribution",
+    "Invite one {group} contribution",
     "A non-host RSVP, contribution, volunteer choice, or published memory completes readiness.",
   ],
   open_family_home: [
-    "Open the family home",
-    "This family space is already active and your gatherings remain available.",
+    "Open the {group} home",
+    "This {group} space is already active and your gatherings remain available.",
   ],
   continue_current_family_space: [
-    "Continue to the family home",
+    "Continue to the {group} home",
     "This existing community was not explicitly created as a provisional reunion space.",
   ],
 };
@@ -70,6 +71,7 @@ const ProgressRow = ({ complete, current, label, target }) => (
 );
 
 export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
+  const { fill } = useGroupWording();
   const navigate = useNavigate();
   const [readiness, setReadiness] = useState(null);
   const [familyName, setFamilyName] = useState("");
@@ -133,8 +135,8 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
   }, [readiness]);
 
   const action = useMemo(
-    () => ACTION_COPY[readiness?.next_action?.code] || ACTION_COPY.continue_current_family_space,
-    [readiness?.next_action?.code]
+    () => (ACTION_COPY[readiness?.next_action?.code] || ACTION_COPY.continue_current_family_space).map(fill),
+    [readiness?.next_action?.code, fill]
   );
 
   if (!session?.token) return <Navigate replace to="/login?intent=reunion" />;
@@ -151,11 +153,11 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
   const activate = async (event) => {
     event.preventDefault();
     if (!online) {
-      toast.info("Reconnect before activating the family space.");
+      toast.info(fill("Reconnect before activating the {group} space."));
       return;
     }
     if (!familyName.trim()) {
-      toast.error("Choose the family-space name you want to keep.");
+      toast.error(fill("Choose the {group}-space name you want to keep."));
       return;
     }
     setBusy(true);
@@ -188,15 +190,15 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
           result: "conflict",
         });
         await load();
-        toast.info(
+        toast.info(fill(
           code === "family_space_already_active"
-            ? "This family space is already active."
-            : "The family space changed. Review the latest state before trying again."
-        );
+            ? "This {group} space is already active."
+            : "The {group} space changed. Review the latest state before trying again."
+        ));
       } else {
         toast.error(
           error.response?.data?.detail?.message
-          || "The family space could not be activated."
+          || fill("The {group} space could not be activated.")
         );
       }
     } finally {
@@ -207,7 +209,7 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
   if (loading) {
     return (
       <div className="app-canvas flex min-h-screen items-center justify-center" aria-busy="true">
-        <p className="text-sm text-muted-foreground">Checking family-space readiness…</p>
+        <p className="text-sm text-muted-foreground">{fill("Checking {group}-space readiness…")}</p>
       </div>
     );
   }
@@ -218,7 +220,7 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
         <section className="archival-card max-w-lg text-center" role="alert">
           <LockKeyhole className="mx-auto h-8 w-8 text-primary" />
           <h1 className="mt-4 font-display text-3xl">Organizer access required</h1>
-          <p className="mt-3 text-sm text-muted-foreground">Only a host or organizer in this family space can activate it.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{fill("Only a host or organizer in this {group} space can activate it.")}</p>
           <Button className="mt-5" onClick={() => navigate("/home")} type="button" variant="outline">Return home</Button>
         </section>
       </div>
@@ -242,8 +244,8 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
       <div className="app-canvas flex min-h-screen items-center justify-center px-5" data-ph-no-capture="true">
         <section className="archival-card max-w-xl text-center" role="status">
           <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
-          <p className="eyebrow-text mt-5">Family space activated</p>
-          <h1 className="mt-3 font-display text-4xl">Your family home is ready.</h1>
+          <p className="eyebrow-text mt-5">{fill("{Group} space activated")}</p>
+          <h1 className="mt-3 font-display text-4xl">{fill("Your {group} home is ready.")}</h1>
           <p className="mt-4 text-sm leading-7 text-muted-foreground">Your gatherings, invitations, members, responses, memories, and history are right where you left them.</p>
         </section>
       </div>
@@ -260,9 +262,9 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
         <header className="archival-card overflow-hidden p-0">
           <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
             <div className="p-6 sm:p-9">
-              <p className="eyebrow-text">From first gathering to family home</p>
+              <p className="eyebrow-text">{fill("From first gathering to {group} home")}</p>
               <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">Keep gathering after the first one.</h1>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Activation changes only the enduring display name and lifecycle state. It does not move, recreate, or rewrite family content.</p>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">Activation changes only the enduring display name and lifecycle state. {fill("It does not move, recreate, or rewrite {group} content.")}</p>
             </div>
             <div className="bg-stone-950 p-6 text-white sm:p-9">
               <p className="eyebrow-text text-orange-200">One next step</p>
@@ -300,7 +302,7 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
             <ul className="mt-6 space-y-3 text-sm leading-7 text-muted-foreground">
               <li>• Existing members keep the same roles and permissions.</li>
               <li>• Reunion invitations, credentials, RSVPs, itinerary, and public links do not change.</li>
-              <li>• Memory capsules, timeline history, subcommunities, and subscription state remain attached to the same family space.</li>
+              <li>• Memory capsules, timeline history, subcommunities, and subscription state {fill("remain attached to the same {group} space.")}</li>
               <li>• No message is sent and no payment or provider call is required.</li>
             </ul>
           </article>
@@ -309,21 +311,21 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
         {alreadyActive || legacy || !readiness.ready ? (
           <section className="archival-card text-center" data-testid="family-space-nonactivatable-state">
             <Home className="mx-auto h-7 w-7 text-primary" />
-            <h2 className="mt-4 font-display text-3xl">{alreadyActive ? "This family space is active." : legacy ? "Your existing family space continues unchanged." : "Keep using every reunion tool while readiness grows."}</h2>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Deferring does not remove access to reunion planning, attendee hubs, memory capsules, or the family home.</p>
+            <h2 className="mt-4 font-display text-3xl">{fill(alreadyActive ? "This {group} space is active." : legacy ? "Your existing {group} space continues unchanged." : "Keep using every reunion tool while readiness grows.")}</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Deferring does not remove access to reunion planning, attendee hubs, {fill("memory capsules, or the {group} home.")}</p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
-              <Button onClick={() => navigate("/home")} type="button">Open family home <ArrowRight className="ml-2 h-4 w-4" /></Button>
+              <Button onClick={() => navigate("/home")} type="button">{fill("Open {group} home")} <ArrowRight className="ml-2 h-4 w-4" /></Button>
               {!alreadyActive && !legacy ? <Button onClick={load} type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" /> Refresh readiness</Button> : null}
             </div>
           </section>
         ) : (
           <section className="archival-card" data-testid="family-space-name-card">
             <p className="eyebrow-text">The one enduring detail</p>
-            <h2 className="mt-3 font-display text-3xl">What should your family call this space?</h2>
+            <h2 className="mt-3 font-display text-3xl">{fill("What should your {group} call this space?")}</h2>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">Choose the private display name authorized members will see. Location, motto, profiles, subcommunities, invitations, and payment can all stay exactly as they are.</p>
             <form className="mt-6 space-y-5" onSubmit={activate}>
               <label className="block max-w-2xl">
-                <span className="field-label">Family-space name</span>
+                <span className="field-label">{fill("{Group}-space name")}</span>
                 <Input
                   autoComplete="off"
                   className="field-input"
@@ -331,13 +333,13 @@ export const FamilySpaceActivationPage = ({ onSessionRefresh, session }) => {
                   disabled={busy}
                   maxLength={80}
                   onChange={(event) => setFamilyName(event.target.value)}
-                  placeholder="The Johnson Family"
+                  placeholder={fill("The Johnson {Group}")}
                   required
                   value={familyName}
                 />
               </label>
               <div className="flex flex-wrap gap-3">
-                <Button data-testid="family-space-activate-button" disabled={busy || !familyName.trim() || !online} type="submit">{busy ? "Activating…" : "Activate family space"}</Button>
+                <Button data-testid="family-space-activate-button" disabled={busy || !familyName.trim() || !online} type="submit">{busy ? "Activating…" : fill("Activate {group} space")}</Button>
                 <Button data-testid="family-space-defer-button" disabled={busy} onClick={defer} type="button" variant="outline">Decide later</Button>
               </div>
               {!online ? <p className="text-sm text-amber-700" role="status">Reconnect to activate. Your reunion tools remain available offline where already supported.</p> : null}

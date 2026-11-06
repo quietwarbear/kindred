@@ -55,7 +55,7 @@ _STATIC_PATHS = {
 
 def _not_available() -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND, detail="Family Today is not available."
+        status_code=status.HTTP_404_NOT_FOUND, detail="Today is not available."
     )
 
 

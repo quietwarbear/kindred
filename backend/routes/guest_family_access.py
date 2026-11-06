@@ -24,6 +24,7 @@ from db import (
 )
 from dependencies import ensure_minimum_role, get_current_user, now_iso
 from family_space_activation import ACTIVE, community_lifecycle_state
+from group_wording import group_label_for_community, wording_for_community_id
 from guest_family_access import (
     find_relationship_invite,
     is_expired,
@@ -70,7 +71,8 @@ def _conflict(code: str, message: str) -> HTTPException:
 
 async def _active_community(community_id: str, *, session=None) -> dict[str, Any] | None:
     community = await communities_collection.find_one(
-        {"id": community_id}, {"_id": 0, "id": 1, "name": 1, "lifecycle_state": 1}, session=session
+        {"id": community_id}, {"_id": 0, "id": 1, "name": 1, "lifecycle_state": 1, "group_label": 1},
+        session=session,
     )
     return community if community_lifecycle_state(community or {}) == ACTIVE else None
 
@@ -170,6 +172,8 @@ async def submit_family_access_request(
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
     }
     try:
+        words = await wording_for_community_id(target_community_id)
+
         async def transaction(session):
             claimed = await guest_family_claims_collection.update_one(
                 {"secret_digest": claim_digest, "$or": [{"status": "unclaimed"}, {"claimed_by_user_id": current_user["id"]}]},
@@ -187,7 +191,7 @@ async def submit_family_access_request(
                 await notification_events_collection.insert_one(
                     _notification(
                         community_id=target_community_id, event_type="family-access-request",
-                        title=f"{request_doc['applicant_name']} requested family access",
+                        title=f"{request_doc['applicant_name']} requested {words.noun} access",
                         description="Review this guest-to-member request in the organizer command center.",
                         audience_scope="organizer", recipient_user_ids=[item["id"] for item in organizers],
                     ), session=session,
@@ -199,7 +203,9 @@ async def submit_family_access_request(
         if not existing:
             raise _conflict("request_concurrency_conflict", "Refresh before trying again.")
         return safe_status_projection(existing)
-    return safe_status_projection(request_doc, community.get("name", ""))
+    return safe_status_projection(
+        request_doc, community.get("name", ""), group_label_for_community(community)
+    )
 
 
 @router.get("/family-access/status")
@@ -208,7 +214,11 @@ async def own_family_access_status(current_user: dict[str, Any] = Depends(get_cu
     if not request:
         return {"status": "none", "revision": 0, "next_action_codes": ["return_to_reunion"]}
     community = await _active_community(request["community_id"])
-    return safe_status_projection(request, (community or {}).get("name", ""))
+    return safe_status_projection(
+        request,
+        (community or {}).get("name", ""),
+        group_label_for_community(community) if community else None,
+    )
 
 
 @router.post("/family-access/confirm")
@@ -261,8 +271,9 @@ async def cancel_own_family_access_request(
 @router.get("/family-access/organizer/requests")
 async def organizer_family_access_requests(current_user: dict[str, Any] = Depends(get_current_user)):
     ensure_minimum_role(current_user, "organizer")
+    words = await wording_for_community_id(current_user["community_id"])
     if not await _active_community(current_user["community_id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family space not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{words.Noun} space not found.")
     requests = await family_access_requests_collection.find(
         {"community_id": current_user["community_id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
@@ -277,8 +288,9 @@ async def decide_family_access_request(
     ensure_minimum_role(current_user, "organizer")
     operation_hash = _validate_operation_key(payload.idempotency_key)
     decision_hash = _digest(json.dumps({"decision": payload.decision}, sort_keys=True))
+    words = await wording_for_community_id(current_user["community_id"])
     if not await _active_community(current_user["community_id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Family space not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{words.Noun} space not found.")
 
     async def transaction(session):
         request = await family_access_requests_collection.find_one(
@@ -327,7 +339,7 @@ async def decide_family_access_request(
         await notification_events_collection.insert_one(
             _notification(
                 community_id=current_user["community_id"], event_type="family-access-status",
-                title="Your family access request was updated",
+                title=f"Your {words.noun} access request was updated",
                 description=f"The request is now {next_status}.", audience_scope="user",
                 recipient_user_ids=[request["applicant_user_id"]],
             ), session=session,
@@ -337,4 +349,8 @@ async def decide_family_access_request(
     async with await client.start_session() as session:
         request = await session.with_transaction(transaction)
     community = await _active_community(current_user["community_id"])
-    return safe_status_projection(request, (community or {}).get("name", ""))
+    return safe_status_projection(
+        request,
+        (community or {}).get("name", ""),
+        group_label_for_community(community) if community else None,
+    )

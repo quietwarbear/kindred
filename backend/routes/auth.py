@@ -675,7 +675,10 @@ async def verify_email(token: str):
 
         asyncio.create_task(
             send_account_welcome(
-                user["email"], user.get("full_name", ""), (community or {}).get("name")
+                user["email"],
+                user.get("full_name", ""),
+                (community or {}).get("name"),
+                (community or {}).get("group_label"),
             )
         )
     await email_verifications_collection.delete_one({"token": token})
@@ -845,7 +848,10 @@ async def register_with_invite(payload: InviteRegistrationRequest):
     from email_service import send_account_welcome
     asyncio.create_task(
         send_account_welcome(
-            email, user_doc["full_name"], (community_doc or {}).get("name")
+            email,
+            user_doc["full_name"],
+            (community_doc or {}).get("name"),
+            (community_doc or {}).get("group_label"),
         )
     )
 

@@ -7,13 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, convertFileToDataUrl, formatDateTime } from "@/lib/api";
 import { toast } from "@/components/ui/sonner";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
+import { useGroupWording } from "@/lib/groupWording";
 
 const CATEGORIES = [
   { value: "oral-history", label: "Oral History" },
   { value: "sermon", label: "Sermon Archive" },
   { value: "youth-reflection", label: "Youth Reflection" },
   { value: "community-dialogue", label: "Community Dialogue" },
-  { value: "family-lore", label: "Family Lore" },
+  { value: "family-lore", label: "Family Lore" }, // group-wording: allow — kinship or partner-product term
   { value: "migration-story", label: "Migration Story" },
   { value: "recipe-tradition", label: "Recipe / Tradition" },
 ];
@@ -31,11 +32,11 @@ const CATEGORY_COLORS = {
 // Prompts that give the archive a starting point so it never sits empty.
 // Kept here (static v1) — an Ubuntu Intelligence layer can generate these later.
 const ELDER_PROMPTS = [
-  { category: "oral-history", text: "What is your earliest happy memory of this family?" },
+  { category: "oral-history", text: "What is your earliest happy memory of this {group}?" },
   { category: "oral-history", text: "Who do you most want the young ones to remember, and why?" },
-  { category: "family-lore", text: "Where does our family name come from, and what story travels with it?" },
+  { category: "family-lore", text: "Where does our family name come from, and what story travels with it?" }, // group-wording: allow — kinship or partner-product term
   { category: "family-lore", text: "What is a tradition we keep that no one remembers the origin of?" },
-  { category: "migration-story", text: "Tell the story of how our family came to live where we are now." },
+  { category: "migration-story", text: "Tell the story of how our {group} came to live where we are now." },
   { category: "migration-story", text: "Who was the first to leave home, and what did they carry with them?" },
   { category: "recipe-tradition", text: "Whose recipe do we make on special days, and what is the secret to it?" },
   { category: "recipe-tradition", text: "Describe a meal that means “home” — who made it, and where?" },
@@ -55,6 +56,7 @@ const promptsForToday = (() => {
 const initialForm = { title: "", category: "oral-history", body: "", elder_name: "" };
 
 export const LegacyThreadsPage = ({ token, user }) => {
+  const gw = useGroupWording();
   const [threads, setThreads] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [audioFile, setAudioFile] = useState(null);
@@ -116,7 +118,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
   };
 
   const startFromPrompt = (prompt) => {
-    setForm({ ...initialForm, title: prompt.text, category: prompt.category });
+    setForm({ ...initialForm, title: gw.fill(prompt.text), category: prompt.category });
     setAudioFile(null);
     setAudioRecording(null);
     setShowForm(true);
@@ -200,7 +202,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
     try {
       const payload = await apiRequest(`/threads/${threadId}/translate`, { method: "POST", token });
       setThreads((c) => c.map((t) => (t.id === payload.id ? payload : t)));
-      toast.success("Story translated — it reaches the whole family now.");
+      toast.success(gw.fill("Story translated — it reaches the whole {group} now."));
     } catch (error) {
       toast.error(error.response?.data?.detail || "Couldn't translate right now.");
     } finally {
@@ -277,7 +279,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
                 <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${CATEGORY_COLORS[prompt.category] || "bg-muted text-muted-foreground"}`}>
                   {CATEGORIES.find((c) => c.value === prompt.category)?.label || prompt.category}
                 </span>
-                <p className="mt-2 text-sm leading-6 text-foreground">{prompt.text}</p>
+                <p className="mt-2 text-sm leading-6 text-foreground">{gw.fill(prompt.text)}</p>
                 <span className="mt-2 inline-flex items-center text-xs font-semibold text-primary">Start this thread →</span>
               </button>
             ))}
@@ -394,7 +396,7 @@ export const LegacyThreadsPage = ({ token, user }) => {
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
                     <li>Your account identity is required for cross-product sign-in.</li>
                     <li>Only this selected title and instructions or story would leave Kindred.</li>
-                    <li>The destination may create a family cookbook and manages its own retention and deletion.</li>
+                    <li>{/* group-wording: allow — kinship or partner-product term */}The destination may create a family cookbook and manages its own retention and deletion.</li>
                   </ul>
                   <label className="mt-3 flex items-start gap-2 text-xs text-foreground">
                     <input checked={consentAccepted} data-testid={`legacy-consent-${thread.id}`} onChange={(event) => setConsentAccepted(event.target.checked)} type="checkbox" />

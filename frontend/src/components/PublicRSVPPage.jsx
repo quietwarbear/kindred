@@ -16,6 +16,7 @@ import {
   choicesApply,
   closedResponseMessage,
 } from "@/components/reunion/ActivityAccess";
+import { groupWords, useGroupWording } from "@/lib/groupWording";
 
 // Public, no-account RSVP page for https://heykindred.org/rsvp#token.
 // Fragments stay out of HTTP request URLs; API authentication uses a header.
@@ -82,11 +83,17 @@ const dayGroups = (activities, reunionTimezone) => activities.reduce((groups, ac
 }, {});
 
 export const PublicRSVPPage = () => {
+  const signedInWords = useGroupWording();
   const { token: legacyToken } = useParams();
   const [token, setToken] = useState(
     () => invitationTokenFromLocation(window.location, legacyToken)
   );
   const [data, setData] = useState(null);
+  // A guest has no session: the invitation payload carries the space's word.
+  const gw = useMemo(
+    () => (data?.group_label ? groupWords(data.group_label) : signedInWords),
+    [data?.group_label, signedInWords]
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [continuing, setContinuing] = useState(false);
@@ -250,7 +257,7 @@ export const PublicRSVPPage = () => {
       trackReunionEvent("guest_family_access_started", { source: "public_rsvp" });
       window.location.assign("/login?intent=family-access");
     } catch {
-      setError("Family access is not available from this invitation. Ask an organizer for help.");
+      setError(gw.fill("{Group} access is not available from this invitation. Ask an organizer for help."));
       setContinuing(false);
     }
   };
@@ -347,7 +354,7 @@ export const PublicRSVPPage = () => {
         <section className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-6" data-testid="guest-family-access-cta">
           <h2 className="text-xl font-semibold text-slate-900">Stay connected after the event</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-            Creating an account is optional. If you ask to join the family space, a host or organizer must approve before you can see family posts, memories, or member areas.
+            Creating an account is optional. If you ask to join the {gw.noun} space, a host or organizer must approve before you can see {gw.noun} posts, memories, or member areas.
           </p>
           <button
             className="mt-4 rounded-full bg-rose-600 px-6 py-3 font-semibold text-white disabled:opacity-50"
@@ -356,7 +363,7 @@ export const PublicRSVPPage = () => {
             onClick={continueToFamilyAccess}
             type="button"
           >
-            {continuing ? "Opening secure sign in…" : "Ask to join the family space"}
+            {continuing ? "Opening secure sign in…" : gw.fill("Ask to join the {group} space")}
           </button>
           <p className="mt-3 text-xs text-slate-500">Your RSVP is already saved and does not depend on this choice.</p>
         </section>
@@ -521,7 +528,7 @@ export const PublicRSVPPage = () => {
         </a>
         <span className="mx-2">·</span>
         <a className="font-medium text-rose-600 underline" href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">Mobile app</a>
-        <p className="mt-2 text-xs leading-5">Shared event memories require an account and approved family access; organizers can also use a separate private invitation. This RSVP link cannot open or add to the family’s memory capsule, and an account alone does not grant community access. A guest request remains private and requires organizer approval.</p>
+        <p className="mt-2 text-xs leading-5">Shared event memories require an account and approved {gw.noun} access; organizers can also use a separate private invitation. This RSVP link cannot open or add to the {gw.noun}’s memory capsule, and an account alone does not grant community access. A guest request remains private and requires organizer approval.</p>
       </div>
     </>
   );

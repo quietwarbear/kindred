@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { describePlanUsage, isContestOpen, KEEP_THE_RECORD } from "@/lib/planUsage";
 import { ReunionPassChipIn } from "@/components/ReunionPassChipIn";
+import { useGroupWording } from "@/lib/groupWording";
 
 /**
  * Plan status with a path to the subscription page.
@@ -19,6 +20,7 @@ import { ReunionPassChipIn } from "@/components/ReunionPassChipIn";
  *     the host can change the plan.
  */
 export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false }) => {
+  const gw = useGroupWording();
   const [usage, setUsage] = useState(null);
 
   useEffect(() => {
@@ -52,9 +54,9 @@ export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false })
             <Trophy className="mt-1 h-5 w-5 text-primary" />
             <div>
               <p className="eyebrow-text">{KEEP_THE_RECORD.name}</p>
-              <h2 className="mt-2 font-display text-3xl">Your family isn’t entered yet</h2>
+              <h2 className="mt-2 font-display text-3xl">Your {gw.noun} isn’t entered yet</h2>
               <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-                {KEEP_THE_RECORD.name} is for subscriber families, and yours is on the free {usage.planName} plan.
+                {KEEP_THE_RECORD.name} is for subscriber {gw.nouns}, and yours is on the free {usage.planName} plan.
                 Only your host can change the plan — but you can help pay for it.
               </p>
             </div>
@@ -82,12 +84,12 @@ export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false })
     let body;
     if (contestPrompt) {
       heading = `Upgrade to enter ${KEEP_THE_RECORD.name}`;
-      body = `${KEEP_THE_RECORD.name} is for subscriber families. Upgrade from ${usage.planName} by December 6 so your family can enter.${limitSentence ? ` ${limitSentence}` : ""}`;
+      body = gw.fill(`${KEEP_THE_RECORD.name} is for subscriber {groups}. Upgrade from ${usage.planName} by December 6 so your {group} can enter.${limitSentence ? ` ${limitSentence}` : ""}`);
     } else if (usage.atLimit) {
-      heading = "Your family is full";
+      heading = gw.fill("Your {group} is full");
       body = `${limitSentence} Upgrade to keep bringing everyone in.`;
     } else {
-      heading = "Your family is almost full";
+      heading = gw.fill("Your {group} is almost full");
       body = `${limitSentence} Upgrade before the next invitations go out.`;
     }
 
@@ -122,7 +124,7 @@ export const PlanUpgradeCard = ({ token, variant = "settings", isHost = false })
             <h3 className="mt-2 font-display text-3xl text-foreground">{usage.planName}</h3>
             <p className="mt-1 text-sm text-muted-foreground" data-testid="settings-plan-usage">
               {membersLine}
-              {usage.atLimit ? " · family is full" : usage.nearLimit ? " · almost full" : ""}
+              {gw.fill(usage.atLimit ? " · {group} is full" : usage.nearLimit ? " · almost full" : "")}
             </p>
           </div>
         </div>

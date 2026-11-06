@@ -211,7 +211,7 @@ export const EventsPage = ({ token, user }) => {
               <span className="field-label">Event template</span>
               <select className="field-input w-full" data-testid="events-create-template-select" onChange={(e) => setEventForm((current) => ({ ...current, event_template: e.target.value }))} value={eventForm.event_template}>
                 <option value="general">General gathering</option>
-                <option value="family-reunion">Family reunion</option>
+                <option value="family-reunion">{/* group-wording: allow — kinship or partner-product term */}Family reunion</option>
                 <option value="church-gathering">Church gathering</option>
               </select>
             </label>

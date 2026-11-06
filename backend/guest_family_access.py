@@ -59,7 +59,11 @@ def find_relationship_invite(event: dict[str, Any], fingerprint: str) -> dict[st
     return matches[0] if invitation_is_active(matches[0]) else None
 
 
-def safe_status_projection(request: dict[str, Any], community_name: str = "") -> dict[str, Any]:
+def safe_status_projection(
+    request: dict[str, Any],
+    community_name: str = "",
+    group_label: dict[str, str] | None = None,
+) -> dict[str, Any]:
     status = request.get("status") if request.get("status") in REQUEST_STATES else "conflict"
     next_actions = {
         "pending": ["wait_for_organizer", "cancel_request"],
@@ -76,6 +80,9 @@ def safe_status_projection(request: dict[str, Any], community_name: str = "") ->
     }
     if status == "approved" and community_name:
         result["family_space_name"] = community_name
+    if group_label:
+        # K3: the target space's chosen word, so the guest's screen matches it.
+        result["group_label"] = group_label
     return result
 
 

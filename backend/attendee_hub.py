@@ -159,8 +159,12 @@ def build_attendee_hub(
     user: dict[str, Any],
     *,
     has_memory: bool,
+    group_noun: str = "family",
 ) -> dict[str, Any]:
-    """Build the complete attendee-safe projection for one visible event."""
+    """Build the complete attendee-safe projection for one visible event.
+
+    ``group_noun`` is the community's chosen word (K3, ``group_wording``).
+    """
     aliases = member_invite_aliases(event, user)
     own_overall = _latest_matching(
         event.get("rsvp_records", []),
@@ -239,7 +243,7 @@ def build_attendee_hub(
             "available": True,
             "code": "reunion_story",
             "title": "Keep one story from this reunion",
-            "question": "What is one family story you want everyone to remember?",
+            "question": f"What is one {group_noun} story you want everyone to remember?",
             "sharing_boundary": (
                 "Your story is saved to this private Kindred community. "
                 "It is not published to the open web."

@@ -7,39 +7,40 @@ import { PlanUpgradeCard } from "@/components/PlanUpgradeCard";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const ACTION_COPY = {
   finish_holiday_meal_setup: ["Finish the holiday meal setup", "Review the private meal draft before inviting anyone.", "Open the draft"],
   prepare_holiday_invitation: ["Prepare the first invitation", "Review the private invitation before sharing it.", "Open invitation controls"],
-  review_holiday_response_gaps: ["Review response gaps", "See whether invited family still needs a response prompt.", "Review responses"],
+  review_holiday_response_gaps: ["Review response gaps", "See whether invited {group} still needs a response prompt.", "Review responses"],
   fill_holiday_contribution_gaps: ["Fill meal contribution gaps", "Review open dishes, supplies, setup, and cleanup needs.", "Review contributions"],
-  preserve_holiday_recipe: ["Preserve a recipe or tradition", "Optionally keep a family food story in Kindred.", "Open Legacy Threads"],
+  preserve_holiday_recipe: ["Preserve a recipe or tradition", "Optionally keep a {group} food story in Kindred.", "Open Legacy Threads"],
   review_holiday_recap: ["Review the holiday meal recap", "Complete the private recap and continuity flow.", "Review recap"],
   complete_holiday_rsvp: ["Respond to the holiday meal", "Share whether you can attend through the private gathering.", "RSVP"],
   review_holiday_schedule: ["Review the meal schedule", "See the published arrival, meal, and cleanup plan.", "View schedule"],
   claim_holiday_contribution: ["Claim a dish or volunteer need", "Choose an open contribution or help slot.", "View contributions"],
   add_holiday_recipe: ["Add an optional recipe or tradition", "Preserve your own food story in Kindred.", "Add a recipe"],
   view_holiday_recap: ["View the holiday meal recap", "Return to the published memories and next-gathering flow.", "View recap"],
-  activate_family_space: ["Name and open your family space", "Your gathering has enough verified participation to become an enduring private family space.", "Complete family setup"],
-  finish_reunion_draft: ["Finish the reunion draft", "Complete the remaining reunion details before inviting family.", "Continue the draft"],
+  activate_family_space: ["Name and open your {group} space", "Your gathering has enough verified participation to become an enduring private {group} space.", "Complete {group} setup"],
+  finish_reunion_draft: ["Finish the reunion draft", "Complete the remaining reunion details before inviting {group}.", "Continue the draft"],
   prepare_first_invitation: ["Bring the first person in", "Prepare or safely share the reunion’s first private invitation.", "Open invitation controls"],
-  review_family_access_requests: ["Review a family access request", "A reunion guest is waiting for an organizer decision.", "Review privately"],
+  review_family_access_requests: ["Review a {group} access request", "A reunion guest is waiting for an organizer decision.", "Review privately"],
   resolve_rsvp_attention: ["Check reunion responses", "A response deadline or missing reply needs organizer attention.", "Open response planning"],
   complete_command_task: ["Move reunion planning forward", "Your organizer command center has one clear next task.", "Continue planning"],
-  review_recap: ["Review the reunion recap", "A completed reunion is ready for a private family recap decision.", "Open recap"],
-  review_gathering_proposal: ["Review a gathering idea", "A private family suggestion is waiting for organizer review.", "Review proposal"],
+  review_recap: ["Review the reunion recap", "A completed reunion is ready for a private {group} recap decision.", "Open recap"],
+  review_gathering_proposal: ["Review a gathering idea", "A private {group} suggestion is waiting for organizer review.", "Review proposal"],
   continue_converted_draft: ["Continue the next private draft", "An accepted gathering idea is ready for careful organizer planning.", "Open private draft"],
   open_command_center: ["Open reunion planning", "Return to the active organizer command center.", "Open command center"],
-  confirm_family_access: ["Confirm your family access", "Your organizer approved access to this existing private family space.", "Confirm access"],
-  complete_reunion_rsvp: ["Share your reunion response", "Let the family know your own plans without exposing anyone else’s response.", "Complete my RSVP"],
+  confirm_family_access: ["Confirm your {group} access", "Your organizer approved access to this existing private {group} space.", "Confirm access"],
+  complete_reunion_rsvp: ["Share your reunion response", "Let the {group} know your own plans without exposing anyone else’s response.", "Complete my RSVP"],
   complete_activity_responses: ["Finish activity responses", "One or more published reunion activities still need your answer.", "Open my itinerary"],
   review_updated_itinerary: ["Review the updated itinerary", "The published reunion plan has an update ready for you.", "Review itinerary"],
   manage_contribution: ["Choose or review a contribution", "See available food and volunteer needs, plus only your own commitments.", "Open contributions"],
-  respond_to_gathering_pulse: ["Respond to a family gathering idea", "Share one private interest response and see anonymous totals.", "Respond privately"],
+  respond_to_gathering_pulse: ["Respond to a {group} gathering idea", "Share one private interest response and see anonymous totals.", "Respond privately"],
   continue_memory_contribution: ["Continue your private memory", "A reunion story draft is waiting for you.", "Continue memory"],
-  view_published_recap: ["See the newly published recap", "A private reunion recap is ready for family members.", "Open recap"],
-  check_family_access_status: ["Check your family access status", "Your own private access request has an update or is still waiting.", "Check status"],
-  open_family_home: ["You’re caught up", "There is no urgent family action right now. The rest of your private family space is ready when you are.", "Browse family activity"],
+  view_published_recap: ["See the newly published recap", "A private reunion recap is ready for {group} members.", "Open recap"],
+  check_family_access_status: ["Check your {group} access status", "Your own private access request has an update or is still waiting.", "Check status"],
+  open_family_home: ["You’re caught up", "There is no urgent {group} action right now. The rest of your private {group} space is ready when you are.", "Browse {group} activity"],
 };
 
 const STATIC_DESTINATIONS = {
@@ -51,22 +52,23 @@ const STATIC_DESTINATIONS = {
 };
 
 const RECENT_CHANGE_COPY = {
-  family_access: "Your family access status changed.",
-  family_update: "Something changed in your private family space.",
+  family_access: "Your {group} access status changed.",
+  family_update: "Something changed in your private {group} space.",
   gathering_update: "A gathering update is ready.",
   organizer_review: "A private organizer review needs attention.",
   reunion_recap: "A private reunion recap is ready.",
-  gathering_pulse: "A family gathering pulse is open.",
+  gathering_pulse: "A {group} gathering pulse is open.",
 };
 
 const roleLabel = (value) => {
   if (value === "organizer" || value === "host") return "Organizer Today";
-  if (value === "new_member") return "Welcome to your family space";
-  return "Family Today";
+  if (value === "new_member") return "Welcome to your {group} space";
+  return "{Group} Today";
 };
 
 export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryToday, onSignInAgain }) => {
   const navigate = useNavigate();
+  const { fill } = useGroupWording();
   const [busy, setBusy] = useState("");
   const [retrying, setRetrying] = useState(false);
   const retryInFlight = useRef(false);
@@ -140,15 +142,15 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
       }
     } catch (error) {
       if (error.response?.status === 404) {
-        toast.error("That family action changed. Today has been refreshed.");
+        toast.error(fill("That {group} action changed. Today has been refreshed."));
         await onRetryToday?.();
       } else {
-        toast.error("That family action is temporarily unavailable.");
+        toast.error(fill("That {group} action is temporarily unavailable."));
       }
     } finally {
       setBusy("");
     }
-  }, [navigate, offline, onRetryToday, todayData?.lifecycle_state, todayData?.viewer_role, token]);
+  }, [fill, navigate, offline, onRetryToday, todayData?.lifecycle_state, todayData?.viewer_role, token]);
 
   const markRecentRead = async () => {
     setBusy("mark-read");
@@ -169,7 +171,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
     try {
       await onRetryToday();
     } catch {
-      toast.error("Today could not be refreshed. You can still open family activity.");
+      toast.error(fill("Today could not be refreshed. You can still open {group} activity."));
     } finally {
       retryInFlight.current = false;
       setRetrying(false);
@@ -177,7 +179,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
   };
 
   if (todayLoading) {
-    return <section className="archival-card" aria-busy="true" data-testid="today-loading"><p className="eyebrow-text">Family Today</p><h1 className="mt-3 font-display text-4xl">Finding what matters now…</h1></section>;
+    return <section className="archival-card" aria-busy="true" data-testid="today-loading"><p className="eyebrow-text">{fill("{Group} Today")}</p><h1 className="mt-3 font-display text-4xl">Finding what matters now…</h1></section>;
   }
 
   if (todayError || !todayData || !todayData.primary_action) {
@@ -186,15 +188,15 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
     return (
       <section className="archival-card text-center" data-testid="today-error" aria-live="polite" aria-busy={retrying}>
         <CircleAlert className="mx-auto h-8 w-8 text-primary" />
-        <h1 className="mt-4 font-display text-4xl">{unavailable ? "Open your family space" : sessionExpired ? "Your session needs a refresh" : "Today couldn’t load"}</h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-muted-foreground">{unavailable
-          ? "The Today summary isn’t available for your current family access. Your family data was not changed. Open family activity or gatherings to continue."
+        <h1 className="mt-4 font-display text-4xl">{fill(unavailable ? "Open your {group} space" : sessionExpired ? "Your session needs a refresh" : "Today couldn’t load")}</h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-muted-foreground">{fill(unavailable
+          ? "The Today summary isn’t available for your current {group} access. Your {group} data was not changed. Open {group} activity or gatherings to continue."
           : sessionExpired
-            ? "Sign in again to reconnect securely. Your family data was not changed."
-            : "We couldn’t load your private summary. Your family data was not changed. Retry, or open family activity to continue."}</p>
+            ? "Sign in again to reconnect securely. Your {group} data was not changed."
+            : "We couldn’t load your private summary. Your {group} data was not changed. Retry, or open {group} activity to continue.")}</p>
         {sessionExpired ? <Button className="mt-5" onClick={onSignInAgain || (() => navigate("/login"))} type="button">Sign in again</Button> : !unavailable && <Button className="mt-5" disabled={retrying || !onRetryToday} onClick={retryToday} type="button" variant="outline"><RefreshCw className={`mr-2 h-4 w-4 ${retrying ? "animate-spin" : ""}`} />{retrying ? "Refreshing…" : "Try again"}</Button>}
         <div className="mt-4 flex flex-wrap justify-center gap-3">
-          <Button onClick={() => navigate("/activity")} type="button">Open family activity</Button>
+          <Button onClick={() => navigate("/activity")} type="button">{fill("Open {group} activity")}</Button>
           <Button onClick={() => navigate("/gatherings")} type="button" variant="outline">Open gatherings</Button>
         </div>
       </section>
@@ -202,7 +204,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
   }
 
   const primary = todayData.primary_action;
-  const primaryCopy = ACTION_COPY[primary.code] || ACTION_COPY.open_family_home;
+  const primaryCopy = (ACTION_COPY[primary.code] || ACTION_COPY.open_family_home).map(fill);
   const unreadRecent = todayData.recent_changes.some((item) => !item.is_read);
 
   return (
@@ -217,7 +219,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
       <section className="archival-card overflow-hidden" data-testid="today-primary-card">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="eyebrow-text">{roleLabel(todayData.viewer_role)}</p>
+            <p className="eyebrow-text">{fill(roleLabel(todayData.viewer_role))}</p>
             <h1 className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-5xl">{primaryCopy[0]}</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">{primaryCopy[1]}</p>
             <Button className="mt-6" disabled={offline || Boolean(busy)} onClick={() => selectAction(primary, true)} type="button">
@@ -226,7 +228,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
           </div>
           <div className="soft-panel flex max-w-sm items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
-            <div><p className="text-sm font-semibold">One clear next step</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Built from your current role and only the private family information you may access.</p></div>
+            <div><p className="text-sm font-semibold">One clear next step</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Built from your current role and only the private {fill("{group}")} information you may access.</p></div>
           </div>
         </div>
       </section>
@@ -239,7 +241,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
           <h2 className="mt-2 font-display text-3xl" id="today-secondary-heading">A few things close behind</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             {todayData.secondary_actions.map((action) => {
-              const copy = ACTION_COPY[action.code] || ACTION_COPY.open_family_home;
+              const copy = (ACTION_COPY[action.code] || ACTION_COPY.open_family_home).map(fill);
               return (
                 <button className="soft-panel text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={offline || Boolean(busy)} key={action.code} onClick={() => selectAction(action)} type="button">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -261,7 +263,7 @@ export const HomePage = ({ token, todayData, todayLoading, todayError, onRetryTo
           {todayData.recent_changes.length ? todayData.recent_changes.map((item, index) => (
             <div className="soft-panel flex items-center gap-3" key={`${item.category}-${index}`}>
               <BellRing className="h-4 w-4 text-primary" />
-              <p className={`text-sm ${item.is_read ? "text-muted-foreground" : "font-semibold text-foreground"}`}>{RECENT_CHANGE_COPY[item.category] || RECENT_CHANGE_COPY.family_update}</p>
+              <p className={`text-sm ${item.is_read ? "text-muted-foreground" : "font-semibold text-foreground"}`}>{fill(RECENT_CHANGE_COPY[item.category] || RECENT_CHANGE_COPY.family_update)}</p>
             </div>
           )) : <div className="soft-panel"><p className="text-sm text-muted-foreground">Nothing new needs your attention. Opening Today never marks anything read.</p></div>}
         </div>

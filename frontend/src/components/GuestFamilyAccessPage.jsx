@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock3, LockKeyhole, RefreshCw, XCircle } from "lucide-react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
@@ -12,15 +12,16 @@ import {
   loadGuestFamilyClaim,
 } from "@/lib/guestFamilyAccess";
 import { toast } from "@/components/ui/sonner";
+import { groupWords, useGroupWording } from "@/lib/groupWording";
 
 const STATUS_COPY = {
-  pending: ["Request sent", "A family host or organizer will review it. Your RSVP remains saved."],
-  approved: ["Welcome to the family space", "Your approved account is now the one canonical member for this family space."],
+  pending: ["Request sent", "A {group} host or organizer will review it. Your RSVP remains saved."],
+  approved: ["Welcome to the {group} space", "Your approved account is now the one canonical member for this {group} space."],
   declined: ["Request not approved", "Your reunion RSVP is unchanged. You can contact the organizer if you have questions."],
   cancelled: ["Request cancelled", "Your reunion RSVP is unchanged."],
   expired: ["Request expired", "Ask the organizer for a fresh private invitation if you still want to join."],
-  conflict: ["Organizer help needed", "Kindred could not safely connect this account. Nothing was merged across family spaces."],
-  none: ["No family access request", "Return to your private reunion invitation to start an optional request."],
+  conflict: ["Organizer help needed", "Kindred could not safely connect this account. Nothing was merged across {group} spaces."],
+  none: ["No {group} access request", "Return to your private reunion invitation to start an optional request."],
 };
 
 const operationKey = (prefix) => {
@@ -34,8 +35,17 @@ const operationKey = (prefix) => {
 };
 
 export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
+  const signedInWords = useGroupWording();
   const navigate = useNavigate();
   const [access, setAccess] = useState(null);
+  // The guest is joining another space: use that space's word when it is known.
+  const gw = useMemo(
+    () => (access?.group_label ? groupWords(access.group_label) : signedInWords),
+    [access?.group_label, signedInWords]
+  );
+  // Read inside the one-shot submit effect without making it re-run.
+  const gwRef = useRef(gw);
+  gwRef.current = gw;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
   const submittedRef = useRef(false);
@@ -75,7 +85,7 @@ export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
         if (payload.status === "approved") await onSessionRefresh?.();
       } catch (requestError) {
         const detail = requestError.response?.data?.detail;
-        setError(typeof detail === "string" ? detail : detail?.message || "This family access request could not be opened safely.");
+        setError(typeof detail === "string" ? detail : detail?.message || gwRef.current.fill("This {group} access request could not be opened safely."));
       } finally {
         setBusy(false);
       }
@@ -124,26 +134,26 @@ export const GuestFamilyAccessPage = ({ session, onSessionRefresh }) => {
       await onSessionRefresh?.();
       navigate("/home");
     } catch {
-      toast.error("Approved family access could not be confirmed safely.");
+      toast.error(gw.fill("Approved {group} access could not be confirmed safely."));
     } finally {
       setBusy(false);
     }
   };
 
   const status = access?.status || "none";
-  const [title, copy] = STATUS_COPY[status] || STATUS_COPY.conflict;
+  const [title, copy] = (STATUS_COPY[status] || STATUS_COPY.conflict).map(gw.fill);
   const Icon = status === "approved" ? CheckCircle2 : status === "pending" ? Clock3 : status === "declined" || status === "cancelled" ? XCircle : LockKeyhole;
 
   return (
     <div className="app-canvas min-h-screen px-6 py-12" data-ph-no-capture="true" data-testid="guest-family-access-page">
       <main className="archival-card mx-auto max-w-2xl text-center">
-        <p className="eyebrow-text">Private family access</p>
+        <p className="eyebrow-text">Private {gw.noun} access</p>
         <Icon className="mx-auto mt-6 h-9 w-9 text-primary" />
         <h1 className="mt-4 font-display text-4xl">{busy && !access ? "Opening your request…" : title}</h1>
         <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-muted-foreground">{error || copy}</p>
         {status === "approved" && access?.family_space_name ? <p className="mt-4 text-lg font-semibold">{access.family_space_name}</p> : null}
         <div className="mt-7 flex flex-wrap justify-center gap-3">
-          {status === "approved" ? <Button disabled={busy} onClick={confirmAccess} type="button">Confirm and open family space</Button> : null}
+          {status === "approved" ? <Button disabled={busy} onClick={confirmAccess} type="button">Confirm and open {gw.noun} space</Button> : null}
           {status === "pending" ? (
             <>
               <Button disabled={busy} onClick={refresh} type="button" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Check status</Button>
