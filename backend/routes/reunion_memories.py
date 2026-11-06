@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import tempfile
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from db import client, events_collection, memories_collection
-from dependencies import get_current_user, get_event_for_user, now_iso
+from capsule_export import CapsuleZipWriter, ExportTooLarge, export_filename
+from dependencies import ensure_minimum_role, get_current_user, get_event_for_user, now_iso
 from models import (
     ReunionMemoryContributionRequest,
     ReunionMemoryOperationRequest,
@@ -18,6 +22,8 @@ from reunion_memory_capsule import build_reunion_memory_capsule
 from rsvp_integrity import RSVPWriteConflict, compare_and_swap_event
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
+EXPORT_CHUNK_BYTES = 1024 * 1024
 
 
 class CapsuleConflict(RuntimeError):
@@ -372,3 +378,74 @@ async def review_reunion_memory_capsule(
     if not event:
         raise _translate_capsule_error(CapsuleNotFound())
     return await capsule_projection(event, current_user)
+
+
+@router.get("/events/{event_id}/memory-capsule/export")
+async def export_reunion_memory_capsule(
+    event_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Organizer download: a ZIP of every published memory shared to this event.
+
+    ``memories.json`` holds the stories, names, comments and pointers into
+    ``media/``, which holds the decoded photos and voice notes. Drafts are
+    never included. See ``capsule_export`` for the format.
+    """
+    ensure_minimum_role(current_user, "organizer")
+    event = await get_event_for_user(event_id, current_user)
+    spool = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024)
+    writer = CapsuleZipWriter(spool)
+    cursor = memories_collection.find(
+        {
+            "community_id": current_user["community_id"],
+            "event_id": event_id,
+            "capsule_status": {"$ne": "draft"},
+        },
+        {"_id": 0},
+    ).sort("created_at", 1)
+    try:
+        async for memory in cursor:
+            writer.add(memory)
+    except ExportTooLarge as exc:
+        writer.abort()
+        spool.close()
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={
+                "code": "capsule_export_too_large",
+                "message": "This capsule is too large to export in one file. Contact support for a full export.",
+            },
+        ) from exc
+    exported_at = now_iso()
+    counts = writer.finish(event, exported_at=exported_at)
+    # Counts only: no story text, names or media in the log.
+    logger.info(
+        "memory capsule exported event=%s memories=%s media=%s skipped_media=%s",
+        event_id,
+        counts["memory_count"],
+        counts["media_count"],
+        counts["skipped_media"],
+    )
+    size = spool.tell()
+    spool.seek(0)
+
+    def chunks():
+        try:
+            while True:
+                block = spool.read(EXPORT_CHUNK_BYTES)
+                if not block:
+                    break
+                yield block
+        finally:
+            spool.close()
+
+    return StreamingResponse(
+        chunks(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{export_filename(event, exported_at)}"',
+            "Content-Length": str(size),
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

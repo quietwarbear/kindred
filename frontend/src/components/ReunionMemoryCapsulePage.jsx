@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { apiRequest } from "@/lib/api";
+import { CapsuleExport } from "@/components/reunion/CapsuleExport";
 import { trackReunionEvent } from "@/lib/analytics";
 import { zonedDateTimeToEpoch } from "@/lib/itinerary";
 import { useGroupWording } from "@/lib/groupWording";
@@ -277,6 +278,9 @@ export const ReunionMemoryCapsulePage = ({ session }) => {
             <p className="mt-3 rounded-xl bg-stone-100 px-4 py-3 text-sm text-stone-800" role="status">
               Your contribution is withdrawn and no longer appears in this capsule.
             </p>
+          ) : null}
+          {["host", "organizer"].includes(session.user?.role) ? (
+            <CapsuleExport eventId={eventId} title={capsule.reunion.title} token={session.token} />
           ) : null}
         </header>
 
