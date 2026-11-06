@@ -119,7 +119,9 @@ async def start_legacy_table_transfer(
         credential, operation = await activate_grant(db, operation)
     except TransferFailure as exc:
         return _safe_failure(exc)
-    except HTTPException:
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == "email_not_verified":
+            return _safe_failure(TransferFailure("email_not_verified", 403))
         return _safe_failure(TransferFailure("destination_sso_unavailable", 502))
     except PyMongoError:
         return _safe_failure(TransferFailure("transfer_storage_unavailable", 503))

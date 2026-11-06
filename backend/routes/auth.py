@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import hmac
 import logging
 import os
 import re
@@ -968,7 +969,7 @@ async def sso_mint_code(payload: SSOCodeRequest):
     The code — not a session — goes in the jump URL and is redeemed once via /auth/sso-redeem.
     """
     expected = os.environ.get("UBUNTU_SSO_SECRET", "")
-    if not expected or payload.secret != expected:
+    if not expected or not hmac.compare_digest(payload.secret.encode(), expected.encode()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid SSO secret"
         )
