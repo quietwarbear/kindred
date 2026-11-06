@@ -9,6 +9,7 @@ import { apiRequest, formatDateTime, shortCurrency } from "@/lib/api";
 import { gaClientId } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
 import { isNative } from "@/lib/native-bridge";
+import { useGroupWording } from "@/lib/groupWording";
 
 const initialBudgetForm = {
   title: "",
@@ -20,6 +21,7 @@ const initialBudgetForm = {
 };
 
 export const FundsTravelPage = ({ token, user }) => {
+  const gw = useGroupWording();
   const [searchParams, setSearchParams] = useSearchParams();
   const [summary, setSummary] = useState(null);
   const [events, setEvents] = useState([]);
@@ -247,7 +249,7 @@ export const FundsTravelPage = ({ token, user }) => {
             <Coins className="h-5 w-5 text-primary" />
             <div>
               <p className="eyebrow-text">Budget planning</p>
-              <h3 className="mt-2 font-display text-3xl text-foreground">Event and family fund budgets</h3>
+              <h3 className="mt-2 font-display text-3xl text-foreground">Event and {gw.noun} fund budgets</h3>
             </div>
           </div>
           <div className="mt-6 space-y-4">

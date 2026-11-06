@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/sonner";
+import { useGroupWording } from "@/lib/groupWording";
 
 const ACTIONS = {
   complete_reunion_details: ["Complete the reunion details", "Confirm the date, timezone, and location."],
@@ -28,8 +29,8 @@ const ACTIONS = {
   follow_up_missing_responses: ["Follow up on missing responses", "Review the safe reminder preflight before contacting anyone."],
   fill_planning_roles: ["Fill the next planning role", "Give one clear responsibility to an authorized helper."],
   resolve_contribution_gaps: ["Resolve contribution gaps", "Potluck items or volunteer roles still need owners."],
-  review_travel_gaps: ["Review travel and lodging gaps", "Capture the travel coordination the family still needs."],
-  prepare_story_prompts: ["Prepare a family story prompt", "Invite one memory before everyone arrives."],
+  review_travel_gaps: ["Review travel and lodging gaps", "Capture the travel coordination the {group} still needs."],
+  prepare_story_prompts: ["Prepare a {group} story prompt", "Invite one memory before everyone arrives."],
   review_reunion_plan: ["Review the reunion plan", "Everything essential is moving; check the next few details."],
 };
 
@@ -74,6 +75,7 @@ const StatusCard = ({ label, value, detail, testId }) => (
 );
 
 export const OrganizerCommandCenterPage = ({ session }) => {
+  const gw = useGroupWording();
   const { eventId } = useParams();
   const [command, setCommand] = useState(null);
   const [event, setEvent] = useState(null);
@@ -348,7 +350,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
           source: "organizer_command_center", request_state: "approved", decision: "approved",
         });
       }
-      toast.success(`Family access request ${result.status}.`);
+      toast.success(gw.fill(`{Group} access request ${result.status}.`));
       await load();
     } catch (error) {
       toast.error(error.response?.data?.detail?.message || "This request changed. Refresh before deciding.");
@@ -380,7 +382,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
     );
   }
 
-  const [actionTitle, actionCopy] = ACTIONS[command.next_action.code] || ACTIONS.review_reunion_plan;
+  const [actionTitle, actionCopy] = (ACTIONS[command.next_action.code] || ACTIONS.review_reunion_plan).map(gw.fill);
   const progressEntries = Object.entries(command.progress).filter(
     ([key, value]) => key !== "budget" || value
   );
@@ -413,7 +415,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
           <section className="archival-card flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" data-testid="command-center-family-activation-card">
             <div>
               <p className="eyebrow-text">After the reunion</p>
-              <h2 className="mt-2 font-display text-3xl">{familyReadiness.ready ? "Your family space is ready to keep." : "Your family space is taking shape."}</h2>
+              <h2 className="mt-2 font-display text-3xl">{gw.fill(familyReadiness.ready ? "Your {group} space is ready to keep." : "Your {group} space is taking shape.")}</h2>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
                 {familyReadiness.ready
                   ? "Choose its enduring name without changing invitations, members, memories, or reunion history."
@@ -421,7 +423,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
               </p>
             </div>
             <Button asChild variant={familyReadiness.ready ? "default" : "outline"}>
-              <Link to="/family/activate">Review family-space readiness <ArrowRight className="ml-2 h-4 w-4" /></Link>
+              <Link to="/family/activate">{gw.fill("Review {group}-space readiness")} <ArrowRight className="ml-2 h-4 w-4" /></Link>
             </Button>
           </section>
         ) : null}
@@ -430,8 +432,8 @@ export const OrganizerCommandCenterPage = ({ session }) => {
           <section className="archival-card flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" data-testid="command-center-recap-card">
             <div>
               <p className="eyebrow-text">Reunion concluded</p>
-              <h2 className="mt-2 font-display text-3xl">Review the private family recap</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Publish an optional family message, review safe participation totals, or explicitly begin the next gathering.</p>
+              <h2 className="mt-2 font-display text-3xl">Review the private {gw.noun} recap</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">Publish an optional {gw.noun} message, review safe participation totals, or explicitly begin the next gathering.</p>
             </div>
             <Button asChild><Link to={`/reunion/recap/${eventId}`}>Open recap and continuity <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
           </section>
@@ -491,7 +493,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
           <div className="flex items-start gap-3">
             <LockKeyhole className="mt-1 h-5 w-5 text-primary" />
             <div>
-              <p className="eyebrow-text">Family access requests</p>
+              <p className="eyebrow-text">{gw.Noun} access requests</p>
               <h2 className="mt-2 font-display text-3xl">Approve one canonical member</h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
                 These guests authenticated after using their private reunion relationship. Email is not proof of membership, and cross-family accounts fail closed.
@@ -512,7 +514,7 @@ export const OrganizerCommandCenterPage = ({ session }) => {
                   </div>
                 ) : <span className="text-sm font-semibold capitalize text-muted-foreground">{request.status}</span>}
               </article>
-            )) : <p className="text-sm text-muted-foreground">No guest family-access requests yet.</p>}
+            )) : <p className="text-sm text-muted-foreground">{gw.fill("No guest {group}-access requests yet.")}</p>}
           </div>
         </section>
 

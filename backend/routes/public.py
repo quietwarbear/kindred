@@ -43,6 +43,7 @@ from family_space_activation import (
     community_lifecycle_state,
     public_community_display_name,
 )
+from group_wording import group_label_for_community
 from guest_family_access import invitation_relationship_fingerprint
 from organizer_command_center import invitation_is_active
 from push_sender import maybe_notify
@@ -154,10 +155,11 @@ async def _public_rsvp_view(token: str):
         await _mark_invitation_opened(event["id"], token)
     community = await communities_collection.find_one(
         {"id": event.get("community_id")},
-        {"_id": 0, "name": 1, "lifecycle_state": 1},
+        {"_id": 0, "name": 1, "lifecycle_state": 1, "group_label": 1},
     )
     view = _public_view(event, invite)
     view["community_name"] = public_community_display_name(community)
+    view["group_label"] = group_label_for_community(community)
     view["family_access_available"] = bool(
         event.get("event_template") == "reunion"
         and invite.get("invite_source") == "guest"

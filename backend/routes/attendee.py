@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from attendee_hub import build_attendee_hub
 from db import events_collection, memories_collection, reunion_recaps_collection
 from dependencies import get_current_user, get_event_for_user
+from group_wording import wording_for_community_id
 from models import AttendeeMemoryRequest, ReunionMemoryContributionRequest
 from routes.reunion_memories import (
     CapsuleConflict,
@@ -58,6 +59,7 @@ async def _hub(
         event,
         current_user,
         has_memory=await _has_attendee_memory(event, current_user),
+        group_noun=(await wording_for_community_id(event.get("community_id"))).noun,
     )
     recap = await reunion_recaps_collection.find_one(
         {"event_id": event["id"], "community_id": current_user["community_id"]},
@@ -169,4 +171,9 @@ async def create_attendee_memory(
                 "message": "This contribution changed. Refresh before trying again.",
             },
         ) from exc
-    return build_attendee_hub(event, current_user, has_memory=True)
+    return build_attendee_hub(
+        event,
+        current_user,
+        has_memory=True,
+        group_noun=(await wording_for_community_id(event.get("community_id"))).noun,
+    )

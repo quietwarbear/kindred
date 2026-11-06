@@ -19,6 +19,7 @@ import { toast } from "@/components/ui/sonner";
 import { apiRequest } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { zonedDateTimeToEpoch } from "@/lib/itinerary";
+import { useGroupWording } from "@/lib/groupWording";
 
 const operationKey = (kind, eventId) => {
   const storageKey = `kindred:recap:${kind}:${eventId}`;
@@ -46,22 +47,23 @@ const formatMoment = (value, timezone, options = {}) => {
 
 const lifecycleCopy = {
   not_ready: ["The reunion is still underway", "Kindred will open the recap after the validated final activity ends."],
-  ready: ["Ready for organizer review", "Review the private recap and optional message before publishing it to the family."],
-  published: ["The family recap is published", "Eligible family-space members can now revisit this reunion."],
+  ready: ["Ready for organizer review", "Review the private recap and optional message before publishing it to the {group}."],
+  published: ["The {group} recap is published", "Eligible {group}-space members can now revisit this reunion."],
   unpublished: ["The recap is unpublished", "Only organizers can preview it until it is published again."],
   legacy_conflict: ["Completion needs organizer attention", "Kindred found ambiguous legacy timing and left the reunion unchanged."],
 };
 
 const memoryActionCopy = {
   finish_memory_draft: "Finish your private memory draft",
-  contribute_memory: "Contribute a family memory",
-  review_memories: "Review the family memories",
+  contribute_memory: "Contribute a {group} memory",
+  review_memories: "Review the {group} memories",
   publish_recap: "Open memories",
   start_next_gathering: "Open memories",
   wait_for_completion: "Open memories",
 };
 
 export const ReunionRecapPage = ({ session }) => {
+  const gw = useGroupWording();
   const { eventId } = useParams();
   const navigate = useNavigate();
   const organizer = ["host", "organizer"].includes(session?.user?.role);
@@ -95,19 +97,19 @@ export const ReunionRecapPage = ({ session }) => {
       setMessage(payload.message || "");
       setNextForm((current) => ({
         ...current,
-        title: current.title || `${payload.reunion?.title || "Family reunion"} — Next gathering`,
+        title: current.title || `${payload.reunion?.title || gw.fill("{Group} reunion")} — Next gathering`,
         timezone: current.timezone === "UTC" ? (payload.reunion?.timezone || "UTC") : current.timezone,
       }));
     } catch (error) {
-      setLoadError(
+      setLoadError(gw.fill(
         error.response?.status === 404
-          ? "This private recap is not available to your current family-space account."
+          ? "This private recap is not available to your current {group}-space account."
           : "The reunion recap could not be opened. Please try again."
-      );
+      ));
     } finally {
       setLoading(false);
     }
-  }, [eventId, organizer, session?.token]);
+  }, [eventId, gw, organizer, session?.token]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -162,7 +164,7 @@ export const ReunionRecapPage = ({ session }) => {
       expected_revision: recap.revision,
       idempotency_key: operationKey(action, eventId),
     },
-    action === "publish" ? "The recap is published to eligible family members." : "The recap is now unpublished."
+    gw.fill(action === "publish" ? "The recap is published to eligible {group} members." : "The recap is now unpublished.")
   ).then((saved) => {
     if (saved && action === "publish") {
       trackReunionEvent("reunion_recap_published", {
@@ -253,7 +255,7 @@ export const ReunionRecapPage = ({ session }) => {
     );
   }
 
-  const [stateTitle, stateCopy] = lifecycleCopy[recap.state] || lifecycleCopy.legacy_conflict;
+  const [stateTitle, stateCopy] = (lifecycleCopy[recap.state] || lifecycleCopy.legacy_conflict).map(gw.fill);
   const catalog = recap.carry_forward_catalog || { itinerary_templates: [], contribution_categories: [] };
   const proposal = nextPreview?.proposal;
   const canManage = organizer && ["ready", "published", "unpublished"].includes(recap.state);
@@ -263,7 +265,7 @@ export const ReunionRecapPage = ({ session }) => {
     <div className="app-canvas min-h-screen" data-ph-no-capture="true" data-testid="reunion-recap">
       <main className="page-section space-y-6 py-5 sm:py-10">
         <header className="space-y-4">
-          <Link className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground" to="/home"><ChevronLeft className="mr-1 h-4 w-4" /> Family space</Link>
+          <Link className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground" to="/home"><ChevronLeft className="mr-1 h-4 w-4" /> {gw.Noun} space</Link>
           <div className="archival-card overflow-hidden">
             <p className="eyebrow-text">Private reunion recap</p>
             <h1 className="mt-2 font-display text-4xl text-foreground">{recap.reunion.title}</h1>
@@ -287,12 +289,12 @@ export const ReunionRecapPage = ({ session }) => {
 
         <section className="grid gap-4 md:grid-cols-3">
           <div className="archival-card"><CheckCircle2 className="h-5 w-5 text-primary" /><p className="mt-3 text-2xl font-semibold">{totals.going + totals.some}</p><p className="text-sm text-muted-foreground">Going or joining part</p></div>
-          <div className="archival-card"><BookHeart className="h-5 w-5 text-primary" /><p className="mt-3 text-2xl font-semibold">{totals.published_memory_count}</p><p className="text-sm text-muted-foreground">Published family memories</p></div>
+          <div className="archival-card"><BookHeart className="h-5 w-5 text-primary" /><p className="mt-3 text-2xl font-semibold">{totals.published_memory_count}</p><p className="text-sm text-muted-foreground">Published {gw.noun} memories</p></div>
           <div className="archival-card"><CalendarDays className="h-5 w-5 text-primary" /><p className="mt-3 text-2xl font-semibold">{totals.claimed_categories}</p><p className="text-sm text-muted-foreground">Contributions completed</p></div>
         </section>
 
         <section className="archival-card space-y-4">
-          <div><p className="eyebrow-text">Your participation</p><h2 className="mt-2 font-display text-2xl">What you shared with the family</h2></div>
+          <div><p className="eyebrow-text">Your participation</p><h2 className="mt-2 font-display text-2xl">What you shared with the {gw.noun}</h2></div>
           <p className="text-sm text-muted-foreground">Overall response: <span className="font-medium text-foreground">{recap.my_participation.rsvp_status.replaceAll("_", " ")}</span></p>
           <div className="space-y-3">
             {recap.itinerary.map((activity) => (
@@ -304,13 +306,13 @@ export const ReunionRecapPage = ({ session }) => {
         </section>
 
         <section className="archival-card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="eyebrow-text">Keep the stories</p><h2 className="mt-2 font-display text-2xl">Continue to the private memory capsule</h2><p className="mt-2 text-sm text-muted-foreground">Review published, non-withdrawn family memories or add your own.</p></div>
-          <Button asChild><Link onClick={() => trackReunionEvent("reunion_memory_continued", { viewer_role: organizer ? "organizer" : "member", recap_state: recap.state, next_action_category: "memory_capsule" })} to={`/reunion/memories/${eventId}`}>{memoryActionCopy[recap.next_action?.code] || "Open memories"} <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+          <div><p className="eyebrow-text">Keep the stories</p><h2 className="mt-2 font-display text-2xl">Continue to the private memory capsule</h2><p className="mt-2 text-sm text-muted-foreground">Review published, non-withdrawn {gw.noun} memories or add your own.</p></div>
+          <Button asChild><Link onClick={() => trackReunionEvent("reunion_memory_continued", { viewer_role: organizer ? "organizer" : "member", recap_state: recap.state, next_action_category: "memory_capsule" })} to={`/reunion/memories/${eventId}`}>{gw.fill(memoryActionCopy[recap.next_action?.code] || "Open memories")} <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
         </section>
 
         {organizer && (
           <section className="archival-card space-y-4" data-testid="organizer-recap-controls">
-            <div><p className="eyebrow-text">Organizer message</p><h2 className="mt-2 font-display text-2xl">A private note for the family</h2><p className="mt-2 text-sm text-muted-foreground">Up to 2,000 characters. This text stays out of analytics, notifications, URLs, and provider systems.</p></div>
+            <div><p className="eyebrow-text">Organizer message</p><h2 className="mt-2 font-display text-2xl">A private note for the {gw.noun}</h2><p className="mt-2 text-sm text-muted-foreground">Up to 2,000 characters. This text stays out of analytics, notifications, URLs, and provider systems.</p></div>
             <Textarea maxLength={2000} onChange={(event) => setMessage(event.target.value)} rows={6} value={message} />
             <div className="flex flex-wrap gap-3">
               <Button disabled={!canManage || busy === "message"} onClick={editMessage} type="button" variant="outline">Save message</Button>
