@@ -98,6 +98,7 @@ test("send is held until the event ends but preview works", async () => {
   const report = container.querySelector("[data-testid='ile-ubuntu-report']");
   expect(report.textContent).toContain("Preview — nothing sent yet");
   expect(report.textContent).toContain("1 new account would be created");
+  expect(container.textContent).not.toContain("Open Ile Ubuntu"); // nothing sent yet
 });
 
 test("sending after confirmation shows the returned report", async () => {
@@ -121,6 +122,7 @@ test("sending after confirmation shows the returned report", async () => {
   expect(report.textContent).toContain("1 person left out: no email on file");
   expect(report.textContent).toContain("2 welcome emails with a sign-in link");
   expect(report.textContent).toContain("Unknown session: course-9");
+  expect(container.textContent).toContain("Open Ile Ubuntu to check the courses");
 });
 
 test("cancelling the confirmation sends nothing", async () => {

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { GroupWordingSettings } from "@/components/GroupWordingSettings";
+import { OpenIleUbuntuButton } from "@/components/OpenIleUbuntuButton";
 import { PlanUpgradeCard } from "@/components/PlanUpgradeCard";
 import { Input } from "@/components/ui/input";
 import { requiresPasswordForAccountDeletion } from "@/lib/accountDeletion";
@@ -260,6 +261,20 @@ export const SettingsPage = ({ token, user, onSessionRefresh }) => {
             </div>
           </div>
         </article>
+      </section>
+
+      <section aria-labelledby="settings-ile-ubuntu-heading" className="archival-card" data-testid="settings-ile-ubuntu-card">
+        <p className="eyebrow-text">Ile Ubuntu</p>
+        <h3 className="mt-2 font-display text-3xl text-foreground" id="settings-ile-ubuntu-heading">
+          Recordings and courses
+        </h3>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          When a gathering shares its recordings and handouts on Ile Ubuntu, open them here. You're signed in with
+          the same email, with no new password. Your email needs to be verified first.
+        </p>
+        <div className="mt-4">
+          <OpenIleUbuntuButton token={token} />
+        </div>
       </section>
 
       <section className="archival-card" data-testid="settings-privacy-card">

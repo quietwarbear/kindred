@@ -4,6 +4,7 @@ import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { apiRequest, errorDetail } from "@/lib/api";
+import { OpenIleUbuntuButton } from "@/components/OpenIleUbuntuButton";
 
 // X2: after an event ends, send the people marked "coming" to the matching
 // Ile Ubuntu courses. Ile Ubuntu creates their accounts, enrolls them and
@@ -224,6 +225,11 @@ export const IleUbuntuHandoff = ({ event, token }) => {
           Send attendees to Ile Ubuntu
         </Button>
       </div>
+      {result?.dry_run === false || last ? (
+        <div className="mt-3">
+          <OpenIleUbuntuButton label="Open Ile Ubuntu to check the courses" token={token} />
+        </div>
+      ) : null}
       {state.connected && !state.event_ended ? (
         <p className="mt-2 text-xs text-muted-foreground">You can send once the event has ended. Preview works now.</p>
       ) : null}
