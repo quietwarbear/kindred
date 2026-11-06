@@ -20,6 +20,7 @@ import { GatheringVolunteers } from "@/components/gatherings/GatheringVolunteers
 import { ReunionInvitePreview } from "@/components/ReunionStartPage";
 import { ReunionItinerary } from "@/components/reunion/ReunionItinerary";
 import { ReunionOperations } from "@/components/reunion/ReunionOperations";
+import { ActivityRoster } from "@/components/reunion/ActivityRoster";
 import { apiRequest, formatDateTime } from "@/lib/api";
 import { trackReunionEvent } from "@/lib/analytics";
 import { clearReunionDraft } from "@/lib/reunionDraft";
@@ -245,6 +246,8 @@ export const ReunionActivationPage = ({ session }) => {
         />
 
         <ReunionOperations event={event} operations={operations} />
+
+        <ActivityRoster eventId={eventId} refreshKey={operations} token={session.token} />
 
         <section className="grid gap-6 xl:grid-cols-2">
           <GatheringChecklist canCreate event={event} onUpdate={updateEvent} token={session.token} />
