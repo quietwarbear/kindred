@@ -1,3 +1,11 @@
+const mockCapacitor = { native: false };
+jest.mock("@capacitor/core", () => ({
+  Capacitor: {
+    isNativePlatform: () => mockCapacitor.native,
+    getPlatform: () => (mockCapacitor.native ? "ios" : "web"),
+  },
+}));
+
 jest.mock("posthog-js", () => ({
   __esModule: true,
   default: {
@@ -25,6 +33,7 @@ import {
 } from "./analytics";
 
 beforeEach(() => {
+  mockCapacitor.native = false;
   Object.values(posthog).forEach((mock) => mock.mockClear());
   window.history.replaceState({}, "", "/");
 });
@@ -477,5 +486,57 @@ describe("Meta Pixel", () => {
     delete window.fbq;
     initAnalytics();
     expect(window.fbq).toBeUndefined();
+  });
+});
+
+// The native app declares no tracking to Apple or Google, so the Pixel —
+// the one cross-company signal this file can send — must stay web-only.
+describe("Meta Pixel inside the native app", () => {
+  const loadWithPixelId = () => {
+    const previous = process.env.REACT_APP_META_PIXEL_ID;
+    process.env.REACT_APP_META_PIXEL_ID = "123456789";
+    let mod;
+    jest.isolateModules(() => {
+      mod = require("./analytics");
+    });
+    if (previous === undefined) delete process.env.REACT_APP_META_PIXEL_ID;
+    else process.env.REACT_APP_META_PIXEL_ID = previous;
+    return mod;
+  };
+
+  beforeEach(() => {
+    delete window.fbq;
+    delete window._fbq;
+    document.querySelectorAll('script[src*="fbevents"]').forEach((node) => node.remove());
+    // The Pixel snippet inserts itself before the page's first <script>.
+    if (!document.getElementsByTagName("script")[0]) {
+      document.head.appendChild(document.createElement("script"));
+    }
+    window.history.replaceState({}, "", "/");
+  });
+
+  afterEach(() => {
+    delete window.fbq;
+    delete window._fbq;
+  });
+
+  it("loads on the web when a pixel id is configured", () => {
+    mockCapacitor.native = false;
+    loadWithPixelId().initAnalytics();
+    expect(typeof window.fbq).toBe("function");
+  });
+
+  it("never loads in the native app, even with a pixel id baked into the build", () => {
+    mockCapacitor.native = true;
+    loadWithPixelId().initAnalytics();
+    expect(window.fbq).toBeUndefined();
+    expect(document.querySelector('script[src*="fbevents"]')).toBeNull();
+  });
+
+  it("forwards nothing to Meta from the native app", () => {
+    mockCapacitor.native = true;
+    window.fbq = jest.fn();
+    loadWithPixelId().trackReunionEvent("community_activated", {});
+    expect(window.fbq).not.toHaveBeenCalled();
   });
 });
