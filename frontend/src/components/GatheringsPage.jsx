@@ -14,6 +14,7 @@ import { GatheringChecklist } from "@/components/gatherings/GatheringChecklist";
 import { GatheringInvites } from "@/components/gatherings/GatheringInvites";
 import { RegistrantImport } from "@/components/gatherings/RegistrantImport";
 import { DuplicateReview } from "@/components/gatherings/DuplicateReview";
+import { IleUbuntuHandoff } from "@/components/gatherings/IleUbuntuHandoff";
 import { EventMessaging } from "@/components/gatherings/EventMessaging";
 import { HolidayPilotReadiness } from "@/components/gatherings/HolidayPilotReadiness";
 import { GatheringPotluck } from "@/components/gatherings/GatheringPotluck";
@@ -729,6 +730,7 @@ export const GatheringsPage = ({ token, user }) => {
                   <>
                     <RegistrantImport event={activeEvent} onUpdate={mergeEvent} token={token} />
                     <DuplicateReview event={activeEvent} onUpdate={mergeEvent} token={token} />
+                    <IleUbuntuHandoff event={activeEvent} token={token} />
                   </>
                 ) : null}
                 {canCreate ? (
